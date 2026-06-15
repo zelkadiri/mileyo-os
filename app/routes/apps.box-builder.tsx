@@ -7,8 +7,26 @@ type ShopifyProduct = {
   id: string;
   title: string;
   featuredImage?: { altText?: string | null; url: string } | null;
+  metafield?: {
+    value: string;
+  } | null;
+  sellingPlanGroups?: {
+    nodes: {
+      name: string;
+      sellingPlans: {
+        nodes: {
+          id: string;
+          name: string;
+        }[];
+      };
+    }[];
+  };
   variants: {
-    nodes: { id: string; price?: string | null; title: string }[];
+    nodes: {
+      id: string;
+      price?: string | null;
+      title: string;
+    }[];
   };
 };
 
@@ -16,7 +34,9 @@ type BuilderProduct = {
   id: string;
   imageAlt: string;
   imageUrl: string | null;
+  subscriptionPrice: string | null;
   title: string;
+  sellingPlanId: string | null;
   variantId: string;
   variantPrice: string | null;
   variantTitle: string;
@@ -40,6 +60,20 @@ const collectionProductsQuery = `#graphql
           featuredImage {
             altText
             url
+          }
+          metafield(namespace: "mileyo", key: "subscription_price") {
+            value
+          }
+          sellingPlanGroups(first: 10) {
+            nodes {
+              name
+              sellingPlans(first: 10) {
+                nodes {
+                  id
+                  name
+                }
+              }
+            }
           }
           variants(first: 1) {
             nodes {
@@ -74,11 +108,20 @@ const getCollectionProducts = async (
 const toBuilderProducts = (products: ShopifyProduct[]): BuilderProduct[] =>
   products.map((product) => {
     const firstVariant = product.variants.nodes[0];
+    const weeklySellingPlanGroup = product.sellingPlanGroups?.nodes.find(
+      (group) => group.name === "Mileyo abonnement hebdomadaire",
+    );
+    const weeklySellingPlan =
+      weeklySellingPlanGroup?.sellingPlans.nodes.find(
+        (sellingPlan) => sellingPlan.name === "Abonnement hebdomadaire",
+      ) ?? null;
 
     return {
       id: product.id,
       imageAlt: product.featuredImage?.altText ?? product.title,
       imageUrl: product.featuredImage?.url ?? null,
+      sellingPlanId: weeklySellingPlan?.id ?? null,
+      subscriptionPrice: product.metafield?.value ?? null,
       title: product.title,
       variantId: firstVariant?.id ?? "",
       variantPrice: firstVariant?.price ?? null,
@@ -146,8 +189,8 @@ const renderBuilder = ({
     </section>
 
     <section class="toggle-row" aria-label="Type de commande">
-      <button class="toggle active" type="button">Commande unique</button>
-      <button class="toggle" disabled type="button">Abonnement hebdomadaire · bientôt</button>
+      <button class="toggle active" id="one-time-toggle" type="button">Commande unique</button>
+      <button class="toggle" id="subscription-toggle" type="button">Abonnement hebdomadaire</button>
     </section>
 
     <section class="section">
@@ -217,6 +260,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 const clientScript = `
 (function () {
   var data = window.__MILEYO_BOX_BUILDER__;
+  var orderType = "one-time";
   var selectedBox = null;
   var requiredMeals = 0;
   var selectedMeals = {};
@@ -228,6 +272,8 @@ const clientScript = `
   var addToCart = document.getElementById("add-to-cart");
   var boxHelper = document.getElementById("box-helper");
   var errorMessage = document.getElementById("error-message");
+  var oneTimeToggle = document.getElementById("one-time-toggle");
+  var subscriptionToggle = document.getElementById("subscription-toggle");
 
   function getMealCountFromTitle(title) {
     var match = title.match(/\\d+/);
@@ -264,7 +310,20 @@ const clientScript = `
   function updateSummary() {
     var total = selectedTotal();
     selectedCount.textContent = total + " / " + requiredMeals + " plats sélectionnés";
-    addToCart.disabled = !selectedBox || requiredMeals === 0 || total !== requiredMeals;
+    var subscriptionUnavailable = orderType === "subscription" && selectedBox && (!selectedBox.sellingPlanId || !selectedBox.subscriptionPrice);
+    addToCart.disabled = !selectedBox || requiredMeals === 0 || total !== requiredMeals || subscriptionUnavailable;
+    if (subscriptionUnavailable) {
+      setError("Abonnement bientôt disponible pour cette box.");
+    } else if (errorMessage.textContent === "Abonnement bientôt disponible pour cette box.") {
+      setError("");
+    }
+  }
+
+  function setOrderType(nextOrderType) {
+    orderType = nextOrderType;
+    oneTimeToggle.classList.toggle("active", orderType === "one-time");
+    subscriptionToggle.classList.toggle("active", orderType === "subscription");
+    updateSummary();
   }
 
   function renderBoxes() {
@@ -293,9 +352,16 @@ const clientScript = `
 
       if (box.variantPrice) {
         var price = document.createElement("span");
-        price.textContent = formatEuros(box.variantPrice);
+        price.textContent = "Commande unique : " + formatEuros(box.variantPrice);
         button.appendChild(price);
       }
+
+      var subscriptionPrice = document.createElement("span");
+      subscriptionPrice.className = box.subscriptionPrice ? "" : "muted";
+      subscriptionPrice.textContent = box.subscriptionPrice
+        ? "Abonnement : " + formatEuros(box.subscriptionPrice)
+        : "Abonnement bientôt disponible";
+      button.appendChild(subscriptionPrice);
 
       button.addEventListener("click", function () {
         console.log("Selected box", box);
@@ -398,7 +464,7 @@ const clientScript = `
     }
 
     var properties = {
-      "Type de commande": "Commande unique",
+      "Type de commande": orderType === "subscription" ? "Abonnement hebdomadaire" : "Commande unique",
       "Nombre de repas": String(requiredMeals)
     };
     var propertyIndex = 1;
@@ -414,15 +480,26 @@ const clientScript = `
     addToCart.textContent = "Ajout en cours...";
     setError("");
 
+    var item = {
+      id: variantId,
+      properties: properties,
+      quantity: 1
+    };
+
+    if (orderType === "subscription") {
+      if (!selectedBox.sellingPlanId || !selectedBox.subscriptionPrice) {
+        setError("Abonnement bientôt disponible pour cette box.");
+        updateSummary();
+        return;
+      }
+      item.selling_plan = getVariantCartId(selectedBox.sellingPlanId);
+    }
+
     fetch("/cart/add.js", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        items: [{
-          id: variantId,
-          properties: properties,
-          quantity: 1
-        }]
+        items: [item]
       })
     }).then(function (response) {
       if (!response.ok) throw new Error("Add to cart failed");
@@ -432,6 +509,14 @@ const clientScript = `
       updateSummary();
       setError("Impossible d’ajouter la box au panier. Réessayez dans un instant.");
     });
+  });
+
+  oneTimeToggle.addEventListener("click", function () {
+    setOrderType("one-time");
+  });
+
+  subscriptionToggle.addEventListener("click", function () {
+    setOrderType("subscription");
   });
 
   renderBoxes();

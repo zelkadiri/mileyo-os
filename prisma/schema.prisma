@@ -55,6 +55,7 @@ model AppSettings {
   mealCollectionId      String?
   mealCollectionHandle  String?
   mealCollectionTitle   String?
+  subscriptionDiscountPercent Float?   @default(20)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
