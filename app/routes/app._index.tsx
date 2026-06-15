@@ -199,6 +199,10 @@ export default function Index() {
 
   return (
     <s-page heading="Mileyo Subscription OS">
+      <s-section slot="aside" heading="Réglages">
+        <s-link href="/app/settings">Collection de plats</s-link>
+      </s-section>
+
       <s-section heading="Créer une nouvelle box">
         <Form method="post">
           <input type="hidden" name="intent" value="createBox" />
