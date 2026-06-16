@@ -61,21 +61,25 @@ model AppSettings {
 }
 
 model BoxOrder {
-  id                String   @id @default(cuid())
-  shop              String
-  shopifyOrderId    String
-  shopifyOrderName  String?
-  customerEmail     String?
-  customerName      String?
-  orderType         String?
-  boxTitle          String?
-  mealsCount        Int?
-  selectedMeals     Json?
-  financialStatus   String?
-  fulfillmentStatus String?
-  rawOrder          Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                      String   @id @default(cuid())
+  shop                    String
+  shopifyOrderId          String
+  shopifyOrderName        String?
+  customerEmail           String?
+  customerName            String?
+  orderType               String?
+  boxTitle                String?
+  mealsCount              Int?
+  selectedMeals           Json?
+  financialStatus         String?
+  fulfillmentStatus       String?
+  rawOrder                Json?
+  selectedMealsSource     String?  @default("line_item_properties")
+  isSubscriptionRenewal   Boolean  @default(false)
+  subscriptionSelectionId String?
+  simulated               Boolean  @default(false)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   @@unique([shop, shopifyOrderId])
 }

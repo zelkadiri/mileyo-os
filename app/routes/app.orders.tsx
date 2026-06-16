@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useSearchParams } from "react-router";
 
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
@@ -45,8 +45,17 @@ const exportButtonStyle = {
   padding: "0.65rem 1rem",
 } as const;
 
+const successBannerStyle = {
+  background: "#dcfce7",
+  borderRadius: "12px",
+  color: "#166534",
+  padding: "12px 16px",
+} as const;
+
 export default function Orders() {
   const { orders = [] } = useLoaderData<typeof loader>();
+  const [searchParams] = useSearchParams();
+  const showSimulatedSuccess = searchParams.get("simulated") === "1";
 
   const handleExportCsv = () => {
     const rows = [
@@ -58,6 +67,8 @@ export default function Orders() {
         "Box",
         "Meals count",
         "Selected meals",
+        "Selected meals source",
+        "Simulated",
         "Financial status",
         "Fulfillment status",
         "Created at",
@@ -70,6 +81,8 @@ export default function Orders() {
         order.boxTitle,
         order.mealsCount,
         getSelectedMeals(order.selectedMeals).join(" | "),
+        order.selectedMealsSource,
+        order.simulated ? "yes" : "no",
         order.financialStatus,
         order.fulfillmentStatus,
         new Date(order.createdAt).toISOString(),
@@ -93,6 +106,11 @@ export default function Orders() {
     <s-page heading="Commandes">
       <s-section>
         <s-stack gap="base">
+          {showSimulatedSuccess ? (
+            <p style={successBannerStyle}>
+              Commande simulée créée avec les plats futurs du client.
+            </p>
+          ) : null}
           <button
             onClick={handleExportCsv}
             style={exportButtonStyle}
@@ -105,6 +123,8 @@ export default function Orders() {
           ) : (
             orders.map((order) => {
               const selectedMeals = getSelectedMeals(order.selectedMeals);
+              const usesFutureSelection =
+                order.selectedMealsSource === "subscription_future_selection";
 
               return (
                 <s-box
@@ -117,6 +137,14 @@ export default function Orders() {
                     <s-text>
                       <strong>{order.shopifyOrderName ?? order.shopifyOrderId}</strong>
                     </s-text>
+                    {order.simulated ? (
+                      <s-text>Commande simulée</s-text>
+                    ) : null}
+                    {usesFutureSelection ? (
+                      <s-text>
+                        Plats récupérés depuis la sélection future client.
+                      </s-text>
+                    ) : null}
                     <s-text>
                       Client : {order.customerName ?? "Non renseigné"}{" "}
                       {order.customerEmail ? `(${order.customerEmail})` : ""}
@@ -125,6 +153,10 @@ export default function Orders() {
                     <s-text>Box : {order.boxTitle ?? "Non renseignée"}</s-text>
                     <s-text>
                       Nombre de repas : {order.mealsCount ?? "Non renseigné"}
+                    </s-text>
+                    <s-text>
+                      Source des plats :{" "}
+                      {order.selectedMealsSource ?? "line_item_properties"}
                     </s-text>
                     <s-text>Plats sélectionnés :</s-text>
                     {selectedMeals.length > 0 ? (
