@@ -14,21 +14,21 @@ datasource db {
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
@@ -47,15 +47,35 @@ model MealBox {
 }
 
 model AppSettings {
-  id                    String   @id @default(cuid())
-  shop                  String   @unique
-  boxCollectionId       String?
-  boxCollectionHandle   String?
-  boxCollectionTitle    String?
-  mealCollectionId      String?
-  mealCollectionHandle  String?
-  mealCollectionTitle   String?
+  id                          String   @id @default(cuid())
+  shop                        String   @unique
+  boxCollectionId             String?
+  boxCollectionHandle         String?
+  boxCollectionTitle          String?
+  mealCollectionId            String?
+  mealCollectionHandle        String?
+  mealCollectionTitle         String?
   subscriptionDiscountPercent Float?   @default(20)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+}
+
+model BoxOrder {
+  id                String   @id @default(cuid())
+  shop              String
+  shopifyOrderId    String
+  shopifyOrderName  String?
+  customerEmail     String?
+  customerName      String?
+  orderType         String?
+  boxTitle          String?
+  mealsCount        Int?
+  selectedMeals     Json?
+  financialStatus   String?
+  fulfillmentStatus String?
+  rawOrder          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([shop, shopifyOrderId])
 }

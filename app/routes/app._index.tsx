@@ -200,7 +200,10 @@ export default function Index() {
   return (
     <s-page heading="Mileyo Subscription OS">
       <s-section slot="aside" heading="Réglages">
-        <s-link href="/app/settings">Collection de plats</s-link>
+        <s-stack gap="small">
+          <s-link href="/app/settings">Collection de plats</s-link>
+          <s-link href="/app/orders">Commandes</s-link>
+        </s-stack>
       </s-section>
 
       <s-section heading="Créer une nouvelle box">
