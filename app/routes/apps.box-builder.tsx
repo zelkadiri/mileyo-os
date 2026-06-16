@@ -186,6 +186,7 @@ const renderBuilder = ({
       <p class="eyebrow">Mileyo</p>
       <h1>Compose ta box</h1>
       <p>Choisis ta box, puis sélectionne exactement le nombre de plats inclus.</p>
+      <p class="portal-link"><a href="/apps/box-builder/portal">Déjà abonné ? Modifier mes prochaines box</a></p>
     </section>
 
     <section class="toggle-row" aria-label="Type de commande">
@@ -543,6 +544,8 @@ body { background: #fff; margin: 0; }
 }
 .hero h1, .setup-card h1, .section h2 { margin: 0 0 8px; }
 .hero p, .setup-card p, .section p { margin: 0; }
+.portal-link { margin-top: 12px; }
+.portal-link a { color: #111827; font-weight: 700; }
 .eyebrow, .muted { color: #6b7280; font-size: 0.9rem; }
 .hidden { display: none; }
 .toggle-row {
