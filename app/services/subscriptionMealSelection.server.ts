@@ -20,6 +20,12 @@ const getPropertyValue = (
 export const isSubscriptionOrderType = (orderType: string | null | undefined) =>
   Boolean(orderType?.toLowerCase().includes("abonnement"));
 
+export type SubscriptionLineItem = {
+  properties?: LineItemProperty[];
+  selling_plan_allocation?: unknown;
+  selling_plan_id?: number | string | null;
+};
+
 export const extractSubscriptionContractId = (
   rawOrder: unknown,
   properties?: LineItemProperty[],
@@ -45,6 +51,88 @@ export const extractSubscriptionContractId = (
     ) ??
     normalizeShopifyId(getPropertyValue(properties, "Contrat abonnement"))
   );
+};
+
+export const isSubscriptionOrder = ({
+  boxLineItem,
+  lineItemProperties,
+  orderType,
+  rawOrder,
+}: {
+  boxLineItem: SubscriptionLineItem;
+  lineItemProperties?: LineItemProperty[];
+  orderType: string | null;
+  rawOrder: unknown;
+}) => {
+  if (isSubscriptionOrderType(orderType)) {
+    return true;
+  }
+
+  if (boxLineItem.selling_plan_allocation || boxLineItem.selling_plan_id) {
+    return true;
+  }
+
+  if (extractSubscriptionContractId(rawOrder, lineItemProperties)) {
+    return true;
+  }
+
+  const order = rawOrder as { subscription_contracts?: unknown[] };
+
+  return Boolean(order.subscription_contracts?.length);
+};
+
+export const findMatchingSubscriptionMealSelection = async ({
+  boxTitle,
+  customerShopifyId,
+  lineItemProperties,
+  rawOrder,
+  shop,
+  shopifyOrderId,
+}: {
+  boxTitle: string | null;
+  customerShopifyId: string | null;
+  lineItemProperties?: LineItemProperty[];
+  rawOrder: unknown;
+  shop: string;
+  shopifyOrderId: string;
+}) => {
+  const normalizedOrderId = normalizeShopifyId(shopifyOrderId) ?? shopifyOrderId;
+  const subscriptionContractId = extractSubscriptionContractId(
+    rawOrder,
+    lineItemProperties,
+  );
+  const normalizedCustomerId = normalizeShopifyId(customerShopifyId);
+
+  if (subscriptionContractId) {
+    const byContract = await db.subscriptionMealSelection.findFirst({
+      orderBy: { updatedAt: "desc" },
+      where: {
+        active: true,
+        shop,
+        shopifyOrderId: { not: normalizedOrderId },
+        subscriptionContractId,
+      },
+    });
+
+    if (byContract) {
+      return byContract;
+    }
+  }
+
+  if (!normalizedCustomerId || !boxTitle) {
+    return null;
+  }
+
+  return db.subscriptionMealSelection.findFirst({
+    orderBy: { updatedAt: "desc" },
+    where: {
+      active: true,
+      boxTitle,
+      customerShopifyId: normalizedCustomerId,
+      shop,
+      shopifyOrderId: { not: normalizedOrderId },
+    },
+  });
 };
 
 export const upsertSubscriptionMealSelectionFromFirstOrder = async ({

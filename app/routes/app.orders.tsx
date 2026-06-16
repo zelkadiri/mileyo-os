@@ -68,6 +68,7 @@ export default function Orders() {
         "Meals count",
         "Selected meals",
         "Selected meals source",
+        "Subscription renewal",
         "Simulated",
         "Financial status",
         "Fulfillment status",
@@ -82,6 +83,7 @@ export default function Orders() {
         order.mealsCount,
         getSelectedMeals(order.selectedMeals).join(" | "),
         order.selectedMealsSource,
+        order.isSubscriptionRenewal ? "yes" : "no",
         order.simulated ? "yes" : "no",
         order.financialStatus,
         order.fulfillmentStatus,
@@ -139,6 +141,9 @@ export default function Orders() {
                     </s-text>
                     {order.simulated ? (
                       <s-text>Commande simulée</s-text>
+                    ) : null}
+                    {order.isSubscriptionRenewal ? (
+                      <s-text>Renouvellement d’abonnement</s-text>
                     ) : null}
                     {usesFutureSelection ? (
                       <s-text>

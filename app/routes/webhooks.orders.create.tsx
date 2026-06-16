@@ -2,7 +2,11 @@ import type { ActionFunctionArgs } from "react-router";
 import type { Prisma } from "@prisma/client";
 
 import db from "../db.server";
-import { upsertSubscriptionMealSelectionFromFirstOrder } from "../services/subscriptionMealSelection.server";
+import {
+  findMatchingSubscriptionMealSelection,
+  isSubscriptionOrder,
+  upsertSubscriptionMealSelectionFromFirstOrder,
+} from "../services/subscriptionMealSelection.server";
 import { normalizeShopifyId } from "../utils/shopifyIds.server";
 import { authenticate } from "../shopify.server";
 
@@ -14,6 +18,8 @@ type LineItemProperty = {
 type OrderLineItem = {
   name?: string;
   properties?: LineItemProperty[];
+  selling_plan_allocation?: unknown;
+  selling_plan_id?: number | string | null;
   title?: string;
 };
 
@@ -31,6 +37,7 @@ type OrderPayload = {
   id?: number | string;
   line_items?: OrderLineItem[];
   name?: string | null;
+  subscription_contracts?: unknown[];
 };
 
 const getPropertyValue = (
@@ -83,63 +90,141 @@ const getCustomerName = (customer: OrderPayload["customer"]) => {
   return name || null;
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { payload, shop, topic } = await authenticate.webhook(request);
-  const order = payload as OrderPayload;
+const findBoxLineItem = (order: OrderPayload) => {
+  const lineItems = order.line_items ?? [];
 
-  console.log(`Received ${topic} webhook for ${shop}`);
-
-  const boxLineItem = order.line_items?.find((lineItem) => {
+  const withBoxProperties = lineItems.find((lineItem) => {
     const orderType = getPropertyValue(lineItem.properties, "Type de commande");
     const mealsCount = getPropertyValue(lineItem.properties, "Nombre de repas");
 
     return Boolean(orderType && mealsCount);
   });
 
+  if (withBoxProperties) {
+    return withBoxProperties;
+  }
+
+  const withSellingPlan = lineItems.find(
+    (lineItem) => lineItem.selling_plan_allocation || lineItem.selling_plan_id,
+  );
+
+  if (withSellingPlan) {
+    return withSellingPlan;
+  }
+
+  if (order.subscription_contracts?.length && lineItems.length > 0) {
+    return lineItems[0];
+  }
+
+  return null;
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const { payload, shop, topic } = await authenticate.webhook(request);
+  const order = payload as OrderPayload;
+
+  console.log(`[ORDERS_CREATE] Received ${topic} webhook for ${shop}`);
+
+  const boxLineItem = findBoxLineItem(order);
+
   if (!boxLineItem || !order.id) {
     return new Response();
   }
 
+  const shopifyOrderId = String(order.id);
+  const shopifyOrderName = order.name ?? null;
   const orderType = getPropertyValue(boxLineItem.properties, "Type de commande");
-  const mealsCount = Number.parseInt(
+  const parsedMealsCount = Number.parseInt(
     getPropertyValue(boxLineItem.properties, "Nombre de repas") ?? "",
     10,
   );
-  const selectedMeals = getSelectedMeals(boxLineItem.properties);
-  const shopifyOrderId = String(order.id);
+  const lineItemSelectedMeals = getSelectedMeals(boxLineItem.properties);
   const rawOrder = JSON.parse(JSON.stringify(order)) as Prisma.InputJsonValue;
-  const selectedMealsJson = selectedMeals as Prisma.InputJsonValue;
   const customerEmail =
     order.email ?? order.contact_email ?? order.customer?.email ?? null;
   const customerShopifyId = normalizeShopifyId(order.customer?.id);
   const boxTitle = boxLineItem.title ?? boxLineItem.name ?? null;
 
+  const isSubscription = isSubscriptionOrder({
+    boxLineItem,
+    lineItemProperties: boxLineItem.properties,
+    orderType,
+    rawOrder: order,
+  });
+
+  const matchedSelection = isSubscription
+    ? await findMatchingSubscriptionMealSelection({
+        boxTitle,
+        customerShopifyId,
+        lineItemProperties: boxLineItem.properties,
+        rawOrder: order,
+        shop,
+        shopifyOrderId,
+      })
+    : null;
+
+  const isRenewal = Boolean(isSubscription && matchedSelection);
+  const selectedMealsSource = isRenewal
+    ? "subscription_future_selection"
+    : "line_item_properties";
+  const selectedMealsJson = (
+    isRenewal && matchedSelection?.selectedMeals
+      ? matchedSelection.selectedMeals
+      : lineItemSelectedMeals
+  ) as Prisma.InputJsonValue;
+  const resolvedOrderType =
+    orderType ?? (isSubscription ? "Abonnement hebdomadaire" : null);
+  const resolvedMealsCount = isRenewal
+    ? (matchedSelection?.mealsCount ?? null)
+    : Number.isNaN(parsedMealsCount)
+      ? null
+      : parsedMealsCount;
+  const resolvedBoxTitle = isRenewal
+    ? (matchedSelection?.boxTitle ?? boxTitle)
+    : boxTitle;
+
+  console.log("[ORDERS_CREATE] Processed order", {
+    isRenewal,
+    isSubscription,
+    matchedSelectionId: matchedSelection?.id ?? null,
+    orderId: shopifyOrderId,
+    orderName: shopifyOrderName,
+    selectedMealsSource,
+    shop,
+  });
+
   await db.boxOrder.upsert({
     create: {
-      boxTitle,
+      boxTitle: resolvedBoxTitle,
       customerEmail,
       customerName: getCustomerName(order.customer),
       financialStatus: order.financial_status ?? null,
       fulfillmentStatus: order.fulfillment_status ?? null,
-      mealsCount: Number.isNaN(mealsCount) ? null : mealsCount,
-      orderType,
+      isSubscriptionRenewal: isRenewal,
+      mealsCount: resolvedMealsCount,
+      orderType: resolvedOrderType,
       rawOrder,
       selectedMeals: selectedMealsJson,
+      selectedMealsSource,
       shop,
       shopifyOrderId,
-      shopifyOrderName: order.name ?? null,
+      shopifyOrderName,
+      subscriptionSelectionId: isRenewal ? matchedSelection?.id ?? null : null,
     },
     update: {
-      boxTitle,
+      boxTitle: resolvedBoxTitle,
       customerEmail,
       customerName: getCustomerName(order.customer),
       financialStatus: order.financial_status ?? null,
       fulfillmentStatus: order.fulfillment_status ?? null,
-      mealsCount: Number.isNaN(mealsCount) ? null : mealsCount,
-      orderType,
+      isSubscriptionRenewal: isRenewal,
+      mealsCount: resolvedMealsCount,
+      orderType: resolvedOrderType,
       rawOrder,
       selectedMeals: selectedMealsJson,
-      shopifyOrderName: order.name ?? null,
+      selectedMealsSource,
+      shopifyOrderName,
+      subscriptionSelectionId: isRenewal ? matchedSelection?.id ?? null : null,
     },
     where: {
       shop_shopifyOrderId: {
@@ -149,19 +234,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     },
   });
 
-  await upsertSubscriptionMealSelectionFromFirstOrder({
-    boxTitle,
-    customerEmail,
-    customerShopifyId,
-    lineItemProperties: boxLineItem.properties,
-    mealsCount: Number.isNaN(mealsCount) ? null : mealsCount,
-    orderType,
-    rawOrder: order,
-    selectedMeals: selectedMealsJson,
-    shop,
-    shopifyOrderId,
-    shopifyOrderName: order.name ?? null,
-  });
+  if (isSubscription && !isRenewal) {
+    await upsertSubscriptionMealSelectionFromFirstOrder({
+      boxTitle,
+      customerEmail,
+      customerShopifyId,
+      lineItemProperties: boxLineItem.properties,
+      mealsCount: resolvedMealsCount,
+      orderType: resolvedOrderType,
+      rawOrder: order,
+      selectedMeals: lineItemSelectedMeals as Prisma.InputJsonValue,
+      shop,
+      shopifyOrderId,
+      shopifyOrderName,
+    });
+  }
 
   return new Response();
 };
