@@ -203,6 +203,7 @@ export default function Index() {
         <s-stack gap="small">
           <s-link href="/app/settings">Collection de plats</s-link>
           <s-link href="/app/orders">Commandes</s-link>
+          <s-link href="/app/subscriptions">Abonnements</s-link>
         </s-stack>
       </s-section>
 

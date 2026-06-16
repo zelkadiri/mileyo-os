@@ -2,6 +2,8 @@ import type { ActionFunctionArgs } from "react-router";
 import type { Prisma } from "@prisma/client";
 
 import db from "../db.server";
+import { upsertSubscriptionMealSelectionFromFirstOrder } from "../services/subscriptionMealSelection.server";
+import { normalizeShopifyId } from "../utils/shopifyIds.server";
 import { authenticate } from "../shopify.server";
 
 type LineItemProperty = {
@@ -20,6 +22,7 @@ type OrderPayload = {
   customer?: {
     email?: string | null;
     first_name?: string | null;
+    id?: number | string | null;
     last_name?: string | null;
   } | null;
   email?: string | null;
@@ -106,12 +109,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shopifyOrderId = String(order.id);
   const rawOrder = JSON.parse(JSON.stringify(order)) as Prisma.InputJsonValue;
   const selectedMealsJson = selectedMeals as Prisma.InputJsonValue;
+  const customerEmail =
+    order.email ?? order.contact_email ?? order.customer?.email ?? null;
+  const customerShopifyId = normalizeShopifyId(order.customer?.id);
+  const boxTitle = boxLineItem.title ?? boxLineItem.name ?? null;
 
   await db.boxOrder.upsert({
     create: {
-      boxTitle: boxLineItem.title ?? boxLineItem.name ?? null,
-      customerEmail:
-        order.email ?? order.contact_email ?? order.customer?.email ?? null,
+      boxTitle,
+      customerEmail,
       customerName: getCustomerName(order.customer),
       financialStatus: order.financial_status ?? null,
       fulfillmentStatus: order.fulfillment_status ?? null,
@@ -124,9 +130,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shopifyOrderName: order.name ?? null,
     },
     update: {
-      boxTitle: boxLineItem.title ?? boxLineItem.name ?? null,
-      customerEmail:
-        order.email ?? order.contact_email ?? order.customer?.email ?? null,
+      boxTitle,
+      customerEmail,
       customerName: getCustomerName(order.customer),
       financialStatus: order.financial_status ?? null,
       fulfillmentStatus: order.fulfillment_status ?? null,
@@ -142,6 +147,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         shopifyOrderId,
       },
     },
+  });
+
+  await upsertSubscriptionMealSelectionFromFirstOrder({
+    boxTitle,
+    customerEmail,
+    customerShopifyId,
+    lineItemProperties: boxLineItem.properties,
+    mealsCount: Number.isNaN(mealsCount) ? null : mealsCount,
+    orderType,
+    rawOrder: order,
+    selectedMeals: selectedMealsJson,
+    shop,
+    shopifyOrderId,
+    shopifyOrderName: order.name ?? null,
   });
 
   return new Response();

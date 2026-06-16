@@ -79,3 +79,24 @@ model BoxOrder {
 
   @@unique([shop, shopifyOrderId])
 }
+
+model SubscriptionMealSelection {
+  id                     String   @id @default(cuid())
+  shop                   String
+  customerShopifyId      String?
+  customerEmail          String?
+  subscriptionContractId String?
+  shopifyOrderId         String
+  shopifyOrderName       String?
+  boxTitle               String?
+  mealsCount             Int?
+  selectedMeals          Json?
+  status                 String   @default("active")
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([shop, shopifyOrderId])
+  @@index([shop, customerShopifyId])
+  @@index([shop, subscriptionContractId])
+}
