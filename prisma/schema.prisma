@@ -96,10 +96,15 @@ model SubscriptionMealSelection {
   boxTitle               String?
   mealsCount             Int?
   selectedMeals          Json?
-  status                 String   @default("active")
-  active                 Boolean  @default(true)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  status                   String    @default("active")
+  active                   Boolean   @default(true)
+  nextBillingDate          DateTime?
+  lastBillingAttemptAt     DateTime?
+  lastBillingAttemptStatus String?
+  lastBillingAttemptError  String?
+  lastBillingAttemptId     String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
 
   @@unique([shop, shopifyOrderId])
   @@index([shop, customerShopifyId])

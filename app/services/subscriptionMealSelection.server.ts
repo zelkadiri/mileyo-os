@@ -3,6 +3,7 @@ import type { Prisma } from "@prisma/client";
 import db from "../db.server";
 import { unauthenticated } from "../shopify.server";
 import { normalizeShopifyId } from "../utils/shopifyIds.server";
+import { fetchSubscriptionContractNextBillingDate } from "./subscriptionBillingWorker.server";
 
 type LineItemProperty = {
   name?: string;
@@ -216,15 +217,29 @@ export const findMatchingSubscriptionMealSelection = async ({
     });
 
     if (byContract) {
+      console.log("[SUBSCRIPTION_SELECTION] matched by contract id", {
+        selectionId: byContract.id,
+        shopifyOrderId: normalizedOrderId,
+        subscriptionContractId,
+      });
       return byContract;
     }
+
+    console.log(
+      "[SUBSCRIPTION_SELECTION] no match for contract id, treating as first order",
+      {
+        shopifyOrderId: normalizedOrderId,
+        subscriptionContractId,
+      },
+    );
+    return null;
   }
 
   if (!normalizedCustomerId || !boxTitle) {
     return null;
   }
 
-  return db.subscriptionMealSelection.findFirst({
+  const fallbackMatches = await db.subscriptionMealSelection.findMany({
     orderBy: { updatedAt: "desc" },
     where: {
       active: true,
@@ -234,12 +249,35 @@ export const findMatchingSubscriptionMealSelection = async ({
       shopifyOrderId: { not: normalizedOrderId },
     },
   });
+
+  if (fallbackMatches.length === 1) {
+    console.log("[SUBSCRIPTION_SELECTION] fallback matched", {
+      selectionId: fallbackMatches[0].id,
+      boxTitle,
+      customerShopifyId: normalizedCustomerId,
+      shopifyOrderId: normalizedOrderId,
+    });
+    return fallbackMatches[0];
+  }
+
+  if (fallbackMatches.length > 1) {
+    console.log("[SUBSCRIPTION_SELECTION] fallback ambiguous skipped", {
+      boxTitle,
+      customerShopifyId: normalizedCustomerId,
+      matchCount: fallbackMatches.length,
+      selectionIds: fallbackMatches.map((selection) => selection.id),
+      shopifyOrderId: normalizedOrderId,
+    });
+  }
+
+  return null;
 };
 
 export const upsertSubscriptionMealSelectionFromFirstOrder = async ({
   boxTitle,
   customerEmail,
   customerShopifyId,
+  isSubscription,
   mealsCount,
   orderType,
   rawOrder,
@@ -253,6 +291,7 @@ export const upsertSubscriptionMealSelectionFromFirstOrder = async ({
   boxTitle: string | null;
   customerEmail: string | null;
   customerShopifyId: string | null;
+  isSubscription: boolean;
   mealsCount: number | null;
   orderType: string | null;
   rawOrder: unknown;
@@ -263,47 +302,110 @@ export const upsertSubscriptionMealSelectionFromFirstOrder = async ({
   lineItemProperties?: LineItemProperty[];
   subscriptionContractId?: string | null;
 }) => {
-  if (!isSubscriptionOrderType(orderType)) {
+  const normalizedOrderId = normalizeShopifyId(shopifyOrderId) ?? shopifyOrderId;
+
+  if (!isSubscription) {
+    console.log("[SUBSCRIPTION_SELECTION] skipped", {
+      reason: "not_subscription",
+      shopifyOrderId: normalizedOrderId,
+      orderType,
+    });
     return null;
   }
 
-  const normalizedOrderId = normalizeShopifyId(shopifyOrderId) ?? shopifyOrderId;
-  const subscriptionContractId =
-    subscriptionContractIdOverride ??
-    extractSubscriptionContractId(rawOrder, lineItemProperties);
-
-  const normalizedCustomerId = normalizeShopifyId(customerShopifyId);
-  const data = {
-    active: true,
-    boxTitle,
-    customerEmail,
-    customerShopifyId: normalizedCustomerId,
-    mealsCount,
-    selectedMeals,
-    shopifyOrderName,
-    status: "active",
-    subscriptionContractId,
-  };
-
-  const existing = await db.subscriptionMealSelection.findFirst({
-    where: {
-      shop,
-      shopifyOrderId: normalizedOrderId,
-    },
+  console.log("[SUBSCRIPTION_SELECTION] create/upsert start", {
+    shopifyOrderId: normalizedOrderId,
+    orderType,
+    subscriptionContractId: subscriptionContractIdOverride ?? null,
   });
 
-  if (existing) {
-    return db.subscriptionMealSelection.update({
-      data,
-      where: { id: existing.id },
+  try {
+    const subscriptionContractId =
+      subscriptionContractIdOverride ??
+      extractSubscriptionContractId(rawOrder, lineItemProperties);
+
+    const normalizedCustomerId = normalizeShopifyId(customerShopifyId);
+    let nextBillingDate: Date | null = null;
+
+    if (subscriptionContractId) {
+      try {
+        const { admin } = await unauthenticated.admin(shop);
+        nextBillingDate = await fetchSubscriptionContractNextBillingDate(
+          admin,
+          subscriptionContractId,
+        );
+      } catch (error) {
+        console.log("[subscriptionMealSelection] nextBillingDate sync failed", {
+          error: error instanceof Error ? error.message : error,
+          subscriptionContractId,
+        });
+      }
+    }
+
+    const data = {
+      active: true,
+      boxTitle,
+      customerEmail,
+      customerShopifyId: normalizedCustomerId,
+      mealsCount,
+      selectedMeals,
+      shopifyOrderName,
+      status: "active",
+      subscriptionContractId,
+      ...(nextBillingDate ? { nextBillingDate } : {}),
+    };
+
+    const existing = await db.subscriptionMealSelection.findFirst({
+      where: {
+        shop,
+        shopifyOrderId: normalizedOrderId,
+      },
     });
-  }
 
-  return db.subscriptionMealSelection.create({
-    data: {
-      ...data,
-      shop,
+    if (existing) {
+      const result = await db.subscriptionMealSelection.update({
+        data,
+        where: { id: existing.id },
+      });
+
+      console.log("[SUBSCRIPTION_SELECTION] created/upserted", {
+        action: "upserted",
+        id: result.id,
+        shopifyOrderId: normalizedOrderId,
+        subscriptionContractId: result.subscriptionContractId ?? null,
+      });
+
+      return result;
+    }
+
+    const result = await db.subscriptionMealSelection.create({
+      data: {
+        ...data,
+        shop,
+        shopifyOrderId: normalizedOrderId,
+      },
+    });
+
+    console.log("[SUBSCRIPTION_SELECTION] first subscription selection created", {
+      id: result.id,
       shopifyOrderId: normalizedOrderId,
-    },
-  });
+      subscriptionContractId: result.subscriptionContractId ?? null,
+    });
+
+    console.log("[SUBSCRIPTION_SELECTION] created/upserted", {
+      action: "created",
+      id: result.id,
+      shopifyOrderId: normalizedOrderId,
+      subscriptionContractId: result.subscriptionContractId ?? null,
+    });
+
+    return result;
+  } catch (error) {
+    console.log("[SUBSCRIPTION_SELECTION] error", {
+      error: error instanceof Error ? error.message : error,
+      shopifyOrderId: normalizedOrderId,
+      orderType,
+    });
+    throw error;
+  }
 };

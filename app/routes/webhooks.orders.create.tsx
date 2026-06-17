@@ -8,8 +8,9 @@ import {
   resolveSubscriptionContractId,
   upsertSubscriptionMealSelectionFromFirstOrder,
 } from "../services/subscriptionMealSelection.server";
+import { fetchSubscriptionContractNextBillingDate } from "../services/subscriptionBillingWorker.server";
 import { normalizeShopifyId } from "../utils/shopifyIds.server";
-import { authenticate } from "../shopify.server";
+import { authenticate, unauthenticated } from "../shopify.server";
 
 type LineItemProperty = {
   name?: string;
@@ -266,6 +267,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       boxTitle,
       customerEmail,
       customerShopifyId,
+      isSubscription,
       lineItemProperties: boxLineItem.properties,
       mealsCount: resolvedMealsCount,
       orderType: resolvedOrderType,
@@ -276,6 +278,62 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shopifyOrderName,
       subscriptionContractId: resolvedSubscriptionContractId,
     });
+  }
+
+  if (isRenewal && matchedSelection) {
+    const contractIdForSync =
+      resolvedSubscriptionContractId ??
+      matchedSelection.subscriptionContractId;
+
+    if (!contractIdForSync) {
+      console.log("[ORDERS_CREATE] nextBillingDate sync skipped", {
+        reason: "missing_subscription_contract_id",
+        selectionId: matchedSelection.id,
+        shopifyOrderId,
+      });
+    } else {
+      console.log("[ORDERS_CREATE] nextBillingDate sync start", {
+        selectionId: matchedSelection.id,
+        shopifyOrderId,
+        subscriptionContractId: contractIdForSync,
+      });
+
+      try {
+        const { admin } = await unauthenticated.admin(shop);
+        const nextBillingDate = await fetchSubscriptionContractNextBillingDate(
+          admin,
+          contractIdForSync,
+        );
+
+        if (!nextBillingDate) {
+          console.log("[ORDERS_CREATE] nextBillingDate sync skipped", {
+            reason: "no_date_returned",
+            selectionId: matchedSelection.id,
+            shopifyOrderId,
+            subscriptionContractId: contractIdForSync,
+          });
+        } else {
+          await db.subscriptionMealSelection.update({
+            data: { nextBillingDate },
+            where: { id: matchedSelection.id },
+          });
+
+          console.log("[ORDERS_CREATE] nextBillingDate synced", {
+            nextBillingDate: nextBillingDate.toISOString(),
+            selectionId: matchedSelection.id,
+            shopifyOrderId,
+            subscriptionContractId: contractIdForSync,
+          });
+        }
+      } catch (error) {
+        console.log("[ORDERS_CREATE] nextBillingDate sync failed", {
+          error: error instanceof Error ? error.message : error,
+          selectionId: matchedSelection.id,
+          shopifyOrderId,
+          subscriptionContractId: contractIdForSync,
+        });
+      }
+    }
   }
 
   return new Response();

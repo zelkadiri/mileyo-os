@@ -32,6 +32,6 @@ automatically_update_urls_on_dev = true
 
 
 [app_proxy]
-url = "https://3db3053b4fd4.ngrok.app/apps/box-builder"
+url = "https://151bbcb0a205.ngrok.app/apps/box-builder"
 prefix = "apps"
 subpath = "box-builder"
