@@ -86,13 +86,30 @@ const secondaryButtonStyle = {
   padding: "0.65rem 1rem",
 } as const;
 
-const bannerStyle = (variant: "error" | "success") =>
+const bannerStyle = (variant: "error" | "success" | "warning") =>
   ({
-    background: variant === "success" ? "#dcfce7" : "#fee2e2",
+    background:
+      variant === "success"
+        ? "#dcfce7"
+        : variant === "warning"
+          ? "#fef3c7"
+          : "#fee2e2",
     borderRadius: "12px",
-    color: variant === "success" ? "#166534" : "#991b1b",
+    color:
+      variant === "success"
+        ? "#166534"
+        : variant === "warning"
+          ? "#92400e"
+          : "#991b1b",
     padding: "12px 16px",
   }) as const;
+
+const isShopifyBillingTestButtonEnabled = () =>
+  process.env.NODE_ENV !== "production" ||
+  process.env.ENABLE_SHOPIFY_BILLING_TEST_BUTTON === "true";
+
+const shopifyBillingConfirmMessage =
+  "Confirmer le déclenchement d’une prochaine commande Shopify pour cet abonnement ?";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -118,6 +135,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ...selection,
       customerName: customerNameByOrderId.get(selection.shopifyOrderId) ?? null,
     })),
+    showShopifyBillingTestButton: isShopifyBillingTestButtonEnabled(),
   };
 };
 
@@ -138,6 +156,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "triggerShopifyBillingAttempt") {
+    if (!isShopifyBillingTestButtonEnabled()) {
+      return redirectWithBillingError(
+        "Déclenchement manuel Shopify désactivé en production.",
+      );
+    }
+
     const selection = await db.subscriptionMealSelection.findFirst({
       where: {
         active: true,
@@ -274,7 +298,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Subscriptions() {
-  const { selections = [] } = useLoaderData<typeof loader>();
+  const { selections = [], showShopifyBillingTestButton = false } =
+    useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const error = searchParams.get("error");
   const billingError = searchParams.get("billingError");
@@ -373,30 +398,56 @@ export default function Subscriptions() {
                             Simuler prochaine commande
                           </button>
                         </Form>
-                        <Form method="post">
-                          <input
-                            name="intent"
-                            type="hidden"
-                            value="triggerShopifyBillingAttempt"
-                          />
-                          <input
-                            name="selectionId"
-                            type="hidden"
-                            value={selection.id}
-                          />
-                          <button
-                            disabled={!canTriggerBilling}
-                            style={primaryButtonStyle}
-                            title={
-                              canTriggerBilling
-                                ? undefined
-                                : "Contrat d’abonnement Shopify requis"
-                            }
-                            type="submit"
+                        {showShopifyBillingTestButton ? (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "0.5rem",
+                            }}
                           >
-                            Déclencher prochaine commande Shopify
-                          </button>
-                        </Form>
+                            <p style={bannerStyle("warning")}>
+                              Attention : ce bouton peut créer une vraie commande
+                              Shopify et déclencher une facturation test/réelle selon
+                              la configuration de paiement.
+                            </p>
+                            <Form
+                              method="post"
+                              onSubmit={(event) => {
+                                if (!confirm(shopifyBillingConfirmMessage)) {
+                                  event.preventDefault();
+                                }
+                              }}
+                            >
+                              <input
+                                name="intent"
+                                type="hidden"
+                                value="triggerShopifyBillingAttempt"
+                              />
+                              <input
+                                name="selectionId"
+                                type="hidden"
+                                value={selection.id}
+                              />
+                              <button
+                                disabled={!canTriggerBilling}
+                                style={primaryButtonStyle}
+                                title={
+                                  canTriggerBilling
+                                    ? undefined
+                                    : "Contrat d’abonnement Shopify requis"
+                                }
+                                type="submit"
+                              >
+                                Déclencher prochaine commande Shopify
+                              </button>
+                            </Form>
+                          </div>
+                        ) : (
+                          <s-text>
+                            Déclenchement manuel Shopify désactivé en production.
+                          </s-text>
+                        )}
                       </div>
                     ) : null}
                   </s-stack>
