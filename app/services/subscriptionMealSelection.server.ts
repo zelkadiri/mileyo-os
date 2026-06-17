@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import db from "../db.server";
+import { unauthenticated } from "../shopify.server";
 import { normalizeShopifyId } from "../utils/shopifyIds.server";
 
 type LineItemProperty = {
@@ -53,6 +54,105 @@ export const extractSubscriptionContractId = (
   );
 };
 
+const orderSubscriptionContractQuery = `#graphql
+  query OrderSubscriptionContract($id: ID!) {
+    order(id: $id) {
+      lineItems(first: 50) {
+        nodes {
+          contract {
+            id
+          }
+        }
+      }
+    }
+  }
+`;
+
+type OrderSubscriptionContractResponse = {
+  data?: {
+    order?: {
+      lineItems?: {
+        nodes?: { contract?: { id?: string | null } | null }[];
+      };
+    } | null;
+  };
+  errors?: unknown;
+};
+
+export const fetchSubscriptionContractIdFromOrder = async (
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: { id: string } },
+    ) => Promise<Response>;
+  },
+  shopifyOrderId: string,
+) => {
+  const normalizedOrderId = normalizeShopifyId(shopifyOrderId) ?? shopifyOrderId;
+  const orderGid = shopifyOrderId.includes("/")
+    ? shopifyOrderId
+    : `gid://shopify/Order/${normalizedOrderId}`;
+
+  const response = await admin.graphql(orderSubscriptionContractQuery, {
+    variables: { id: orderGid },
+  });
+  const json = (await response.json()) as OrderSubscriptionContractResponse;
+
+  if (json.errors) {
+    console.log(
+      "[ORDERS_CREATE] subscriptionContractId GraphQL errors",
+      json.errors,
+    );
+    return null;
+  }
+
+  for (const lineItem of json.data?.order?.lineItems?.nodes ?? []) {
+    const contractId = lineItem.contract?.id;
+
+    if (contractId) {
+      return normalizeShopifyId(contractId);
+    }
+  }
+
+  return null;
+};
+
+export const resolveSubscriptionContractId = async ({
+  isSubscription,
+  lineItemProperties,
+  rawOrder,
+  shop,
+  shopifyOrderId,
+}: {
+  isSubscription: boolean;
+  lineItemProperties?: LineItemProperty[];
+  rawOrder: unknown;
+  shop: string;
+  shopifyOrderId: string;
+}) => {
+  const fromPayload = extractSubscriptionContractId(rawOrder, lineItemProperties);
+
+  if (fromPayload) {
+    return fromPayload;
+  }
+
+  if (!isSubscription) {
+    return null;
+  }
+
+  try {
+    const { admin } = await unauthenticated.admin(shop);
+
+    return await fetchSubscriptionContractIdFromOrder(admin, shopifyOrderId);
+  } catch (error) {
+    console.log("[ORDERS_CREATE] subscriptionContractId lookup failed", {
+      error: error instanceof Error ? error.message : error,
+      orderId: shopifyOrderId,
+    });
+    return null;
+  }
+};
+
 export const isSubscriptionOrder = ({
   boxLineItem,
   lineItemProperties,
@@ -86,6 +186,7 @@ export const findMatchingSubscriptionMealSelection = async ({
   customerShopifyId,
   lineItemProperties,
   rawOrder,
+  resolvedSubscriptionContractId,
   shop,
   shopifyOrderId,
 }: {
@@ -93,14 +194,14 @@ export const findMatchingSubscriptionMealSelection = async ({
   customerShopifyId: string | null;
   lineItemProperties?: LineItemProperty[];
   rawOrder: unknown;
+  resolvedSubscriptionContractId?: string | null;
   shop: string;
   shopifyOrderId: string;
 }) => {
   const normalizedOrderId = normalizeShopifyId(shopifyOrderId) ?? shopifyOrderId;
-  const subscriptionContractId = extractSubscriptionContractId(
-    rawOrder,
-    lineItemProperties,
-  );
+  const subscriptionContractId =
+    resolvedSubscriptionContractId ??
+    extractSubscriptionContractId(rawOrder, lineItemProperties);
   const normalizedCustomerId = normalizeShopifyId(customerShopifyId);
 
   if (subscriptionContractId) {
@@ -147,6 +248,7 @@ export const upsertSubscriptionMealSelectionFromFirstOrder = async ({
   shopifyOrderId,
   shopifyOrderName,
   lineItemProperties,
+  subscriptionContractId: subscriptionContractIdOverride,
 }: {
   boxTitle: string | null;
   customerEmail: string | null;
@@ -159,16 +261,16 @@ export const upsertSubscriptionMealSelectionFromFirstOrder = async ({
   shopifyOrderId: string;
   shopifyOrderName: string | null;
   lineItemProperties?: LineItemProperty[];
+  subscriptionContractId?: string | null;
 }) => {
   if (!isSubscriptionOrderType(orderType)) {
     return null;
   }
 
   const normalizedOrderId = normalizeShopifyId(shopifyOrderId) ?? shopifyOrderId;
-  const subscriptionContractId = extractSubscriptionContractId(
-    rawOrder,
-    lineItemProperties,
-  );
+  const subscriptionContractId =
+    subscriptionContractIdOverride ??
+    extractSubscriptionContractId(rawOrder, lineItemProperties);
 
   const normalizedCustomerId = normalizeShopifyId(customerShopifyId);
   const data = {

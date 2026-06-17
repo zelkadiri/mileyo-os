@@ -5,6 +5,7 @@ import db from "../db.server";
 import {
   findMatchingSubscriptionMealSelection,
   isSubscriptionOrder,
+  resolveSubscriptionContractId,
   upsertSubscriptionMealSelectionFromFirstOrder,
 } from "../services/subscriptionMealSelection.server";
 import { normalizeShopifyId } from "../utils/shopifyIds.server";
@@ -152,12 +153,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     rawOrder: order,
   });
 
+  const subscriptionContractId = isSubscription
+    ? await resolveSubscriptionContractId({
+        isSubscription,
+        lineItemProperties: boxLineItem.properties,
+        rawOrder: order,
+        shop,
+        shopifyOrderId,
+      })
+    : null;
+
+  console.log("[ORDERS_CREATE] Subscription contract lookup", {
+    isSubscription,
+    orderId: shopifyOrderId,
+    orderName: shopifyOrderName,
+    shop,
+    subscriptionContractId: subscriptionContractId ?? null,
+    subscriptionContractIdFound: Boolean(subscriptionContractId),
+  });
+
   const matchedSelection = isSubscription
     ? await findMatchingSubscriptionMealSelection({
         boxTitle,
         customerShopifyId,
         lineItemProperties: boxLineItem.properties,
         rawOrder: order,
+        resolvedSubscriptionContractId: subscriptionContractId,
         shop,
         shopifyOrderId,
       })
@@ -182,6 +203,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const resolvedBoxTitle = isRenewal
     ? (matchedSelection?.boxTitle ?? boxTitle)
     : boxTitle;
+  const resolvedSubscriptionContractId = isSubscription
+    ? (subscriptionContractId ?? matchedSelection?.subscriptionContractId ?? null)
+    : null;
 
   console.log("[ORDERS_CREATE] Processed order", {
     isRenewal,
@@ -191,6 +215,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     orderName: shopifyOrderName,
     selectedMealsSource,
     shop,
+    subscriptionContractId: resolvedSubscriptionContractId,
   });
 
   await db.boxOrder.upsert({
@@ -209,6 +234,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shop,
       shopifyOrderId,
       shopifyOrderName,
+      subscriptionContractId: resolvedSubscriptionContractId,
       subscriptionSelectionId: isRenewal ? matchedSelection?.id ?? null : null,
     },
     update: {
@@ -224,6 +250,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       selectedMeals: selectedMealsJson,
       selectedMealsSource,
       shopifyOrderName,
+      subscriptionContractId: resolvedSubscriptionContractId,
       subscriptionSelectionId: isRenewal ? matchedSelection?.id ?? null : null,
     },
     where: {
@@ -247,6 +274,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shop,
       shopifyOrderId,
       shopifyOrderName,
+      subscriptionContractId: resolvedSubscriptionContractId,
     });
   }
 

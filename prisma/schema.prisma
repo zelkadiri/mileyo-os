@@ -77,6 +77,7 @@ model BoxOrder {
   selectedMealsSource     String?  @default("line_item_properties")
   isSubscriptionRenewal   Boolean  @default(false)
   subscriptionSelectionId String?
+  subscriptionContractId  String?
   simulated               Boolean  @default(false)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
