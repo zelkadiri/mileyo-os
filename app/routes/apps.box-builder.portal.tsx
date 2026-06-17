@@ -31,7 +31,57 @@ type PortalSelection = {
   mealsCount: number;
   selectedMeals: string[];
   shopifyOrderName: string | null;
+  status: string;
 };
+
+type SubscriptionContractStatusResponse = {
+  data?: {
+    subscriptionContractPause?: {
+      contract?: { id?: string | null; status?: string | null } | null;
+      userErrors?: { field?: string[] | null; message?: string | null }[];
+    } | null;
+    subscriptionContractActivate?: {
+      contract?: { id?: string | null; status?: string | null } | null;
+      userErrors?: { field?: string[] | null; message?: string | null }[];
+    } | null;
+  };
+  errors?: { message?: string | null }[];
+};
+
+const subscriptionContractPauseMutation = `#graphql
+  mutation SubscriptionContractPause($subscriptionContractId: ID!) {
+    subscriptionContractPause(subscriptionContractId: $subscriptionContractId) {
+      contract {
+        id
+        status
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+const subscriptionContractActivateMutation = `#graphql
+  mutation SubscriptionContractActivate($subscriptionContractId: ID!) {
+    subscriptionContractActivate(subscriptionContractId: $subscriptionContractId) {
+      contract {
+        id
+        status
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+const toSubscriptionContractGid = (subscriptionContractId: string) =>
+  subscriptionContractId.includes("/")
+    ? subscriptionContractId
+    : `gid://shopify/SubscriptionContract/${subscriptionContractId}`;
 
 type CollectionProductsResponse = {
   data?: {
@@ -182,11 +232,11 @@ const renderMessage = (message: string, options?: { loginLink?: boolean }) =>
 const renderPortal = ({
   meals,
   selections,
-  success,
+  successMessage,
 }: {
   meals: PortalMeal[];
   selections: PortalSelection[];
-  success: boolean;
+  successMessage?: string | null;
 }) => {
   const initialQuantities = Object.fromEntries(
     selections.map((selection) => [
@@ -212,19 +262,28 @@ const renderPortal = ({
         Ta première commande est déjà confirmée et ne peut pas être modifiée. Ici, tu peux modifier les plats de tes prochaines box avant le prochain prélèvement.
       </p>
       ${
-        success
-          ? `<p class="success">Tes prochains plats ont bien été mis à jour.</p>`
+        successMessage
+          ? `<p class="success">${escapeHtml(successMessage)}</p>`
           : ""
       }
     </section>
 
     ${
       selections.length === 0
-        ? `<section class="portal-card"><p>Aucun abonnement actif trouvé pour ton compte.</p></section>`
+        ? `<section class="portal-card"><p>Aucun abonnement trouvé pour ton compte.</p></section>`
         : selections
             .map(
-              (selection) => `<section class="portal-card selection-card" data-selection-id="${escapeHtml(selection.id)}">
+              (selection) => {
+                const isActive = selection.status === "active";
+                const isPaused = selection.status === "paused";
+
+                return `<section class="portal-card selection-card" data-selection-id="${escapeHtml(selection.id)}">
       <h2>${escapeHtml(selection.shopifyOrderName ?? "Commande abonnement")}</h2>
+      ${
+        isPaused
+          ? `<p class="status-badge paused">Abonnement en pause</p>`
+          : ""
+      }
       <p><strong>Box :</strong> ${escapeHtml(selection.boxTitle ?? "Non renseignée")}</p>
       <p><strong>Nombre de repas :</strong> ${selection.mealsCount}</p>
       <p><strong>Prochains plats :</strong></p>
@@ -238,7 +297,21 @@ const renderPortal = ({
               .join("")}</ul>`
           : `<p class="muted">Aucun plat sélectionné pour le moment.</p>`
       }
-      <button class="portal-button secondary edit-button" type="button">Modifier mes prochains plats</button>
+      ${
+        isActive
+          ? `<button class="portal-button secondary edit-button" type="button">Modifier mes prochains plats</button>`
+          : ""
+      }
+      ${
+        isActive
+          ? `<button class="portal-button secondary pause-button" type="button">Mettre mon abonnement en pause</button>`
+          : ""
+      }
+      ${
+        isPaused
+          ? `<button class="portal-button reactivate-button" type="button">Réactiver mon abonnement</button>`
+          : ""
+      }
       <div class="editor hidden">
         <div class="editor-heading">
           <div>
@@ -251,7 +324,8 @@ const renderPortal = ({
         <div class="meal-grid"></div>
         <button class="portal-button secondary cancel-button" type="button">Annuler</button>
       </div>
-    </section>`,
+    </section>`;
+              },
             )
             .join("")
     }
@@ -295,9 +369,9 @@ const loadPortalData = async ({
   const records = await prisma.subscriptionMealSelection.findMany({
     orderBy: { createdAt: "desc" },
     where: {
-      active: true,
       customerShopifyId,
       shop,
+      status: { in: ["active", "paused"] },
     },
   });
 
@@ -309,6 +383,7 @@ const loadPortalData = async ({
       mealsCount: record.mealsCount as number,
       selectedMeals: getSelectedMeals(record.selectedMeals),
       shopifyOrderName: record.shopifyOrderName,
+      status: record.status,
     }));
 
   return { meals, selections };
@@ -339,7 +414,95 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  return renderPortal({ ...portalData, success: false });
+  return renderPortal({ ...portalData, successMessage: null });
+};
+
+const getGraphqlUserErrors = (
+  userErrors: { message?: string | null }[] | undefined,
+) =>
+  userErrors
+    ?.map((error) => error.message)
+    .filter(Boolean)
+    .join(" ") ?? "";
+
+const pauseSubscriptionContract = async (
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: { subscriptionContractId: string } },
+    ) => Promise<Response>;
+  },
+  subscriptionContractId: string,
+) => {
+  const response = await admin.graphql(subscriptionContractPauseMutation, {
+    variables: {
+      subscriptionContractId: toSubscriptionContractGid(subscriptionContractId),
+    },
+  });
+  const json = (await response.json()) as SubscriptionContractStatusResponse;
+
+  if (json.errors?.length) {
+    return {
+      error:
+        json.errors
+          .map((error) => error.message)
+          .filter(Boolean)
+          .join(" ") || "Erreur GraphQL lors de la mise en pause.",
+    };
+  }
+
+  const result = json.data?.subscriptionContractPause;
+  const userErrorMessage = getGraphqlUserErrors(result?.userErrors);
+
+  if (userErrorMessage) {
+    return { error: userErrorMessage };
+  }
+
+  if (!result?.contract?.id) {
+    return { error: "Shopify n’a pas confirmé la mise en pause." };
+  }
+
+  return { ok: true as const };
+};
+
+const reactivateSubscriptionContract = async (
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: { subscriptionContractId: string } },
+    ) => Promise<Response>;
+  },
+  subscriptionContractId: string,
+) => {
+  const response = await admin.graphql(subscriptionContractActivateMutation, {
+    variables: {
+      subscriptionContractId: toSubscriptionContractGid(subscriptionContractId),
+    },
+  });
+  const json = (await response.json()) as SubscriptionContractStatusResponse;
+
+  if (json.errors?.length) {
+    return {
+      error:
+        json.errors
+          .map((error) => error.message)
+          .filter(Boolean)
+          .join(" ") || "Erreur GraphQL lors de la réactivation.",
+    };
+  }
+
+  const result = json.data?.subscriptionContractActivate;
+  const userErrorMessage = getGraphqlUserErrors(result?.userErrors);
+
+  if (userErrorMessage) {
+    return { error: userErrorMessage };
+  }
+
+  if (!result?.contract?.id) {
+    return { error: "Shopify n’a pas confirmé la réactivation." };
+  }
+
+  return { ok: true as const };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -360,14 +523,81 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
 
+  const selectionId = String(formData.get("selectionId") ?? "");
+
+  if (!selectionId) {
+    return renderMessage("Données de sélection invalides.");
+  }
+
+  if (intent === "pauseSubscription" || intent === "reactivateSubscription") {
+    const expectedStatus = intent === "pauseSubscription" ? "active" : "paused";
+
+    const selection = await prisma.subscriptionMealSelection.findFirst({
+      where: {
+        customerShopifyId,
+        id: selectionId,
+        shop,
+        status: expectedStatus,
+      },
+    });
+
+    if (!selection) {
+      return renderMessage("Abonnement introuvable.");
+    }
+
+    if (!selection.subscriptionContractId) {
+      return renderMessage("Contrat d’abonnement Shopify manquant.");
+    }
+
+    const { admin } = await unauthenticated.admin(shop);
+
+    const shopifyResult =
+      intent === "pauseSubscription"
+        ? await pauseSubscriptionContract(
+            admin,
+            selection.subscriptionContractId,
+          )
+        : await reactivateSubscriptionContract(
+            admin,
+            selection.subscriptionContractId,
+          );
+
+    if ("error" in shopifyResult) {
+      return renderMessage(
+        shopifyResult.error ?? "Erreur lors de l’opération Shopify.",
+      );
+    }
+
+    await prisma.subscriptionMealSelection.update({
+      data:
+        intent === "pauseSubscription"
+          ? { active: false, status: "paused" }
+          : { active: true, status: "active" },
+      where: { id: selection.id },
+    });
+
+    const portalData = await loadPortalData({ customerShopifyId, shop });
+
+    if (!portalData) {
+      return renderMessage("Configuration incomplète.");
+    }
+
+    return renderPortal({
+      ...portalData,
+      successMessage:
+        intent === "pauseSubscription"
+          ? "Ton abonnement a bien été mis en pause."
+          : "Ton abonnement a bien été réactivé.",
+    });
+  }
+
   if (intent !== "updateFutureMealSelection") {
     return renderMessage("Action non reconnue.");
   }
 
-  const selectionId = String(formData.get("selectionId") ?? "");
   const selectedMealsRaw = String(formData.get("selectedMeals") ?? "");
 
-  if (!selectionId || !selectedMealsRaw) {
+  if (!selectedMealsRaw) {
     return renderMessage("Données de sélection invalides.");
   }
 
@@ -443,7 +673,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return renderMessage("Configuration incomplète.");
   }
 
-  return renderPortal({ ...portalData, success: true });
+  return renderPortal({
+    ...portalData,
+    successMessage: "Tes prochains plats ont bien été mis à jour.",
+  });
 };
 
 const clientScript = `
@@ -534,7 +767,9 @@ const clientScript = `
     Object.keys(editors).forEach(function (selectionId) {
       if (selectionId === exceptId) return;
       editors[selectionId].editor.classList.add("hidden");
-      editors[selectionId].editButton.classList.remove("hidden");
+      if (editors[selectionId].editButton) {
+        editors[selectionId].editButton.classList.remove("hidden");
+      }
     });
   }
 
@@ -560,48 +795,110 @@ const clientScript = `
 
     editors[selectionId] = editor;
 
-    editor.editButton.addEventListener("click", function () {
-      closeAllEditors(selectionId);
-      editor.quantities = JSON.parse(JSON.stringify(data.initialQuantities[selectionId] || {}));
-      editor.editButton.classList.add("hidden");
-      editor.editor.classList.remove("hidden");
-      updateEditor(editor);
-    });
-
-    editor.cancelButton.addEventListener("click", function () {
-      editor.editor.classList.add("hidden");
-      editor.editButton.classList.remove("hidden");
-      setEditorError(editor, "");
-    });
-
-    editor.saveButton.addEventListener("click", function () {
-      if (selectedTotal(editor.quantities) !== editor.requiredMeals) return;
-
-      editor.saveButton.disabled = true;
-      editor.saveButton.textContent = "Enregistrement...";
-      setEditorError(editor, "");
-
-      var body = new URLSearchParams();
-      body.set("intent", "updateFutureMealSelection");
-      body.set("selectionId", editor.selectionId);
-      body.set("selectedMeals", JSON.stringify(editor.quantities));
-
-      fetch(window.location.pathname + window.location.search, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString()
-      }).then(function (response) {
-        return response.text().then(function (html) {
-          document.open();
-          document.write(html);
-          document.close();
-        });
-      }).catch(function () {
-        editor.saveButton.textContent = "Enregistrer";
+    if (editor.editButton) {
+      editor.editButton.addEventListener("click", function () {
+        closeAllEditors(selectionId);
+        editor.quantities = JSON.parse(JSON.stringify(data.initialQuantities[selectionId] || {}));
+        editor.editButton.classList.add("hidden");
+        editor.editor.classList.remove("hidden");
         updateEditor(editor);
-        setEditorError(editor, "Impossible d’enregistrer tes plats. Réessayez dans un instant.");
       });
-    });
+
+      editor.cancelButton.addEventListener("click", function () {
+        editor.editor.classList.add("hidden");
+        editor.editButton.classList.remove("hidden");
+        setEditorError(editor, "");
+      });
+
+      editor.saveButton.addEventListener("click", function () {
+        if (selectedTotal(editor.quantities) !== editor.requiredMeals) return;
+
+        editor.saveButton.disabled = true;
+        editor.saveButton.textContent = "Enregistrement...";
+        setEditorError(editor, "");
+
+        var body = new URLSearchParams();
+        body.set("intent", "updateFutureMealSelection");
+        body.set("selectionId", editor.selectionId);
+        body.set("selectedMeals", JSON.stringify(editor.quantities));
+
+        fetch(window.location.pathname + window.location.search, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: body.toString()
+        }).then(function (response) {
+          return response.text().then(function (html) {
+            document.open();
+            document.write(html);
+            document.close();
+          });
+        }).catch(function () {
+          editor.saveButton.textContent = "Enregistrer";
+          updateEditor(editor);
+          setEditorError(editor, "Impossible d’enregistrer tes plats. Réessayez dans un instant.");
+        });
+      });
+    }
+
+    var pauseButton = card.querySelector(".pause-button");
+    if (pauseButton) {
+      pauseButton.addEventListener("click", function () {
+        if (!confirm("Confirmer la mise en pause de ton abonnement ?")) return;
+
+        pauseButton.disabled = true;
+        pauseButton.textContent = "Mise en pause...";
+
+        var pauseBody = new URLSearchParams();
+        pauseBody.set("intent", "pauseSubscription");
+        pauseBody.set("selectionId", selectionId);
+
+        fetch(window.location.pathname + window.location.search, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: pauseBody.toString()
+        }).then(function (response) {
+          return response.text().then(function (html) {
+            document.open();
+            document.write(html);
+            document.close();
+          });
+        }).catch(function () {
+          pauseButton.disabled = false;
+          pauseButton.textContent = "Mettre mon abonnement en pause";
+          alert("Impossible de mettre ton abonnement en pause. Réessayez dans un instant.");
+        });
+      });
+    }
+
+    var reactivateButton = card.querySelector(".reactivate-button");
+    if (reactivateButton) {
+      reactivateButton.addEventListener("click", function () {
+        if (!confirm("Confirmer la réactivation de ton abonnement ?")) return;
+
+        reactivateButton.disabled = true;
+        reactivateButton.textContent = "Réactivation...";
+
+        var reactivateBody = new URLSearchParams();
+        reactivateBody.set("intent", "reactivateSubscription");
+        reactivateBody.set("selectionId", selectionId);
+
+        fetch(window.location.pathname + window.location.search, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: reactivateBody.toString()
+        }).then(function (response) {
+          return response.text().then(function (html) {
+            document.open();
+            document.write(html);
+            document.close();
+          });
+        }).catch(function () {
+          reactivateButton.disabled = false;
+          reactivateButton.textContent = "Réactiver mon abonnement";
+          alert("Impossible de réactiver ton abonnement. Réessayez dans un instant.");
+        });
+      });
+    }
   });
 })();
 `;
@@ -638,6 +935,18 @@ body { background: #fff; margin: 0; }
   color: #166534;
   margin-top: 12px;
   padding: 12px;
+}
+.status-badge {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  padding: 6px 12px;
+}
+.status-badge.paused {
+  background: #fef3c7;
+  color: #92400e;
 }
 .error {
   background: #fee2e2;

@@ -367,7 +367,14 @@ export default function Subscriptions() {
                     ) : (
                       <s-text>Aucun plat trouvé.</s-text>
                     )}
-                    <s-text>Statut : {selection.status}</s-text>
+                    <s-text>
+                      Statut :{" "}
+                      {selection.status === "active"
+                        ? "Actif"
+                        : selection.status === "paused"
+                          ? "En pause"
+                          : selection.status}
+                    </s-text>
                     {selection.subscriptionContractId ? (
                       <s-text>
                         Contrat : {selection.subscriptionContractId}
