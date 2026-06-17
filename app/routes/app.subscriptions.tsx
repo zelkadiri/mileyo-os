@@ -4,10 +4,6 @@ import type { Prisma } from "@prisma/client";
 
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
-import {
-  isShopifyBillingWorkerButtonEnabled,
-  processDueSubscriptionBillings,
-} from "../services/subscriptionBillingWorker.server";
 
 const billingAttemptCreateMutation = `#graphql
   mutation SubscriptionBillingAttemptCreate(
@@ -112,17 +108,6 @@ const isShopifyBillingTestButtonEnabled = () =>
   process.env.NODE_ENV !== "production" ||
   process.env.ENABLE_SHOPIFY_BILLING_TEST_BUTTON === "true";
 
-const redirectWithBillingWorkerSummary = (summary: {
-  processed: number;
-  skipped: number;
-  success: number;
-  submitted: number;
-  errors: number;
-}) =>
-  redirect(
-    `/app/subscriptions?billingWorkerProcessed=${summary.processed}&billingWorkerSkipped=${summary.skipped}&billingWorkerSuccess=${summary.success}&billingWorkerSubmitted=${summary.submitted}&billingWorkerErrors=${summary.errors}`,
-  );
-
 const shopifyBillingConfirmMessage =
   "Confirmer le déclenchement d’une prochaine commande Shopify pour cet abonnement ?";
 
@@ -151,7 +136,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       customerName: customerNameByOrderId.get(selection.shopifyOrderId) ?? null,
     })),
     showShopifyBillingTestButton: isShopifyBillingTestButtonEnabled(),
-    showShopifyBillingWorkerButton: isShopifyBillingWorkerButtonEnabled(),
   };
 };
 
@@ -166,17 +150,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
   const selectionId = String(formData.get("selectionId") ?? "");
-
-  if (intent === "processDueSubscriptionBillings") {
-    if (!isShopifyBillingWorkerButtonEnabled()) {
-      return redirectWithBillingError(
-        "Traitement automatique des abonnements dus désactivé en production.",
-      );
-    }
-
-    const summary = await processDueSubscriptionBillings(shop);
-    return redirectWithBillingWorkerSummary(summary);
-  }
 
   if (!selectionId) {
     return redirect("/app/subscriptions");
@@ -328,63 +301,17 @@ export default function Subscriptions() {
   const {
     selections = [],
     showShopifyBillingTestButton = false,
-    showShopifyBillingWorkerButton = false,
   } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const error = searchParams.get("error");
   const billingError = searchParams.get("billingError");
   const billingSuccess = searchParams.get("billingSuccess") === "1";
   const attemptId = searchParams.get("attemptId");
-  const billingWorkerProcessed = searchParams.get("billingWorkerProcessed");
-  const billingWorkerSkipped = searchParams.get("billingWorkerSkipped");
-  const billingWorkerSuccess = searchParams.get("billingWorkerSuccess");
-  const billingWorkerSubmitted = searchParams.get("billingWorkerSubmitted");
-  const billingWorkerErrors = searchParams.get("billingWorkerErrors");
-  const hasBillingWorkerSummary =
-    billingWorkerProcessed != null &&
-    billingWorkerSkipped != null &&
-    billingWorkerSuccess != null &&
-    billingWorkerSubmitted != null &&
-    billingWorkerErrors != null;
 
   return (
     <s-page heading="Abonnements">
       <s-section>
         <s-stack gap="base">
-          {showShopifyBillingWorkerButton ? (
-            <div style={buttonRowStyle}>
-              <Form
-                method="post"
-                onSubmit={(event) => {
-                  if (
-                    !confirm(
-                      "Confirmer le traitement automatique de tous les abonnements actifs dus pour facturation Shopify ?",
-                    )
-                  ) {
-                    event.preventDefault();
-                  }
-                }}
-              >
-                <input
-                  name="intent"
-                  type="hidden"
-                  value="processDueSubscriptionBillings"
-                />
-                <button style={primaryButtonStyle} type="submit">
-                  Traiter les abonnements dus
-                </button>
-              </Form>
-            </div>
-          ) : null}
-          {hasBillingWorkerSummary ? (
-            <p style={bannerStyle("success")}>
-              Traitement terminé — traités : {billingWorkerProcessed}, ignorés
-              : {billingWorkerSkipped}, succès : {billingWorkerSuccess}, soumis
-              : {billingWorkerSubmitted}, erreurs : {billingWorkerErrors}. Les
-              commandes Shopify réussies seront
-              capturées via le webhook ORDERS_CREATE.
-            </p>
-          ) : null}
           {billingSuccess ? (
             <p style={bannerStyle("success")}>
               Tentative de facturation Shopify lancée
