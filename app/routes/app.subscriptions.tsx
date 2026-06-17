@@ -104,7 +104,7 @@ const bannerStyle = (variant: "error" | "success" | "warning") =>
     padding: "12px 16px",
   }) as const;
 
-const isShopifyBillingTestButtonEnabled = () =>
+const isSubscriptionTestActionsEnabled = () =>
   process.env.NODE_ENV !== "production" ||
   process.env.ENABLE_SHOPIFY_BILLING_TEST_BUTTON === "true";
 
@@ -135,7 +135,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       ...selection,
       customerName: customerNameByOrderId.get(selection.shopifyOrderId) ?? null,
     })),
-    showShopifyBillingTestButton: isShopifyBillingTestButtonEnabled(),
+    showSubscriptionTestActions: isSubscriptionTestActionsEnabled(),
   };
 };
 
@@ -156,7 +156,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "triggerShopifyBillingAttempt") {
-    if (!isShopifyBillingTestButtonEnabled()) {
+    if (!isSubscriptionTestActionsEnabled()) {
       return redirectWithBillingError(
         "Déclenchement manuel Shopify désactivé en production.",
       );
@@ -232,6 +232,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return redirect("/app/subscriptions");
   }
 
+  if (!isSubscriptionTestActionsEnabled()) {
+    return redirectWithBillingError(
+      "Actions de test désactivées en production.",
+    );
+  }
+
   const selection = await db.subscriptionMealSelection.findFirst({
     where: {
       active: true,
@@ -300,7 +306,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Subscriptions() {
   const {
     selections = [],
-    showShopifyBillingTestButton = false,
+    showSubscriptionTestActions = false,
   } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const error = searchParams.get("error");
@@ -413,23 +419,23 @@ export default function Subscriptions() {
                       {new Date(selection.updatedAt).toLocaleString("fr-FR")}
                     </s-text>
                     {isActive ? (
-                      <div style={buttonRowStyle}>
-                        <Form method="post">
-                          <input
-                            name="intent"
-                            type="hidden"
-                            value="simulateNextSubscriptionOrder"
-                          />
-                          <input
-                            name="selectionId"
-                            type="hidden"
-                            value={selection.id}
-                          />
-                          <button style={secondaryButtonStyle} type="submit">
-                            Simuler prochaine commande
-                          </button>
-                        </Form>
-                        {showShopifyBillingTestButton ? (
+                      showSubscriptionTestActions ? (
+                        <div style={buttonRowStyle}>
+                          <Form method="post">
+                            <input
+                              name="intent"
+                              type="hidden"
+                              value="simulateNextSubscriptionOrder"
+                            />
+                            <input
+                              name="selectionId"
+                              type="hidden"
+                              value={selection.id}
+                            />
+                            <button style={secondaryButtonStyle} type="submit">
+                              Simuler prochaine commande
+                            </button>
+                          </Form>
                           <div
                             style={{
                               display: "flex",
@@ -474,12 +480,10 @@ export default function Subscriptions() {
                               </button>
                             </Form>
                           </div>
-                        ) : (
-                          <s-text>
-                            Déclenchement manuel Shopify désactivé en production.
-                          </s-text>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <s-text>Actions de test désactivées en production.</s-text>
+                      )
                     ) : null}
                   </s-stack>
                 </s-box>
