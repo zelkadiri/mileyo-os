@@ -1,37 +1,26 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "b7570c05a698930d95dc6e2121c044df"
-name = "mileyo-subscription-os"
-application_url = "https://example.com"
+client_id = "b2ca390f61d777ae3c4f87ecc30648a6"
+name = "Mileyo Subscription Os"
+application_url = "https://mileyo-os.vercel.app/"
 embedded = true
 
+[app_proxy]
+url = "https://mileyo-os.vercel.app/apps/box-builder"
+subpath = "box-builder"
+prefix = "apps"
+
 [webhooks]
-api_version = "2026-07"
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/app/uninstalled"
-  topics = [ "app/uninstalled" ]
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/app/scopes_update"
-  topics = [ "app/scopes_update" ]
-
-  [[webhooks.subscriptions]]
-  uri = "/webhooks/orders/create"
-  topics = [ "orders/create" ]
+api_version = "2026-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_orders,write_metaobject_definitions,write_metaobjects,write_products,read_own_subscription_contracts,write_own_subscription_contracts"
+scopes = "write_metaobject_definitions,write_metaobjects,read_orders,write_products,read_own_subscription_contracts,write_own_subscription_contracts"
+optional_scopes = [ ]
+use_legacy_install_flow = false
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
-
-[build]
-automatically_update_urls_on_dev = true
-
-
-[app_proxy]
-url = "https://mileyo-os.vercel.app//apps/box-builder"
-prefix = "apps"
-subpath = "box-builder"
+redirect_urls = [
+  "https://mileyo-os.vercel.app/auth/callback",
+  "https://mileyo-os.vercel.app/auth/shopify/callback"
+]
