@@ -5,6 +5,40 @@ import type { Prisma } from "@prisma/client";
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
 
+const billingAttemptCreateMutation = `#graphql
+  mutation SubscriptionBillingAttemptCreate(
+    $subscriptionContractId: ID!
+    $subscriptionBillingAttemptInput: SubscriptionBillingAttemptInput!
+  ) {
+    subscriptionBillingAttemptCreate(
+      subscriptionContractId: $subscriptionContractId
+      subscriptionBillingAttemptInput: $subscriptionBillingAttemptInput
+    ) {
+      subscriptionBillingAttempt {
+        id
+        ready
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+type BillingAttemptCreateResponse = {
+  data?: {
+    subscriptionBillingAttemptCreate?: {
+      subscriptionBillingAttempt?: {
+        id?: string | null;
+        ready?: boolean | null;
+      } | null;
+      userErrors?: { field?: string[] | null; message?: string | null }[];
+    } | null;
+  };
+  errors?: { message?: string | null }[];
+};
+
 const getSelectedMeals = (value: unknown) => {
   if (!Array.isArray(value)) {
     return [];
@@ -13,12 +47,24 @@ const getSelectedMeals = (value: unknown) => {
   return value.map((meal) => String(meal));
 };
 
+const toSubscriptionContractGid = (subscriptionContractId: string) =>
+  subscriptionContractId.includes("/")
+    ? subscriptionContractId
+    : `gid://shopify/SubscriptionContract/${subscriptionContractId}`;
+
 const listStyle = {
   margin: 0,
   paddingLeft: "1.25rem",
 } as const;
 
-const simulateButtonStyle = {
+const buttonRowStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "0.5rem",
+  marginTop: "0.5rem",
+} as const;
+
+const primaryButtonStyle = {
   background: "#111827",
   border: 0,
   borderRadius: "999px",
@@ -26,9 +72,27 @@ const simulateButtonStyle = {
   cursor: "pointer",
   font: "inherit",
   fontWeight: 700,
-  marginTop: "0.5rem",
   padding: "0.65rem 1rem",
 } as const;
+
+const secondaryButtonStyle = {
+  background: "#f3f4f6",
+  border: "1px solid #d1d5db",
+  borderRadius: "999px",
+  color: "#111827",
+  cursor: "pointer",
+  font: "inherit",
+  fontWeight: 700,
+  padding: "0.65rem 1rem",
+} as const;
+
+const bannerStyle = (variant: "error" | "success") =>
+  ({
+    background: variant === "success" ? "#dcfce7" : "#fee2e2",
+    borderRadius: "12px",
+    color: variant === "success" ? "#166534" : "#991b1b",
+    padding: "12px 16px",
+  }) as const;
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -57,14 +121,90 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+const redirectWithBillingError = (message: string) =>
+  redirect(
+    `/app/subscriptions?billingError=${encodeURIComponent(message)}`,
+  );
+
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
   const selectionId = String(formData.get("selectionId") ?? "");
 
-  if (intent !== "simulateNextSubscriptionOrder" || !selectionId) {
+  if (!selectionId) {
+    return redirect("/app/subscriptions");
+  }
+
+  if (intent === "triggerShopifyBillingAttempt") {
+    const selection = await db.subscriptionMealSelection.findFirst({
+      where: {
+        active: true,
+        id: selectionId,
+        shop,
+        status: "active",
+      },
+    });
+
+    if (!selection) {
+      return redirectWithBillingError("Abonnement introuvable ou inactif.");
+    }
+
+    if (!selection.subscriptionContractId) {
+      return redirectWithBillingError(
+        "Contrat d’abonnement Shopify manquant pour cet abonnement.",
+      );
+    }
+
+    const idempotencyKey = `mileyo_${selection.id}_${Date.now()}`;
+
+    try {
+      const response = await admin.graphql(billingAttemptCreateMutation, {
+        variables: {
+          subscriptionBillingAttemptInput: { idempotencyKey },
+          subscriptionContractId: toSubscriptionContractGid(
+            selection.subscriptionContractId,
+          ),
+        },
+      });
+      const json = (await response.json()) as BillingAttemptCreateResponse;
+
+      if (json.errors?.length) {
+        return redirectWithBillingError(
+          json.errors
+            .map((error) => error.message)
+            .filter(Boolean)
+            .join(" ") || "Erreur GraphQL lors du déclenchement.",
+        );
+      }
+
+      const result = json.data?.subscriptionBillingAttemptCreate;
+      const userErrors = result?.userErrors ?? [];
+
+      if (userErrors.length > 0) {
+        return redirectWithBillingError(
+          userErrors
+            .map((error) => error.message)
+            .filter(Boolean)
+            .join(" ") || "Shopify a refusé la tentative de facturation.",
+        );
+      }
+
+      const attemptId =
+        result?.subscriptionBillingAttempt?.id ?? "inconnu";
+
+      return redirect(
+        `/app/subscriptions?billingSuccess=1&attemptId=${encodeURIComponent(attemptId)}`,
+      );
+    } catch {
+      return redirectWithBillingError(
+        "Impossible de contacter Shopify pour déclencher la facturation.",
+      );
+    }
+  }
+
+  if (intent !== "simulateNextSubscriptionOrder") {
     return redirect("/app/subscriptions");
   }
 
@@ -126,6 +266,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shopifyOrderName,
       simulated: true,
       subscriptionSelectionId: selection.id,
+      subscriptionContractId: selection.subscriptionContractId,
     },
   });
 
@@ -136,11 +277,25 @@ export default function Subscriptions() {
   const { selections = [] } = useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const error = searchParams.get("error");
+  const billingError = searchParams.get("billingError");
+  const billingSuccess = searchParams.get("billingSuccess") === "1";
+  const attemptId = searchParams.get("attemptId");
 
   return (
     <s-page heading="Abonnements">
       <s-section>
         <s-stack gap="base">
+          {billingSuccess ? (
+            <p style={bannerStyle("success")}>
+              Tentative de facturation Shopify lancée
+              {attemptId ? ` (${attemptId})` : ""}. Si le paiement réussit,
+              Shopify créera la commande et le webhook ORDERS_CREATE la
+              capturera.
+            </p>
+          ) : null}
+          {billingError ? (
+            <p style={bannerStyle("error")}>{billingError}</p>
+          ) : null}
           {error === "no_meals" ? (
             <s-text>
               Impossible de simuler : aucun plat futur enregistré pour cet
@@ -153,6 +308,7 @@ export default function Subscriptions() {
             selections.map((selection) => {
               const selectedMeals = getSelectedMeals(selection.selectedMeals);
               const isActive = selection.active && selection.status === "active";
+              const canTriggerBilling = Boolean(selection.subscriptionContractId);
 
               return (
                 <s-box
@@ -201,21 +357,47 @@ export default function Subscriptions() {
                       {new Date(selection.updatedAt).toLocaleString("fr-FR")}
                     </s-text>
                     {isActive ? (
-                      <Form method="post">
-                        <input
-                          name="intent"
-                          type="hidden"
-                          value="simulateNextSubscriptionOrder"
-                        />
-                        <input
-                          name="selectionId"
-                          type="hidden"
-                          value={selection.id}
-                        />
-                        <button style={simulateButtonStyle} type="submit">
-                          Simuler prochaine commande
-                        </button>
-                      </Form>
+                      <div style={buttonRowStyle}>
+                        <Form method="post">
+                          <input
+                            name="intent"
+                            type="hidden"
+                            value="simulateNextSubscriptionOrder"
+                          />
+                          <input
+                            name="selectionId"
+                            type="hidden"
+                            value={selection.id}
+                          />
+                          <button style={secondaryButtonStyle} type="submit">
+                            Simuler prochaine commande
+                          </button>
+                        </Form>
+                        <Form method="post">
+                          <input
+                            name="intent"
+                            type="hidden"
+                            value="triggerShopifyBillingAttempt"
+                          />
+                          <input
+                            name="selectionId"
+                            type="hidden"
+                            value={selection.id}
+                          />
+                          <button
+                            disabled={!canTriggerBilling}
+                            style={primaryButtonStyle}
+                            title={
+                              canTriggerBilling
+                                ? undefined
+                                : "Contrat d’abonnement Shopify requis"
+                            }
+                            type="submit"
+                          >
+                            Déclencher prochaine commande Shopify
+                          </button>
+                        </Form>
+                      </div>
                     ) : null}
                   </s-stack>
                 </s-box>
@@ -226,4 +408,4 @@ export default function Subscriptions() {
       </s-section>
     </s-page>
   );
-}
+};
