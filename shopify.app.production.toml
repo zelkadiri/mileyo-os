@@ -11,7 +11,19 @@ subpath = "box-builder"
 prefix = "apps"
 
 [webhooks]
-api_version = "2026-04"
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/create"
+  topics = [ "orders/create" ]
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -24,3 +36,7 @@ redirect_urls = [
   "https://mileyo-os.vercel.app/auth/callback",
   "https://mileyo-os.vercel.app/auth/shopify/callback"
 ]
+
+
+[build]
+automatically_update_urls_on_dev = true
