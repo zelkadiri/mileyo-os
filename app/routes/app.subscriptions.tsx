@@ -1,9 +1,19 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type {
+  ActionFunctionArgs,
+  ClientLoaderFunctionArgs,
+  HeadersFunction,
+  LoaderFunctionArgs,
+} from "react-router";
 import { Form, redirect, useLoaderData, useSearchParams } from "react-router";
 import type { Prisma } from "@prisma/client";
 
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
+import { normalizeShopifyId } from "../utils/shopifyIds.server";
+import {
+  dedupeSubscriptionSelectionsByContract,
+} from "../services/subscriptionMealSelection.server";
+import { RECOVERY_STATUS } from "../constants/subscriptionPaymentRecovery";
 
 const billingAttemptCreateMutation = `#graphql
   mutation SubscriptionBillingAttemptCreate(
@@ -111,13 +121,48 @@ const isSubscriptionTestActionsEnabled = () =>
 const shopifyBillingConfirmMessage =
   "Confirmer le déclenchement d’une prochaine commande Shopify pour cet abonnement ?";
 
+const recoveryStatusLabel = (status: string) => {
+  switch (status) {
+    case RECOVERY_STATUS.PROCESSING:
+      return "Traitement en cours";
+    case RECOVERY_STATUS.RETRY_SCHEDULED:
+      return "Nouvelle tentative planifiée";
+    case RECOVERY_STATUS.PAYMENT_METHOD_UPDATE_NEEDED:
+      return "Mise à jour du paiement requise";
+    case RECOVERY_STATUS.EMAIL_SEND_FAILED:
+      return "Email de mise à jour en échec";
+    case RECOVERY_STATUS.FINAL_FAILED:
+      return "Échec final — abonnement en pause";
+    case RECOVERY_STATUS.RECOVERED:
+      return "Régularisé";
+    default:
+      return status;
+  }
+};
+
+export const shouldRevalidate = () => true;
+
+export const headers: HeadersFunction = () => ({
+  "Cache-Control": "no-store, max-age=0, must-revalidate",
+});
+
+export async function clientLoader({ serverLoader }: ClientLoaderFunctionArgs) {
+  return serverLoader();
+}
+
+clientLoader.hydrate = true as const;
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
-  const selections = await db.subscriptionMealSelection.findMany({
-    orderBy: { createdAt: "desc" },
+  const allSelections = await db.subscriptionMealSelection.findMany({
+    orderBy: { updatedAt: "desc" },
     where: { shop },
   });
+  const selections = dedupeSubscriptionSelectionsByContract(allSelections).sort(
+    (left, right) => right.updatedAt.getTime() - left.updatedAt.getTime(),
+  );
+  const hiddenDuplicateCount = allSelections.length - selections.length;
   const boxOrders = await db.boxOrder.findMany({
     where: {
       shop,
@@ -130,7 +175,63 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     boxOrders.map((order) => [order.shopifyOrderId, order.customerName]),
   );
 
+  const paymentRecoveries = await db.subscriptionPaymentRecovery.findMany({
+    include: { subscriptionMealSelection: true },
+    orderBy: [{ nextRetryAt: "asc" }, { updatedAt: "desc" }],
+    where: {
+      shop,
+      status: {
+        in: [
+          RECOVERY_STATUS.PROCESSING,
+          RECOVERY_STATUS.RETRY_SCHEDULED,
+          RECOVERY_STATUS.PAYMENT_METHOD_UPDATE_NEEDED,
+          RECOVERY_STATUS.EMAIL_SEND_FAILED,
+          RECOVERY_STATUS.FINAL_FAILED,
+        ],
+      },
+    },
+  });
+
   return {
+    hiddenDuplicateCount,
+    paymentRecoveries: paymentRecoveries.map((recovery) => {
+      const canonicalSelection = allSelections.find(
+        (selection) => selection.id === recovery.subscriptionMealSelectionId,
+      );
+      const contractId = normalizeShopifyId(
+        canonicalSelection?.subscriptionContractId,
+      );
+      const resolvedSelection = contractId
+        ? (selections.find(
+            (selection) =>
+              normalizeShopifyId(selection.subscriptionContractId) ===
+              contractId,
+          ) ?? canonicalSelection)
+        : canonicalSelection;
+
+      return {
+        boxTitle: resolvedSelection?.boxTitle ?? recovery.subscriptionMealSelection.boxTitle,
+        boxSubscriptionPrice:
+          resolvedSelection?.boxSubscriptionPrice ??
+          recovery.subscriptionMealSelection.boxSubscriptionPrice,
+        customerEmail: recovery.subscriptionMealSelection.customerEmail,
+        customerName:
+          customerNameByOrderId.get(
+            recovery.subscriptionMealSelection.shopifyOrderId,
+          ) ?? null,
+        failureCount: recovery.failureCount,
+        id: recovery.id,
+        lastErrorCode: recovery.lastErrorCode,
+        lastErrorMessage: recovery.lastErrorMessage,
+        mealsCount:
+          resolvedSelection?.mealsCount ??
+          recovery.subscriptionMealSelection.mealsCount,
+        nextRetryAt: recovery.nextRetryAt,
+        selectionId: recovery.subscriptionMealSelectionId,
+        shopifyOrderName: recovery.subscriptionMealSelection.shopifyOrderName,
+        status: recovery.status,
+      };
+    }),
     selections: selections.map((selection) => ({
       ...selection,
       customerName: customerNameByOrderId.get(selection.shopifyOrderId) ?? null,
@@ -305,6 +406,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Subscriptions() {
   const {
+    hiddenDuplicateCount = 0,
+    paymentRecoveries = [],
     selections = [],
     showSubscriptionTestActions = false,
   } = useLoaderData<typeof loader>();
@@ -316,8 +419,73 @@ export default function Subscriptions() {
 
   return (
     <s-page heading="Abonnements">
+      <s-section heading="Paiements à régulariser">
+        <s-stack gap="base">
+          {paymentRecoveries.length === 0 ? (
+            <s-text>Aucun paiement en attente de régularisation.</s-text>
+          ) : (
+            paymentRecoveries.map((recovery) => (
+              <s-box
+                key={recovery.id}
+                borderRadius="base"
+                borderWidth="base"
+                padding="base"
+              >
+                <s-stack gap="small">
+                  <s-text>
+                    Client :{" "}
+                    {recovery.customerName
+                      ? `${recovery.customerName} (${recovery.customerEmail ?? "email non renseigné"})`
+                      : (recovery.customerEmail ?? "Non renseigné")}
+                  </s-text>
+                  <s-text>
+                    Première commande :{" "}
+                    {recovery.shopifyOrderName ?? recovery.selectionId}
+                  </s-text>
+                  <s-text>Box actuelle (prochaine commande) : {recovery.boxTitle ?? "Non renseignée"}</s-text>
+                  {recovery.mealsCount ? (
+                    <s-text>Nombre de repas : {recovery.mealsCount}</s-text>
+                  ) : null}
+                  {recovery.boxSubscriptionPrice ? (
+                    <s-text>
+                      Prix abonnement : {recovery.boxSubscriptionPrice} € / semaine
+                    </s-text>
+                  ) : null}
+                  <s-text>
+                    Tentatives échouées : {recovery.failureCount} / 3
+                  </s-text>
+                  <s-text>
+                    Statut : {recoveryStatusLabel(recovery.status)}
+                  </s-text>
+                  {recovery.lastErrorMessage ? (
+                    <s-text>
+                      Dernière erreur
+                      {recovery.lastErrorCode
+                        ? ` (${recovery.lastErrorCode})`
+                        : ""}
+                      : {recovery.lastErrorMessage}
+                    </s-text>
+                  ) : null}
+                  {recovery.nextRetryAt ? (
+                    <s-text>
+                      Prochaine tentative :{" "}
+                      {new Date(recovery.nextRetryAt).toLocaleString("fr-FR")}
+                    </s-text>
+                  ) : null}
+                </s-stack>
+              </s-box>
+            ))
+          )}
+        </s-stack>
+      </s-section>
       <s-section>
         <s-stack gap="base">
+          {hiddenDuplicateCount > 0 ? (
+            <p style={bannerStyle("warning")}>
+              {hiddenDuplicateCount} fiche(s) doublon masquée(s) — seule la
+              configuration la plus récente par contrat Shopify est affichée.
+            </p>
+          ) : null}
           {billingSuccess ? (
             <p style={bannerStyle("success")}>
               Tentative de facturation Shopify lancée
@@ -361,11 +529,20 @@ export default function Subscriptions() {
                       Première commande :{" "}
                       {selection.shopifyOrderName ?? selection.shopifyOrderId}
                     </s-text>
-                    <s-text>Box : {selection.boxTitle ?? "Non renseignée"}</s-text>
                     <s-text>
-                      Nombre de repas : {selection.mealsCount ?? "Non renseigné"}
+                      Prochaine box configurée :{" "}
+                      {selection.boxTitle ?? "Non renseignée"}
                     </s-text>
-                    <s-text>Prochains plats :</s-text>
+                    <s-text>
+                      Nombre de repas (prochaine commande) :{" "}
+                      {selection.mealsCount ?? "Non renseigné"}
+                    </s-text>
+                    {selection.boxSubscriptionPrice ? (
+                      <s-text>
+                        Prix abonnement : {selection.boxSubscriptionPrice} € / semaine
+                      </s-text>
+                    ) : null}
+                    <s-text>Plats prévus pour la prochaine commande :</s-text>
                     {selectedMeals.length > 0 ? (
                       <ul style={listStyle}>
                         {selectedMeals.map((meal, index) => (
@@ -415,8 +592,11 @@ export default function Subscriptions() {
                       {new Date(selection.createdAt).toLocaleString("fr-FR")}
                     </s-text>
                     <s-text>
-                      Mise à jour le :{" "}
+                      Mise à jour config abonnement :{" "}
                       {new Date(selection.updatedAt).toLocaleString("fr-FR")}
+                    </s-text>
+                    <s-text>
+                      ID fiche : {selection.id}
                     </s-text>
                     {isActive ? (
                       showSubscriptionTestActions ? (

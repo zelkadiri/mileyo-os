@@ -2,7 +2,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import { processDueSubscriptionBillings } from "../services/subscriptionBillingWorker.server";
 
-const CRON_SHOP = "mileyo-6u4o9pcv.myshopify.com";
+const CRON_SHOP = "mileyo-ok1bszwz.myshopify.com";
 
 const validateCronSecret = (request: Request): Response | null => {
   const cronSecret = process.env.CRON_SECRET;

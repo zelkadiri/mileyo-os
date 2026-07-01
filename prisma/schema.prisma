@@ -95,19 +95,55 @@ model SubscriptionMealSelection {
   shopifyOrderId           String
   shopifyOrderName         String?
   boxTitle                 String?
+  boxProductShopifyId      String?
+  boxVariantShopifyId      String?
+  boxSubscriptionPrice     String?
+  boxSellingPlanShopifyId  String?
   mealsCount               Int?
   selectedMeals            Json?
   status                   String    @default("active")
   active                   Boolean   @default(true)
   nextBillingDate          DateTime?
-  lastBillingAttemptAt     DateTime?
-  lastBillingAttemptStatus String?
-  lastBillingAttemptError  String?
-  lastBillingAttemptId     String?
-  createdAt                DateTime  @default(now())
+  lastBillingAttemptAt            DateTime?
+  lastBillingAttemptStatus        String?
+  lastBillingAttemptError         String?
+  lastBillingAttemptId            String?
+  resumeAttemptKey                String?
+  resumeAttemptStatus             String?
+  resumeAttemptStartedAt          DateTime?
+  resumeAttemptOrderId            String?
+  resumeAttemptBillingAttemptId   String?
+  resumeAttemptRetryNumber        Int       @default(1)
+  resumeAttemptLastFailedBillingAttemptId String?
+  createdAt                       DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
+
+  paymentRecoveries SubscriptionPaymentRecovery[]
 
   @@unique([shop, shopifyOrderId])
   @@index([shop, customerShopifyId])
   @@index([shop, subscriptionContractId])
+}
+
+model SubscriptionPaymentRecovery {
+  id                          String   @id @default(cuid())
+  shop                        String
+  subscriptionMealSelectionId String
+  billingCycleKey             String
+  failureCount                Int      @default(0)
+  status                      String
+  nextRetryAt                 DateTime?
+  lastFailureAt               DateTime?
+  lastErrorCode               String?
+  lastErrorMessage            String?
+  lastBillingAttemptId        String?
+  paymentUpdateEmailSentAt    DateTime?
+  finalPausedAt               DateTime?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  subscriptionMealSelection SubscriptionMealSelection @relation(fields: [subscriptionMealSelectionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionMealSelectionId, billingCycleKey])
+  @@index([shop, status, nextRetryAt])
 }

@@ -2,8 +2,47 @@ import type { Prisma } from "@prisma/client";
 
 import db from "../db.server";
 import { unauthenticated } from "../shopify.server";
-import { normalizeShopifyId } from "../utils/shopifyIds.server";
+import {
+  normalizeShopifyId,
+  subscriptionContractIdOrFilter,
+  toSubscriptionContractGid,
+} from "../utils/shopifyIds.server";
 import { fetchSubscriptionContractNextBillingDate } from "./subscriptionBillingWorker.server";
+
+export { toSubscriptionContractGid };
+
+export type OrdersCreateDecision =
+  | "attach_existing"
+  | "create_first_subscription"
+  | "orphan_renewal"
+  | "not_subscription";
+
+export const findSubscriptionMealSelectionByContractId = async ({
+  excludeShopifyOrderId,
+  shop,
+  subscriptionContractId,
+}: {
+  excludeShopifyOrderId?: string | null;
+  shop: string;
+  subscriptionContractId: string;
+}) => {
+  const normalizedContractId =
+    normalizeShopifyId(subscriptionContractId) ?? subscriptionContractId;
+  const normalizedExcludeOrderId = excludeShopifyOrderId
+    ? (normalizeShopifyId(excludeShopifyOrderId) ?? excludeShopifyOrderId)
+    : null;
+
+  return db.subscriptionMealSelection.findFirst({
+    orderBy: [{ active: "desc" }, { createdAt: "asc" }],
+    where: {
+      shop,
+      ...subscriptionContractIdOrFilter(normalizedContractId),
+      ...(normalizedExcludeOrderId
+        ? { shopifyOrderId: { not: normalizedExcludeOrderId } }
+        : {}),
+    },
+  });
+};
 
 type LineItemProperty = {
   name?: string;
@@ -21,6 +60,31 @@ const getPropertyValue = (
 
 export const isSubscriptionOrderType = (orderType: string | null | undefined) =>
   Boolean(orderType?.toLowerCase().includes("abonnement"));
+
+/** Checkout first order from box-builder (not a cron/resume billing renewal). */
+export const isFirstSubscriptionCheckoutOrder = ({
+  lineItemProperties,
+  orderType,
+}: {
+  lineItemProperties?: LineItemProperty[];
+  orderType: string | null;
+}) => {
+  if (isSubscriptionOrderType(orderType)) {
+    return true;
+  }
+
+  const mealsCount = getPropertyValue(lineItemProperties, "Nombre de repas");
+  const orderTypeProperty = getPropertyValue(
+    lineItemProperties,
+    "Type de commande",
+  );
+  const mealsJson = getPropertyValue(
+    lineItemProperties,
+    "_mileyo_selected_meals_json",
+  );
+
+  return Boolean(mealsCount && (orderTypeProperty || mealsJson));
+};
 
 export type SubscriptionLineItem = {
   properties?: LineItemProperty[];
@@ -200,20 +264,17 @@ export const findMatchingSubscriptionMealSelection = async ({
   shopifyOrderId: string;
 }) => {
   const normalizedOrderId = normalizeShopifyId(shopifyOrderId) ?? shopifyOrderId;
-  const subscriptionContractId =
+  const subscriptionContractId = normalizeShopifyId(
     resolvedSubscriptionContractId ??
-    extractSubscriptionContractId(rawOrder, lineItemProperties);
+      extractSubscriptionContractId(rawOrder, lineItemProperties),
+  );
   const normalizedCustomerId = normalizeShopifyId(customerShopifyId);
 
   if (subscriptionContractId) {
-    const byContract = await db.subscriptionMealSelection.findFirst({
-      orderBy: { updatedAt: "desc" },
-      where: {
-        active: true,
-        shop,
-        shopifyOrderId: { not: normalizedOrderId },
-        subscriptionContractId,
-      },
+    const byContract = await findSubscriptionMealSelectionByContractId({
+      excludeShopifyOrderId: normalizedOrderId,
+      shop,
+      subscriptionContractId,
     });
 
     if (byContract) {
@@ -221,17 +282,15 @@ export const findMatchingSubscriptionMealSelection = async ({
         selectionId: byContract.id,
         shopifyOrderId: normalizedOrderId,
         subscriptionContractId,
+        subscriptionContractIdStored: byContract.subscriptionContractId,
       });
       return byContract;
     }
 
-    console.log(
-      "[SUBSCRIPTION_SELECTION] no match for contract id, treating as first order",
-      {
-        shopifyOrderId: normalizedOrderId,
-        subscriptionContractId,
-      },
-    );
+    console.log("[ORDERS_CREATE] orphan_renewal — contract id with no local selection", {
+      shopifyOrderId: normalizedOrderId,
+      subscriptionContractId,
+    });
     return null;
   }
 
@@ -242,11 +301,11 @@ export const findMatchingSubscriptionMealSelection = async ({
   const fallbackMatches = await db.subscriptionMealSelection.findMany({
     orderBy: { updatedAt: "desc" },
     where: {
-      active: true,
       boxTitle,
       customerShopifyId: normalizedCustomerId,
       shop,
       shopifyOrderId: { not: normalizedOrderId },
+      subscriptionContractId: null,
     },
   });
 
@@ -320,9 +379,30 @@ export const upsertSubscriptionMealSelectionFromFirstOrder = async ({
   });
 
   try {
-    const subscriptionContractId =
+    const subscriptionContractId = normalizeShopifyId(
       subscriptionContractIdOverride ??
-      extractSubscriptionContractId(rawOrder, lineItemProperties);
+        extractSubscriptionContractId(rawOrder, lineItemProperties),
+    );
+
+    if (subscriptionContractId) {
+      const existingByContract = await findSubscriptionMealSelectionByContractId({
+        shop,
+        subscriptionContractId,
+      });
+
+      if (existingByContract) {
+        console.log(
+          "[SUBSCRIPTION_SELECTION] skipped create — contract already linked",
+          {
+            existingSelectionId: existingByContract.id,
+            existingShopifyOrderId: existingByContract.shopifyOrderId,
+            shopifyOrderId: normalizedOrderId,
+            subscriptionContractId,
+          },
+        );
+        return existingByContract;
+      }
+    }
 
     const normalizedCustomerId = normalizeShopifyId(customerShopifyId);
     let nextBillingDate: Date | null = null;
@@ -408,4 +488,61 @@ export const upsertSubscriptionMealSelectionFromFirstOrder = async ({
     });
     throw error;
   }
+};
+
+export const pickCanonicalSubscriptionSelection = <
+  T extends { active: boolean; createdAt: Date; status: string; updatedAt: Date },
+>(
+  left: T,
+  right: T,
+) => {
+  const leftActive = left.status === "active" && left.active;
+  const rightActive = right.status === "active" && right.active;
+
+  if (leftActive !== rightActive) {
+    return leftActive ? left : right;
+  }
+
+  if (left.updatedAt.getTime() !== right.updatedAt.getTime()) {
+    return left.updatedAt >= right.updatedAt ? left : right;
+  }
+
+  return left.createdAt <= right.createdAt ? left : right;
+};
+
+export const dedupeSubscriptionSelectionsByContract = <
+  T extends {
+    active: boolean;
+    createdAt: Date;
+    id: string;
+    shopifyOrderName: string | null;
+    status: string;
+    subscriptionContractId: string | null;
+    updatedAt: Date;
+  },
+>(
+  records: T[],
+) => {
+  const byContract = new Map<string, T>();
+  const withoutContract: T[] = [];
+
+  for (const record of records) {
+    const contractId = normalizeShopifyId(record.subscriptionContractId);
+
+    if (!contractId) {
+      withoutContract.push(record);
+      continue;
+    }
+
+    const existing = byContract.get(contractId);
+
+    byContract.set(
+      contractId,
+      existing
+        ? pickCanonicalSubscriptionSelection(existing, record)
+        : record,
+    );
+  }
+
+  return [...byContract.values(), ...withoutContract];
 };

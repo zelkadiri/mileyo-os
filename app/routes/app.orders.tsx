@@ -3,6 +3,8 @@ import { useLoaderData, useSearchParams } from "react-router";
 
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
+import { dedupeSubscriptionSelectionsByContract } from "../services/subscriptionMealSelection.server";
+import { normalizeShopifyId } from "../utils/shopifyIds.server";
 
 const getSelectedMeals = (value: unknown) => {
   if (!Array.isArray(value)) {
@@ -20,12 +22,55 @@ const escapeCsvValue = (value: unknown) => {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const orders = await db.boxOrder.findMany({
-    orderBy: { createdAt: "desc" },
-    where: { shop: session.shop },
-  });
+  const shop = session.shop;
+  const [orders, allSelections] = await Promise.all([
+    db.boxOrder.findMany({
+      orderBy: { createdAt: "desc" },
+      where: { shop },
+    }),
+    db.subscriptionMealSelection.findMany({
+      where: { shop },
+    }),
+  ]);
 
-  return { orders };
+  const selections = dedupeSubscriptionSelectionsByContract(allSelections);
+  const selectionByOrderId = new Map(
+    selections.map((selection) => [selection.shopifyOrderId, selection]),
+  );
+  const selectionByContractId = new Map(
+    selections.flatMap((selection) => {
+      const contractId = normalizeShopifyId(selection.subscriptionContractId);
+      return contractId ? [[contractId, selection] as const] : [];
+    }),
+  );
+  const selectionById = new Map(
+    selections.map((selection) => [selection.id, selection]),
+  );
+
+  return {
+    orders: orders.map((order) => {
+      const linkedSelection =
+        (order.subscriptionSelectionId
+          ? selectionById.get(order.subscriptionSelectionId)
+          : null) ??
+        selectionByOrderId.get(order.shopifyOrderId) ??
+        (order.subscriptionContractId
+          ? selectionByContractId.get(
+              normalizeShopifyId(order.subscriptionContractId) ??
+                order.subscriptionContractId,
+            )
+          : null);
+
+      return {
+        ...order,
+        futureBoxTitle: linkedSelection?.boxTitle ?? null,
+        futureMealsCount: linkedSelection?.mealsCount ?? null,
+        futureSelectedMeals: linkedSelection?.selectedMeals ?? null,
+        futureSubscriptionPrice: linkedSelection?.boxSubscriptionPrice ?? null,
+        futureUpdatedAt: linkedSelection?.updatedAt ?? null,
+      };
+    }),
+  };
 };
 
 const listStyle = {
@@ -125,8 +170,14 @@ export default function Orders() {
           ) : (
             orders.map((order) => {
               const selectedMeals = getSelectedMeals(order.selectedMeals);
+              const futureMeals = getSelectedMeals(order.futureSelectedMeals);
               const usesFutureSelection =
                 order.selectedMealsSource === "subscription_future_selection";
+              const hasFutureConfig =
+                Boolean(order.futureBoxTitle) &&
+                (order.futureBoxTitle !== order.boxTitle ||
+                  order.futureMealsCount !== order.mealsCount ||
+                  futureMeals.length > 0);
 
               return (
                 <s-box
@@ -155,15 +206,54 @@ export default function Orders() {
                       {order.customerEmail ? `(${order.customerEmail})` : ""}
                     </s-text>
                     <s-text>Type : {order.orderType ?? "Non renseigné"}</s-text>
-                    <s-text>Box : {order.boxTitle ?? "Non renseignée"}</s-text>
                     <s-text>
-                      Nombre de repas : {order.mealsCount ?? "Non renseigné"}
+                      Box commandée (snapshot) :{" "}
+                      {order.boxTitle ?? "Non renseignée"}
                     </s-text>
+                    <s-text>
+                      Nombre de repas (commande) :{" "}
+                      {order.mealsCount ?? "Non renseigné"}
+                    </s-text>
+                    {hasFutureConfig ? (
+                      <>
+                        <s-text>
+                          Prochaine box configurée : {order.futureBoxTitle}
+                        </s-text>
+                        <s-text>
+                          Repas prévus (prochaine commande) :{" "}
+                          {order.futureMealsCount ?? "Non renseigné"}
+                        </s-text>
+                        {order.futureSubscriptionPrice ? (
+                          <s-text>
+                            Prix abonnement : {order.futureSubscriptionPrice} € /
+                            semaine
+                          </s-text>
+                        ) : null}
+                        {futureMeals.length > 0 ? (
+                          <>
+                            <s-text>Plats prévus :</s-text>
+                            <ul style={listStyle}>
+                              {futureMeals.map((meal, index) => (
+                                <li key={`future-${meal}-${index}`}>{meal}</li>
+                              ))}
+                            </ul>
+                          </>
+                        ) : null}
+                        {order.futureUpdatedAt ? (
+                          <s-text>
+                            Config abonnement mise à jour le :{" "}
+                            {new Date(order.futureUpdatedAt).toLocaleString(
+                              "fr-FR",
+                            )}
+                          </s-text>
+                        ) : null}
+                      </>
+                    ) : null}
                     <s-text>
                       Source des plats :{" "}
                       {order.selectedMealsSource ?? "line_item_properties"}
                     </s-text>
-                    <s-text>Plats sélectionnés :</s-text>
+                    <s-text>Plats de cette commande :</s-text>
                     {selectedMeals.length > 0 ? (
                       <ul style={listStyle}>
                         {selectedMeals.map((meal, index) => (

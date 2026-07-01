@@ -4,11 +4,19 @@ import type { Prisma } from "@prisma/client";
 import db from "../db.server";
 import {
   findMatchingSubscriptionMealSelection,
+  isFirstSubscriptionCheckoutOrder,
   isSubscriptionOrder,
   resolveSubscriptionContractId,
+  type OrdersCreateDecision,
   upsertSubscriptionMealSelectionFromFirstOrder,
 } from "../services/subscriptionMealSelection.server";
-import { fetchSubscriptionContractNextBillingDate } from "../services/subscriptionBillingWorker.server";
+import {
+  completeResumeRenewalFromWebhook,
+  fetchSubscriptionContractNextBillingDate,
+  isResumeOrderAlreadyScheduled,
+  isResumeRenewalOrder,
+} from "../services/subscriptionBillingWorker.server";
+import { closeRecoveryOnSuccessfulOrder } from "../services/subscriptionPaymentRecovery.server";
 import { normalizeShopifyId } from "../utils/shopifyIds.server";
 import { authenticate, unauthenticated } from "../shopify.server";
 
@@ -26,6 +34,7 @@ type OrderLineItem = {
 };
 
 type OrderPayload = {
+  created_at?: string | null;
   contact_email?: string | null;
   customer?: {
     email?: string | null;
@@ -154,7 +163,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     rawOrder: order,
   });
 
-  const subscriptionContractId = isSubscription
+  const subscriptionContractIdRaw = isSubscription
     ? await resolveSubscriptionContractId({
         isSubscription,
         lineItemProperties: boxLineItem.properties,
@@ -163,14 +172,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         shopifyOrderId,
       })
     : null;
+  const subscriptionContractId = subscriptionContractIdRaw
+    ? normalizeShopifyId(subscriptionContractIdRaw)
+    : null;
 
   console.log("[ORDERS_CREATE] Subscription contract lookup", {
     isSubscription,
     orderId: shopifyOrderId,
     orderName: shopifyOrderName,
     shop,
-    subscriptionContractId: subscriptionContractId ?? null,
+    subscriptionContractId,
     subscriptionContractIdFound: Boolean(subscriptionContractId),
+    subscriptionContractIdRaw,
   });
 
   const matchedSelection = isSubscription
@@ -186,12 +199,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     : null;
 
   const isRenewal = Boolean(isSubscription && matchedSelection);
+  let decision: OrdersCreateDecision = "not_subscription";
+
+  if (isSubscription) {
+    if (matchedSelection) {
+      decision = "attach_existing";
+    } else if (
+      subscriptionContractId &&
+      !isFirstSubscriptionCheckoutOrder({
+        lineItemProperties: boxLineItem.properties,
+        orderType,
+      })
+    ) {
+      decision = "orphan_renewal";
+    } else {
+      decision = "create_first_subscription";
+    }
+  }
+
+  const freshMatchedSelection =
+    isRenewal && matchedSelection
+      ? await db.subscriptionMealSelection.findUnique({
+          where: { id: matchedSelection.id },
+        })
+      : null;
+
   const selectedMealsSource = isRenewal
-    ? "subscription_future_selection"
-    : "line_item_properties";
+    ? "saved_selection"
+    : "order_properties";
   const selectedMealsJson = (
-    isRenewal && matchedSelection?.selectedMeals
-      ? matchedSelection.selectedMeals
+    isRenewal && freshMatchedSelection?.selectedMeals
+      ? freshMatchedSelection.selectedMeals
       : lineItemSelectedMeals
   ) as Prisma.InputJsonValue;
   const resolvedOrderType =
@@ -205,18 +243,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     ? (matchedSelection?.boxTitle ?? boxTitle)
     : boxTitle;
   const resolvedSubscriptionContractId = isSubscription
-    ? (subscriptionContractId ?? matchedSelection?.subscriptionContractId ?? null)
+    ? (subscriptionContractId ??
+      normalizeShopifyId(matchedSelection?.subscriptionContractId) ??
+      null)
     : null;
 
   console.log("[ORDERS_CREATE] Processed order", {
+    decision,
     isRenewal,
     isSubscription,
     matchedSelectionId: matchedSelection?.id ?? null,
+    mealSnapshotSource: selectedMealsSource,
     orderId: shopifyOrderId,
     orderName: shopifyOrderName,
-    selectedMealsSource,
     shop,
     subscriptionContractId: resolvedSubscriptionContractId,
+    subscriptionContractIdNormalized: subscriptionContractId,
+    subscriptionContractIdRaw,
   });
 
   await db.boxOrder.upsert({
@@ -262,7 +305,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     },
   });
 
-  if (isSubscription && !isRenewal) {
+  if (decision === "create_first_subscription") {
     await upsertSubscriptionMealSelectionFromFirstOrder({
       boxTitle,
       customerEmail,
@@ -281,6 +324,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (isRenewal && matchedSelection) {
+    if (
+      subscriptionContractId &&
+      normalizeShopifyId(matchedSelection.subscriptionContractId) !==
+        subscriptionContractId
+    ) {
+      await db.subscriptionMealSelection.update({
+        data: { subscriptionContractId },
+        where: { id: matchedSelection.id },
+      });
+    }
+
+    try {
+      await closeRecoveryOnSuccessfulOrder({
+        orderId: shopifyOrderId,
+        selectionId: matchedSelection.id,
+      });
+    } catch (error) {
+      console.log("[ORDERS_CREATE] recovery close failed", {
+        error: error instanceof Error ? error.message : error,
+        selectionId: matchedSelection.id,
+        shopifyOrderId,
+      });
+    }
+
     const contractIdForSync =
       resolvedSubscriptionContractId ??
       matchedSelection.subscriptionContractId;
@@ -292,46 +359,90 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         shopifyOrderId,
       });
     } else {
-      console.log("[ORDERS_CREATE] nextBillingDate sync start", {
-        selectionId: matchedSelection.id,
-        shopifyOrderId,
-        subscriptionContractId: contractIdForSync,
+      const freshSelection = await db.subscriptionMealSelection.findUnique({
+        where: { id: matchedSelection.id },
       });
 
-      try {
-        const { admin } = await unauthenticated.admin(shop);
-        const nextBillingDate = await fetchSubscriptionContractNextBillingDate(
-          admin,
-          contractIdForSync,
-        );
+      const { admin } = await unauthenticated.admin(shop);
+      const orderCreatedAt = order.created_at
+        ? new Date(order.created_at)
+        : new Date();
 
-        if (!nextBillingDate) {
-          console.log("[ORDERS_CREATE] nextBillingDate sync skipped", {
-            reason: "no_date_returned",
+      if (freshSelection && isResumeRenewalOrder(freshSelection)) {
+        console.log("[ORDERS_CREATE] resume renewal — scheduling from order date", {
+          orderCreatedAt: orderCreatedAt.toISOString(),
+          resumeAttemptKey: freshSelection.resumeAttemptKey,
+          resumeAttemptStatus: freshSelection.resumeAttemptStatus,
+          selectionId: matchedSelection.id,
+          shopifyOrderId,
+        });
+
+        try {
+          await completeResumeRenewalFromWebhook({
+            admin,
+            orderCreatedAt,
             selectionId: matchedSelection.id,
             shopifyOrderId,
             subscriptionContractId: contractIdForSync,
           });
-        } else {
-          await db.subscriptionMealSelection.update({
-            data: { nextBillingDate },
-            where: { id: matchedSelection.id },
+        } catch (error) {
+          console.log("[ORDERS_CREATE] resume renewal scheduling failed", {
+            error: error instanceof Error ? error.message : error,
+            selectionId: matchedSelection.id,
+            shopifyOrderId,
           });
+        }
+      } else if (
+        freshSelection &&
+        isResumeOrderAlreadyScheduled(freshSelection, shopifyOrderId)
+      ) {
+        console.log("[ORDERS_CREATE] nextBillingDate sync skipped", {
+          reason: "resume_already_scheduled",
+          nextBillingDate: freshSelection.nextBillingDate?.toISOString() ?? null,
+          selectionId: matchedSelection.id,
+          shopifyOrderId,
+        });
+      } else {
+        console.log("[ORDERS_CREATE] nextBillingDate sync start", {
+          selectionId: matchedSelection.id,
+          shopifyOrderId,
+          subscriptionContractId: contractIdForSync,
+        });
 
-          console.log("[ORDERS_CREATE] nextBillingDate synced", {
-            nextBillingDate: nextBillingDate.toISOString(),
+        try {
+          const nextBillingDate = await fetchSubscriptionContractNextBillingDate(
+            admin,
+            contractIdForSync,
+          );
+
+          if (!nextBillingDate) {
+            console.log("[ORDERS_CREATE] nextBillingDate sync skipped", {
+              reason: "no_date_returned",
+              selectionId: matchedSelection.id,
+              shopifyOrderId,
+              subscriptionContractId: contractIdForSync,
+            });
+          } else {
+            await db.subscriptionMealSelection.update({
+              data: { nextBillingDate },
+              where: { id: matchedSelection.id },
+            });
+
+            console.log("[ORDERS_CREATE] nextBillingDate synced", {
+              nextBillingDate: nextBillingDate.toISOString(),
+              selectionId: matchedSelection.id,
+              shopifyOrderId,
+              subscriptionContractId: contractIdForSync,
+            });
+          }
+        } catch (error) {
+          console.log("[ORDERS_CREATE] nextBillingDate sync failed", {
+            error: error instanceof Error ? error.message : error,
             selectionId: matchedSelection.id,
             shopifyOrderId,
             subscriptionContractId: contractIdForSync,
           });
         }
-      } catch (error) {
-        console.log("[ORDERS_CREATE] nextBillingDate sync failed", {
-          error: error instanceof Error ? error.message : error,
-          selectionId: matchedSelection.id,
-          shopifyOrderId,
-          subscriptionContractId: contractIdForSync,
-        });
       }
     }
   }
