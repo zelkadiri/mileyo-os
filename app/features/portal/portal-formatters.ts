@@ -1,15 +1,13 @@
 import type { PortalMeal } from "./portal-types";
+import { escapeHtml, scriptJson } from "../../utils/html";
+import {
+  getSelectedMealsFromJson,
+  quantitiesToTitles as quantitiesToTitlesFromCatalog,
+  titlesToQuantities as titlesToQuantitiesFromCatalog,
+} from "../../utils/mealSelection";
 
-export const escapeHtml = (value: string) =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-
-export const scriptJson = (value: unknown) =>
-  JSON.stringify(value).replace(/</g, "\\u003c");
+export { escapeHtml, scriptJson };
+export { getSelectedMealsFromJson as getSelectedMeals };
 
 export const formatFrenchDateTime = (isoDate: string) =>
   new Date(isoDate).toLocaleString("fr-FR", {
@@ -118,50 +116,15 @@ export const formatFulfillmentStatus = (status: string | null) => {
   }
 };
 
-export const getSelectedMeals = (value: unknown): string[] => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((meal) => String(meal));
-};
-
 export const titlesToQuantities = (
   titles: string[],
   meals: PortalMeal[],
-): Record<string, number> => {
-  const titleToId = new Map(meals.map((meal) => [meal.title, meal.id]));
-  const quantities: Record<string, number> = {};
-
-  for (const title of titles) {
-    const mealId = titleToId.get(title);
-    if (!mealId) continue;
-    quantities[mealId] = (quantities[mealId] ?? 0) + 1;
-  }
-
-  return quantities;
-};
+): Record<string, number> => titlesToQuantitiesFromCatalog(titles, meals);
 
 export const quantitiesToTitles = (
   quantities: Record<string, number>,
   meals: PortalMeal[],
-) => {
-  const mealById = new Map(meals.map((meal) => [meal.id, meal.title]));
-  const titles: string[] = [];
-
-  for (const [mealId, quantity] of Object.entries(quantities)) {
-    const title = mealById.get(mealId);
-    if (!title) {
-      return null;
-    }
-
-    for (let index = 0; index < quantity; index += 1) {
-      titles.push(title);
-    }
-  }
-
-  return titles;
-};
+) => quantitiesToTitlesFromCatalog(quantities, meals);
 
 export const parseMealQuantities = (
   selectedMealsRaw: string,

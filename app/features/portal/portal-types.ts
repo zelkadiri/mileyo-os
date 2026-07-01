@@ -1,6 +1,7 @@
 import type { PaymentUpdateUnavailableReason } from "../../constants/subscriptionPaymentRecovery";
+import type { PortalSubscriptionState } from "../../constants/subscriptionStatus";
 
-export type PortalSubscriptionState = "active" | "paused" | "resume_processing";
+export type { PortalSubscriptionState };
 
 export type PortalMeal = {
   id: string;

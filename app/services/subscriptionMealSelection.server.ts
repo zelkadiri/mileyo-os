@@ -3,8 +3,13 @@ import type { Prisma } from "@prisma/client";
 import db from "../db.server";
 import { unauthenticated } from "../shopify.server";
 import {
+  getPropertyValue,
+  type LineItemProperty,
+} from "../utils/orderLineItemProperties";
+import {
   normalizeShopifyId,
   subscriptionContractIdOrFilter,
+  toShopifyOrderGid,
   toSubscriptionContractGid,
 } from "../utils/shopifyIds.server";
 import { fetchSubscriptionContractNextBillingDate } from "./subscriptionBillingWorker.server";
@@ -42,20 +47,6 @@ export const findSubscriptionMealSelectionByContractId = async ({
         : {}),
     },
   });
-};
-
-type LineItemProperty = {
-  name?: string;
-  value?: unknown;
-};
-
-const getPropertyValue = (
-  properties: LineItemProperty[] | undefined,
-  name: string,
-) => {
-  const property = properties?.find((item) => item.name === name);
-
-  return property?.value == null ? null : String(property.value);
 };
 
 export const isSubscriptionOrderType = (orderType: string | null | undefined) =>
@@ -153,10 +144,7 @@ export const fetchSubscriptionContractIdFromOrder = async (
   },
   shopifyOrderId: string,
 ) => {
-  const normalizedOrderId = normalizeShopifyId(shopifyOrderId) ?? shopifyOrderId;
-  const orderGid = shopifyOrderId.includes("/")
-    ? shopifyOrderId
-    : `gid://shopify/Order/${normalizedOrderId}`;
+  const orderGid = toShopifyOrderGid(shopifyOrderId);
 
   const response = await admin.graphql(orderSubscriptionContractQuery, {
     variables: { id: orderGid },

@@ -4,15 +4,8 @@ import { useLoaderData, useSearchParams } from "react-router";
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
 import { dedupeSubscriptionSelectionsByContract } from "../services/subscriptionMealSelection.server";
+import { getSelectedMealsFromJson } from "../utils/mealSelection";
 import { normalizeShopifyId } from "../utils/shopifyIds.server";
-
-const getSelectedMeals = (value: unknown) => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((meal) => String(meal));
-};
 
 const escapeCsvValue = (value: unknown) => {
   const stringValue = value == null ? "" : String(value);
@@ -126,7 +119,7 @@ export default function Orders() {
         order.orderType,
         order.boxTitle,
         order.mealsCount,
-        getSelectedMeals(order.selectedMeals).join(" | "),
+        getSelectedMealsFromJson(order.selectedMeals).join(" | "),
         order.selectedMealsSource,
         order.isSubscriptionRenewal ? "yes" : "no",
         order.simulated ? "yes" : "no",
@@ -169,8 +162,8 @@ export default function Orders() {
             <s-text>Aucune commande box capturée pour le moment.</s-text>
           ) : (
             orders.map((order) => {
-              const selectedMeals = getSelectedMeals(order.selectedMeals);
-              const futureMeals = getSelectedMeals(order.futureSelectedMeals);
+              const selectedMeals = getSelectedMealsFromJson(order.selectedMeals);
+              const futureMeals = getSelectedMealsFromJson(order.futureSelectedMeals);
               const usesFutureSelection =
                 order.selectedMealsSource === "subscription_future_selection";
               const hasFutureConfig =

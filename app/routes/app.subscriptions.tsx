@@ -7,13 +7,18 @@ import type {
 import { Form, redirect, useLoaderData, useSearchParams } from "react-router";
 import type { Prisma } from "@prisma/client";
 
+import { formatRecoveryStatusLabel, formatMealSelectionStatusLabel } from "../constants/subscriptionStatus";
+import { RECOVERY_STATUS } from "../constants/subscriptionPaymentRecovery";
 import db from "../db.server";
 import { authenticate } from "../shopify.server";
-import { normalizeShopifyId } from "../utils/shopifyIds.server";
 import {
   dedupeSubscriptionSelectionsByContract,
 } from "../services/subscriptionMealSelection.server";
-import { RECOVERY_STATUS } from "../constants/subscriptionPaymentRecovery";
+import { getSelectedMealsFromJson } from "../utils/mealSelection";
+import {
+  normalizeShopifyId,
+  toSubscriptionContractGid,
+} from "../utils/shopifyIds.server";
 
 const billingAttemptCreateMutation = `#graphql
   mutation SubscriptionBillingAttemptCreate(
@@ -48,19 +53,6 @@ type BillingAttemptCreateResponse = {
   };
   errors?: { message?: string | null }[];
 };
-
-const getSelectedMeals = (value: unknown) => {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value.map((meal) => String(meal));
-};
-
-const toSubscriptionContractGid = (subscriptionContractId: string) =>
-  subscriptionContractId.includes("/")
-    ? subscriptionContractId
-    : `gid://shopify/SubscriptionContract/${subscriptionContractId}`;
 
 const listStyle = {
   margin: 0,
@@ -120,25 +112,6 @@ const isSubscriptionTestActionsEnabled = () =>
 
 const shopifyBillingConfirmMessage =
   "Confirmer le déclenchement d’une prochaine commande Shopify pour cet abonnement ?";
-
-const recoveryStatusLabel = (status: string) => {
-  switch (status) {
-    case RECOVERY_STATUS.PROCESSING:
-      return "Traitement en cours";
-    case RECOVERY_STATUS.RETRY_SCHEDULED:
-      return "Nouvelle tentative planifiée";
-    case RECOVERY_STATUS.PAYMENT_METHOD_UPDATE_NEEDED:
-      return "Mise à jour du paiement requise";
-    case RECOVERY_STATUS.EMAIL_SEND_FAILED:
-      return "Email de mise à jour en échec";
-    case RECOVERY_STATUS.FINAL_FAILED:
-      return "Échec final — abonnement en pause";
-    case RECOVERY_STATUS.RECOVERED:
-      return "Régularisé";
-    default:
-      return status;
-  }
-};
 
 export const shouldRevalidate = () => true;
 
@@ -352,7 +325,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return redirect("/app/subscriptions?error=no_meals");
   }
 
-  const selectedMeals = getSelectedMeals(selection.selectedMeals);
+  const selectedMeals = getSelectedMealsFromJson(selection.selectedMeals);
 
   if (selectedMeals.length === 0) {
     return redirect("/app/subscriptions?error=no_meals");
@@ -455,7 +428,7 @@ export default function Subscriptions() {
                     Tentatives échouées : {recovery.failureCount} / 3
                   </s-text>
                   <s-text>
-                    Statut : {recoveryStatusLabel(recovery.status)}
+                    Statut : {formatRecoveryStatusLabel(recovery.status)}
                   </s-text>
                   {recovery.lastErrorMessage ? (
                     <s-text>
@@ -507,7 +480,7 @@ export default function Subscriptions() {
             <s-text>Aucun abonnement enregistré pour le moment.</s-text>
           ) : (
             selections.map((selection) => {
-              const selectedMeals = getSelectedMeals(selection.selectedMeals);
+              const selectedMeals = getSelectedMealsFromJson(selection.selectedMeals);
               const isActive = selection.active && selection.status === "active";
               const canTriggerBilling = Boolean(selection.subscriptionContractId);
 
@@ -554,11 +527,7 @@ export default function Subscriptions() {
                     )}
                     <s-text>
                       Statut :{" "}
-                      {selection.status === "active"
-                        ? "Actif"
-                        : selection.status === "paused"
-                          ? "En pause"
-                          : selection.status}
+                      {formatMealSelectionStatusLabel(selection.status)}
                     </s-text>
                     {selection.subscriptionContractId ? (
                       <s-text>

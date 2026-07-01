@@ -1,9 +1,10 @@
 import { RECOVERY_STATUS } from "../constants/subscriptionPaymentRecovery";
+import { getGraphqlUserErrors } from "../utils/graphql";
+import { toSubscriptionContractGid } from "../utils/shopifyIds.server";
 import {
   derivePortalSubscriptionState,
   isRecentBillingAttempt,
   isResumeAttemptInFlight,
-  toSubscriptionContractGid,
   type ShopifyAdminGraphql,
 } from "./subscriptionBillingWorker.server";
 import type { TrustedBoxProduct } from "./subscriptionBoxCatalog.server";
@@ -130,14 +131,6 @@ type SubscriptionDraftCommitResponse = {
   };
   errors?: { message?: string | null }[];
 };
-
-const getGraphqlUserErrors = (
-  userErrors: { message?: string | null }[] | undefined,
-) =>
-  userErrors
-    ?.map((error) => error.message)
-    .filter(Boolean)
-    .join(" ") ?? "";
 
 export const getSubscriptionBoxChangeBlockReason = (
   selection: {

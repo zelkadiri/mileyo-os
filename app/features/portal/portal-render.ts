@@ -1,13 +1,12 @@
 import type { PortalBoxProduct } from "../../services/subscriptionBoxCatalog.server";
+import { escapeHtml, scriptJson } from "../../utils/html";
 import {
-  escapeHtml,
   formatFinancialStatus,
   formatFrenchDate,
   formatFrenchDateTime,
   formatFulfillmentStatus,
   formatOrderPrice,
   formatSubscriptionPrice,
-  scriptJson,
   titlesToQuantities,
 } from "./portal-formatters";
 import { portalClientScript } from "./portal-client";
