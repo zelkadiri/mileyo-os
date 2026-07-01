@@ -11,6 +11,9 @@ export type ShopifyProduct = {
   } | null;
   handle: string;
   id: string;
+  mealCountMetafield?: {
+    value: string;
+  } | null;
   publishedAt?: string | null;
   status?: string | null;
   title: string;
@@ -118,4 +121,8 @@ export type SettingsActionData = {
   errors?: string[];
   message?: string;
   ok: boolean;
+};
+
+export type SettingsBoxProduct = ShopifyProduct & {
+  configuredMealCount: number | null;
 };

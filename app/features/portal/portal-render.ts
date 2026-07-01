@@ -7,6 +7,8 @@ import {
   formatFulfillmentStatus,
   formatOrderPrice,
   formatSubscriptionPrice,
+  getUpcomingTabEmptyMessage,
+  isPortalForecastEligible,
   titlesToQuantities,
 } from "./portal-formatters";
 import { portalClientScript } from "./portal-client";
@@ -87,9 +89,34 @@ const renderBoxPickerCards = (
   boxes
     .map((box) => {
       const isCurrent = box.id === currentBoxProductId;
+      const isAvailable = box.mealCount !== null;
+
+      if (!isAvailable) {
+        return `<button
+        class="box-card unavailable"
+        data-available="false"
+        data-box-id="${escapeHtml(box.id)}"
+        disabled
+        type="button"
+      >
+        ${
+          box.imageUrl
+            ? `<img alt="${escapeHtml(box.imageAlt)}" src="${escapeHtml(box.imageUrl)}" />`
+            : ""
+        }
+        <span class="box-card-title">${escapeHtml(box.title)}</span>
+        <span class="box-card-meta">Non disponible</span>
+        ${
+          box.subscriptionPrice
+            ? `<span class="box-card-price">${escapeHtml(formatSubscriptionPrice(box.subscriptionPrice))}</span>`
+            : ""
+        }
+      </button>`;
+      }
 
       return `<button
         class="box-card${isCurrent ? " selected" : ""}"
+        data-available="true"
         data-box-id="${escapeHtml(box.id)}"
         data-meal-count="${box.mealCount}"
         type="button"
@@ -357,8 +384,13 @@ export const renderPortal = ({
   );
 
   const forecastCards = selections
+    .filter((selection) => isPortalForecastEligible(selection.portalState))
     .flatMap((selection) => selection.forecastCycles)
     .map((cycle, index) => renderForecastCard(cycle, index + 1));
+  const upcomingEmptyMessage = getUpcomingTabEmptyMessage(
+    selections,
+    forecastCards.length,
+  );
 
   return htmlResponse(`<!doctype html>
 <html lang="fr">
@@ -412,7 +444,7 @@ export const renderPortal = ({
       ${
         forecastCards.length > 0
           ? forecastCards.join("")
-          : `<section class="portal-card"><p class="muted">Aucune prévision disponible pour le moment.</p></section>`
+          : `<section class="portal-card"><p class="muted">${escapeHtml(upcomingEmptyMessage ?? "Aucune prévision disponible pour le moment.")}</p></section>`
       }
     </div>
     <div class="portal-tab-panel hidden" data-tab-panel="history" role="tabpanel">

@@ -3,11 +3,13 @@ import { Form, useActionData, useLoaderData } from "react-router";
 import type { loadSettingsPageData } from "./settings-catalog.server";
 import {
   fieldStyle,
+  numberInputStyle,
   productGridStyle,
   productImageStyle,
   selectStyle,
+  warningBadgeStyle,
 } from "./settings-styles";
-import type { SettingsActionData, ShopifyProduct } from "./settings-types";
+import type { SettingsActionData, SettingsBoxProduct, ShopifyProduct } from "./settings-types";
 
 type SettingsPageData = Awaited<ReturnType<typeof loadSettingsPageData>>;
 
@@ -76,6 +78,51 @@ function ProductPreview({
   );
 }
 
+function BoxMealCountField({ product }: { product: SettingsBoxProduct }) {
+  const needsConfiguration = product.configuredMealCount === null;
+
+  return (
+    <s-box borderRadius="base" borderWidth="base" padding="base">
+      <s-stack gap="small">
+        {product.featuredImage ? (
+          <img
+            alt={product.featuredImage.altText ?? product.title}
+            src={product.featuredImage.url}
+            style={productImageStyle}
+          />
+        ) : null}
+        <s-text>
+          <strong>{product.title}</strong>
+        </s-text>
+        {needsConfiguration ? (
+          <span style={warningBadgeStyle}>À configurer</span>
+        ) : (
+          <s-text>Valeur actuelle : {product.configuredMealCount} repas</s-text>
+        )}
+        <input name="boxProductIds" type="hidden" value={product.id} />
+        <label style={fieldStyle}>
+          Nombre de repas
+          <input
+            defaultValue={
+              product.configuredMealCount != null
+                ? String(product.configuredMealCount)
+                : ""
+            }
+            inputMode="numeric"
+            max={100}
+            min={1}
+            name="boxMealCounts"
+            placeholder="Ex. 6"
+            step={1}
+            style={numberInputStyle}
+            type="number"
+          />
+        </label>
+      </s-stack>
+    </s-box>
+  );
+}
+
 export default function Settings() {
   const actionData = useActionData<SettingsActionData>();
   const { boxProducts, collections, mealProducts, settings, shop } =
@@ -140,6 +187,14 @@ export default function Settings() {
             <input
               type="hidden"
               name="intent"
+              value="createMealCountMetafieldDefinition"
+            />
+            <s-button type="submit">Créer le champ Nombre de repas</s-button>
+          </Form>
+          <Form method="post">
+            <input
+              type="hidden"
+              name="intent"
               value="setupWeeklySellingPlans"
             />
             <s-button type="submit">
@@ -171,6 +226,36 @@ export default function Settings() {
             </s-text>
           ) : (
             <s-text>Aucune collection de plats n’est configurée.</s-text>
+          )}
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Configuration des tailles de box">
+        <s-stack gap="base">
+          <s-text>
+            Définissez le nombre de repas inclus pour chaque produit box via le
+            metafield <strong>mileyo.meal_count</strong>. Cette valeur est
+            utilisée par le builder, le portail client et les changements de box.
+          </s-text>
+          {boxProducts.length === 0 ? (
+            <s-text>
+              Sélectionnez une collection de box contenant des produits pour
+              configurer les tailles.
+            </s-text>
+          ) : (
+            <Form method="post">
+              <input type="hidden" name="intent" value="saveBoxMealCounts" />
+              <s-stack gap="base">
+                <div style={productGridStyle}>
+                  {boxProducts.map((product) => (
+                    <BoxMealCountField key={product.id} product={product} />
+                  ))}
+                </div>
+                <s-button type="submit">
+                  Enregistrer les tailles de box
+                </s-button>
+              </s-stack>
+            </Form>
           )}
         </s-stack>
       </s-section>

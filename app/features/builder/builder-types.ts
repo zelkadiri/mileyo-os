@@ -2,7 +2,10 @@ export type ShopifyProduct = {
   id: string;
   title: string;
   featuredImage?: { altText?: string | null; url: string } | null;
-  metafield?: {
+  mealCountMetafield?: {
+    value: string;
+  } | null;
+  subscriptionPriceMetafield?: {
     value: string;
   } | null;
   sellingPlanGroups?: {
@@ -29,6 +32,7 @@ export type BuilderProduct = {
   id: string;
   imageAlt: string;
   imageUrl: string | null;
+  mealCount: number | null;
   sellingPlanId: string | null;
   subscriptionPrice: string | null;
   title: string;

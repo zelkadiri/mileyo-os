@@ -1,3 +1,4 @@
+import type { PortalSubscriptionState } from "../../constants/subscriptionStatus";
 import type { PortalMeal } from "./portal-types";
 import { escapeHtml, scriptJson } from "../../utils/html";
 import {
@@ -182,4 +183,27 @@ export const validateMealSelection = ({
   }
 
   return { titles };
+};
+
+export const isPortalForecastEligible = (
+  portalState: PortalSubscriptionState,
+) => portalState === "active";
+
+export const getUpcomingTabEmptyMessage = (
+  selections: { portalState: PortalSubscriptionState }[],
+  forecastCardCount: number,
+) => {
+  if (forecastCardCount > 0) {
+    return null;
+  }
+
+  const hasActiveSubscription = selections.some((selection) =>
+    isPortalForecastEligible(selection.portalState),
+  );
+
+  if (hasActiveSubscription) {
+    return "Aucune prévision disponible pour le moment.";
+  }
+
+  return "Aucune box à venir pour le moment. Votre abonnement est en pause.";
 };

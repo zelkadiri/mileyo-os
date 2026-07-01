@@ -1,0 +1,207 @@
+import type { Prisma } from "@prisma/client";
+import { redirect } from "react-router";
+
+import db from "../../db.server";
+import { authenticate } from "../../shopify.server";
+import { getSelectedMealsFromJson } from "../../utils/mealSelection";
+import { toSubscriptionContractGid } from "../../utils/shopifyIds.server";
+
+const billingAttemptCreateMutation = `#graphql
+  mutation SubscriptionBillingAttemptCreate(
+    $subscriptionContractId: ID!
+    $subscriptionBillingAttemptInput: SubscriptionBillingAttemptInput!
+  ) {
+    subscriptionBillingAttemptCreate(
+      subscriptionContractId: $subscriptionContractId
+      subscriptionBillingAttemptInput: $subscriptionBillingAttemptInput
+    ) {
+      subscriptionBillingAttempt {
+        id
+        ready
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
+type BillingAttemptCreateResponse = {
+  data?: {
+    subscriptionBillingAttemptCreate?: {
+      subscriptionBillingAttempt?: {
+        id?: string | null;
+        ready?: boolean | null;
+      } | null;
+      userErrors?: { field?: string[] | null; message?: string | null }[];
+    } | null;
+  };
+  errors?: { message?: string | null }[];
+};
+
+import { isSubscriptionTestActionsEnabled } from "./subscriptions-test.server";
+
+const redirectWithBillingError = (message: string) =>
+  redirect(
+    `/app/subscriptions?billingError=${encodeURIComponent(message)}`,
+  );
+
+export const handleSubscriptionsAction = async (request: Request) => {
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session.shop;
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") ?? "");
+  const selectionId = String(formData.get("selectionId") ?? "");
+
+  if (!selectionId) {
+    return redirect("/app/subscriptions");
+  }
+
+  if (intent === "triggerShopifyBillingAttempt") {
+    if (!isSubscriptionTestActionsEnabled()) {
+      return redirectWithBillingError(
+        "Déclenchement manuel Shopify désactivé en production.",
+      );
+    }
+
+    const selection = await db.subscriptionMealSelection.findFirst({
+      where: {
+        active: true,
+        id: selectionId,
+        shop,
+        status: "active",
+      },
+    });
+
+    if (!selection) {
+      return redirectWithBillingError("Abonnement introuvable ou inactif.");
+    }
+
+    if (!selection.subscriptionContractId) {
+      return redirectWithBillingError(
+        "Contrat d’abonnement Shopify manquant pour cet abonnement.",
+      );
+    }
+
+    const idempotencyKey = `mileyo_${selection.id}_${Date.now()}`;
+
+    try {
+      const response = await admin.graphql(billingAttemptCreateMutation, {
+        variables: {
+          subscriptionBillingAttemptInput: { idempotencyKey },
+          subscriptionContractId: toSubscriptionContractGid(
+            selection.subscriptionContractId,
+          ),
+        },
+      });
+      const json = (await response.json()) as BillingAttemptCreateResponse;
+
+      if (json.errors?.length) {
+        return redirectWithBillingError(
+          json.errors
+            .map((error) => error.message)
+            .filter(Boolean)
+            .join(" ") || "Erreur GraphQL lors du déclenchement.",
+        );
+      }
+
+      const result = json.data?.subscriptionBillingAttemptCreate;
+      const userErrors = result?.userErrors ?? [];
+
+      if (userErrors.length > 0) {
+        return redirectWithBillingError(
+          userErrors
+            .map((error) => error.message)
+            .filter(Boolean)
+            .join(" ") || "Shopify a refusé la tentative de facturation.",
+        );
+      }
+
+      const attemptId =
+        result?.subscriptionBillingAttempt?.id ?? "inconnu";
+
+      return redirect(
+        `/app/subscriptions?billingSuccess=1&attemptId=${encodeURIComponent(attemptId)}`,
+      );
+    } catch {
+      return redirectWithBillingError(
+        "Impossible de contacter Shopify pour déclencher la facturation.",
+      );
+    }
+  }
+
+  if (intent !== "simulateNextSubscriptionOrder") {
+    return redirect("/app/subscriptions");
+  }
+
+  if (!isSubscriptionTestActionsEnabled()) {
+    return redirectWithBillingError(
+      "Actions de test désactivées en production.",
+    );
+  }
+
+  const selection = await db.subscriptionMealSelection.findFirst({
+    where: {
+      active: true,
+      id: selectionId,
+      shop,
+      status: "active",
+    },
+  });
+
+  if (!selection?.selectedMeals) {
+    return redirect("/app/subscriptions?error=no_meals");
+  }
+
+  const selectedMeals = getSelectedMealsFromJson(selection.selectedMeals);
+
+  if (selectedMeals.length === 0) {
+    return redirect("/app/subscriptions?error=no_meals");
+  }
+
+  const firstOrder = await db.boxOrder.findFirst({
+    where: {
+      shop,
+      shopifyOrderId: selection.shopifyOrderId,
+    },
+  });
+
+  const now = Date.now();
+  const shopifyOrderId = `simulated_${selection.id}_${now}`;
+  const shopifyOrderName = `SIM-${new Date(now)
+    .toISOString()
+    .slice(0, 16)
+    .replace("T", " ")}`;
+  const rawOrder = {
+    message:
+      "Simulated renewal order for testing. No Shopify order was created.",
+    simulated: true,
+    subscriptionSelectionId: selection.id,
+    type: "subscription_renewal_test",
+  } as Prisma.InputJsonValue;
+
+  await db.boxOrder.create({
+    data: {
+      boxTitle: selection.boxTitle,
+      customerEmail: selection.customerEmail,
+      customerName: firstOrder?.customerName ?? null,
+      financialStatus: "simulated",
+      fulfillmentStatus: "unfulfilled",
+      isSubscriptionRenewal: true,
+      mealsCount: selection.mealsCount,
+      orderType: "Abonnement hebdomadaire",
+      rawOrder,
+      selectedMeals: selection.selectedMeals as Prisma.InputJsonValue,
+      selectedMealsSource: "subscription_future_selection",
+      shop,
+      shopifyOrderId,
+      shopifyOrderName,
+      simulated: true,
+      subscriptionSelectionId: selection.id,
+      subscriptionContractId: selection.subscriptionContractId,
+    },
+  });
+
+  return redirect("/app/orders?simulated=1");
+};

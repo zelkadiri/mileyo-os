@@ -1,3 +1,7 @@
+import {
+  parseMealCountMetafield,
+  warnMissingMealCountMetafield,
+} from "../../utils/mealCountMetafield";
 import type {
   BuilderProduct,
   CollectionProductsResponse,
@@ -15,7 +19,13 @@ const collectionProductsQuery = `#graphql
             altText
             url
           }
-          metafield(namespace: "mileyo", key: "subscription_price") {
+          subscriptionPriceMetafield: metafield(
+            namespace: "mileyo"
+            key: "subscription_price"
+          ) {
+            value
+          }
+          mealCountMetafield: metafield(namespace: "mileyo", key: "meal_count") {
             value
           }
           sellingPlanGroups(first: 10) {
@@ -62,6 +72,14 @@ export const getCollectionProducts = async (
 export const toBuilderProducts = (products: ShopifyProduct[]): BuilderProduct[] =>
   products.map((product) => {
     const firstVariant = product.variants.nodes[0];
+    const mealCount = parseMealCountMetafield(
+      product.mealCountMetafield?.value,
+    );
+
+    if (mealCount === null) {
+      warnMissingMealCountMetafield(product.id, product.title);
+    }
+
     const weeklySellingPlanGroup = product.sellingPlanGroups?.nodes.find(
       (group) => group.name === "Mileyo abonnement hebdomadaire",
     );
@@ -74,8 +92,9 @@ export const toBuilderProducts = (products: ShopifyProduct[]): BuilderProduct[] 
       id: product.id,
       imageAlt: product.featuredImage?.altText ?? product.title,
       imageUrl: product.featuredImage?.url ?? null,
+      mealCount,
       sellingPlanId: weeklySellingPlan?.id ?? null,
-      subscriptionPrice: product.metafield?.value ?? null,
+      subscriptionPrice: product.subscriptionPriceMetafield?.value ?? null,
       title: product.title,
       variantId: firstVariant?.id ?? "",
       variantPrice: firstVariant?.price ?? null,

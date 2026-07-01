@@ -1,9 +1,11 @@
 import prisma from "../../db.server";
+import { parseMealCountMetafield } from "../../utils/mealCountMetafield";
 import type {
   CollectionProductsResponse,
   CollectionResponse,
   CollectionsResponse,
   ShopifyCollection,
+  SettingsBoxProduct,
   ShopifyProduct,
 } from "./settings-types";
 
@@ -42,6 +44,9 @@ const collectionProductsQuery = `#graphql
           featuredImage {
             altText
             url
+          }
+          mealCountMetafield: metafield(namespace: "mileyo", key: "meal_count") {
+            value
           }
           variants(first: 1) {
             nodes {
@@ -103,6 +108,16 @@ export const getCollectionProducts = async (
   return json.data?.collection?.products.nodes ?? [];
 };
 
+export const toSettingsBoxProducts = (
+  products: ShopifyProduct[],
+): SettingsBoxProduct[] =>
+  products.map((product) => ({
+    ...product,
+    configuredMealCount: parseMealCountMetafield(
+      product.mealCountMetafield?.value,
+    ),
+  }));
+
 export const getFormString = (formData: FormData, key: string) => {
   const value = formData.get(key);
 
@@ -151,5 +166,11 @@ export const loadSettingsPageData = async (
     getCollectionProducts(admin, settings.mealCollectionId),
   ]);
 
-  return { boxProducts, collections, mealProducts, settings, shop };
+  return {
+    boxProducts: toSettingsBoxProducts(boxProducts),
+    collections,
+    mealProducts,
+    settings,
+    shop,
+  };
 };

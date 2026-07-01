@@ -16,9 +16,84 @@ export const builderClientScript = `
   var oneTimeToggle = document.getElementById("one-time-toggle");
   var subscriptionToggle = document.getElementById("subscription-toggle");
 
-  function getMealCountFromTitle(title) {
-    var match = title.match(/\\d+/);
-    return match ? parseInt(match[0], 10) : 0;
+  function renderBoxes() {
+    boxGrid.innerHTML = "";
+    data.boxes.forEach(function (box) {
+      var isAvailable = typeof box.mealCount === "number" && box.mealCount > 0;
+      var button = document.createElement("button");
+      button.className = "product-card selectable" + (isAvailable ? "" : " unavailable");
+      button.type = "button";
+      button.disabled = !isAvailable;
+
+      if (box.imageUrl) {
+        var image = document.createElement("img");
+        image.alt = box.imageAlt;
+        image.src = box.imageUrl;
+        button.appendChild(image);
+      }
+
+      var title = document.createElement("span");
+      title.className = "product-title";
+      title.textContent = box.title;
+      button.appendChild(title);
+
+      var variant = document.createElement("span");
+      variant.className = "muted";
+      variant.textContent = box.variantTitle;
+      button.appendChild(variant);
+
+      if (!isAvailable) {
+        var unavailable = document.createElement("span");
+        unavailable.className = "muted";
+        unavailable.textContent = "Cette box n’est pas encore disponible.";
+        button.appendChild(unavailable);
+      } else if (box.variantPrice) {
+        var price = document.createElement("span");
+        price.textContent = "Commande unique : " + formatEuros(box.variantPrice);
+        button.appendChild(price);
+      }
+
+      if (isAvailable) {
+        var subscriptionPrice = document.createElement("span");
+        subscriptionPrice.className = box.subscriptionPrice ? "" : "muted";
+        subscriptionPrice.textContent = box.subscriptionPrice
+          ? "Abonnement : " + formatEuros(box.subscriptionPrice)
+          : "Abonnement bientôt disponible";
+        button.appendChild(subscriptionPrice);
+      }
+
+      button.addEventListener("click", function () {
+        if (!isAvailable) {
+          setError("Cette box n’est pas encore disponible.");
+          return;
+        }
+
+        console.log("Selected box", box);
+        selectedBox = box;
+        requiredMeals = box.mealCount;
+        selectedMeals = {};
+        setError("");
+        boxHelper.textContent = requiredMeals + " repas à sélectionner";
+        mealsSection.classList.remove("hidden");
+
+        document.querySelectorAll(".product-card.selectable").forEach(function (card) {
+          card.classList.remove("selected");
+          var existingBadge = card.querySelector(".selected-badge");
+          if (existingBadge) existingBadge.remove();
+        });
+
+        button.classList.add("selected");
+        var badge = document.createElement("span");
+        badge.className = "selected-badge";
+        badge.textContent = "Sélectionnée";
+        button.insertBefore(badge, button.firstChild);
+
+        renderMeals();
+        updateSummary();
+      });
+
+      boxGrid.appendChild(button);
+    });
   }
 
   function getVariantCartId(variantId) {
@@ -65,72 +140,6 @@ export const builderClientScript = `
     oneTimeToggle.classList.toggle("active", orderType === "one-time");
     subscriptionToggle.classList.toggle("active", orderType === "subscription");
     updateSummary();
-  }
-
-  function renderBoxes() {
-    boxGrid.innerHTML = "";
-    data.boxes.forEach(function (box) {
-      var button = document.createElement("button");
-      button.className = "product-card selectable";
-      button.type = "button";
-
-      if (box.imageUrl) {
-        var image = document.createElement("img");
-        image.alt = box.imageAlt;
-        image.src = box.imageUrl;
-        button.appendChild(image);
-      }
-
-      var title = document.createElement("span");
-      title.className = "product-title";
-      title.textContent = box.title;
-      button.appendChild(title);
-
-      var variant = document.createElement("span");
-      variant.className = "muted";
-      variant.textContent = box.variantTitle;
-      button.appendChild(variant);
-
-      if (box.variantPrice) {
-        var price = document.createElement("span");
-        price.textContent = "Commande unique : " + formatEuros(box.variantPrice);
-        button.appendChild(price);
-      }
-
-      var subscriptionPrice = document.createElement("span");
-      subscriptionPrice.className = box.subscriptionPrice ? "" : "muted";
-      subscriptionPrice.textContent = box.subscriptionPrice
-        ? "Abonnement : " + formatEuros(box.subscriptionPrice)
-        : "Abonnement bientôt disponible";
-      button.appendChild(subscriptionPrice);
-
-      button.addEventListener("click", function () {
-        console.log("Selected box", box);
-        selectedBox = box;
-        requiredMeals = getMealCountFromTitle(box.title);
-        selectedMeals = {};
-        setError("");
-        boxHelper.textContent = requiredMeals + " repas à sélectionner";
-        mealsSection.classList.remove("hidden");
-
-        document.querySelectorAll(".product-card.selectable").forEach(function (card) {
-          card.classList.remove("selected");
-          var existingBadge = card.querySelector(".selected-badge");
-          if (existingBadge) existingBadge.remove();
-        });
-
-        button.classList.add("selected");
-        var badge = document.createElement("span");
-        badge.className = "selected-badge";
-        badge.textContent = "Sélectionnée";
-        button.insertBefore(badge, button.firstChild);
-
-        renderMeals();
-        updateSummary();
-      });
-
-      boxGrid.appendChild(button);
-    });
   }
 
   function renderMeals() {

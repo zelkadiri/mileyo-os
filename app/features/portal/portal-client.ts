@@ -479,11 +479,16 @@ export const portalClientScript = `
 
       boxChangeEditor.querySelectorAll(".box-card").forEach(function (boxCard) {
         boxCard.addEventListener("click", function () {
+          if (boxCard.getAttribute("data-available") === "false") {
+            setBoxChangeError(boxChangeState, "Cette box n’est pas encore disponible.");
+            return;
+          }
+
           var boxId = boxCard.getAttribute("data-box-id");
           var selectedBox = data.boxes.find(function (box) {
             return box.id === boxId;
           });
-          if (!selectedBox) return;
+          if (!selectedBox || selectedBox.mealCount == null) return;
 
           boxChangeState.selectedBox = selectedBox;
           boxChangeState.requiredMeals = selectedBox.mealCount;

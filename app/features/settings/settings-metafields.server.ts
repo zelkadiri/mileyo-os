@@ -41,3 +41,31 @@ export const createSubscriptionPriceMetafieldDefinition = async (admin: {
 
   return userErrors;
 };
+
+export const createMealCountMetafieldDefinition = async (admin: {
+  graphql: (
+    query: string,
+    options?: { variables?: Record<string, unknown> },
+  ) => Promise<Response>;
+}) => {
+  const response = await admin.graphql(metafieldDefinitionCreateMutation, {
+    variables: {
+      definition: {
+        description:
+          "Nombre de repas inclus dans cette box Mileyo.",
+        key: "meal_count",
+        name: "Nombre de repas",
+        namespace: "mileyo",
+        ownerType: "PRODUCT",
+        type: "number_integer",
+      },
+    },
+  });
+  const json = (await response.json()) as MetafieldDefinitionMutationResponse;
+  const userErrors =
+    json.data?.metafieldDefinitionCreate?.userErrors.map(
+      (error) => error.message,
+    ) ?? [];
+
+  return userErrors;
+};

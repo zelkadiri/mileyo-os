@@ -281,6 +281,10 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   border-color: #c45d28;
   box-shadow: 0 0 0 1px #c45d28;
 }
+.box-card.unavailable {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
 .box-card img {
   border-radius: 12px;
   height: 120px;

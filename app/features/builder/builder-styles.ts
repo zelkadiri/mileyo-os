@@ -64,6 +64,10 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   width: 100%;
 }
 .product-card.selectable { cursor: pointer; }
+.product-card.unavailable {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
 .product-card.selected {
   background: #f7eadb;
   border-color: #111827;

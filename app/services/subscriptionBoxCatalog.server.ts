@@ -1,3 +1,8 @@
+import {
+  parseMealCountMetafield,
+  warnMissingMealCountMetafield,
+} from "../utils/mealCountMetafield";
+
 export const MILEYO_SELLING_PLAN_GROUP_NAME = "Mileyo abonnement hebdomadaire";
 export const MILEYO_SELLING_PLAN_NAME = "Abonnement hebdomadaire";
 
@@ -5,7 +10,8 @@ export type ShopifyBoxProductNode = {
   id: string;
   title: string;
   featuredImage?: { altText?: string | null; url: string } | null;
-  metafield?: { value: string } | null;
+  mealCountMetafield?: { value: string } | null;
+  subscriptionPriceMetafield?: { value: string } | null;
   sellingPlanGroups?: {
     nodes: {
       name: string;
@@ -23,25 +29,32 @@ export type ShopifyBoxProductNode = {
   };
 };
 
-export type TrustedBoxProduct = {
+export type BoxCatalogProduct = {
   id: string;
   imageAlt: string;
   imageUrl: string | null;
-  mealCount: number;
-  sellingPlanId: string;
-  subscriptionPrice: string;
+  mealCount: number | null;
+  sellingPlanId: string | null;
+  subscriptionPrice: string | null;
   title: string;
   variantId: string;
   variantPrice: string | null;
   variantTitle: string;
 };
 
+export type TrustedBoxProduct = BoxCatalogProduct & {
+  mealCount: number;
+  sellingPlanId: string;
+  subscriptionPrice: string;
+  variantId: string;
+};
+
 export type PortalBoxProduct = {
   id: string;
   imageAlt: string;
   imageUrl: string | null;
-  mealCount: number;
-  subscriptionPrice: string;
+  mealCount: number | null;
+  subscriptionPrice: string | null;
   title: string;
 };
 
@@ -56,7 +69,13 @@ const boxCollectionProductsQuery = `#graphql
             altText
             url
           }
-          metafield(namespace: "mileyo", key: "subscription_price") {
+          subscriptionPriceMetafield: metafield(
+            namespace: "mileyo"
+            key: "subscription_price"
+          ) {
+            value
+          }
+          mealCountMetafield: metafield(namespace: "mileyo", key: "meal_count") {
             value
           }
           sellingPlanGroups(first: 10) {
@@ -92,11 +111,6 @@ type BoxCollectionProductsResponse = {
   errors?: { message?: string | null }[];
 };
 
-export const getMealCountFromBoxTitle = (title: string) => {
-  const match = title.match(/\d+/);
-  return match ? Number.parseInt(match[0], 10) : 0;
-};
-
 const parseSubscriptionPrice = (value: string | null | undefined) => {
   if (!value?.trim()) {
     return null;
@@ -112,15 +126,19 @@ const parseSubscriptionPrice = (value: string | null | undefined) => {
   return amount.toFixed(2);
 };
 
-export const toTrustedBoxProducts = (
+export const toBoxCatalogProducts = (
   products: ShopifyBoxProductNode[],
-): TrustedBoxProduct[] => {
-  const trusted: TrustedBoxProduct[] = [];
-
-  for (const product of products) {
+): BoxCatalogProduct[] =>
+  products.map((product) => {
     const firstVariant = product.variants.nodes[0];
-    const subscriptionPrice = parseSubscriptionPrice(product.metafield?.value);
-    const mealCount = getMealCountFromBoxTitle(product.title);
+    const mealCount = parseMealCountMetafield(
+      product.mealCountMetafield?.value,
+    );
+
+    if (mealCount === null) {
+      warnMissingMealCountMetafield(product.id, product.title);
+    }
+
     const weeklySellingPlanGroup = product.sellingPlanGroups?.nodes.find(
       (group) => group.name === MILEYO_SELLING_PLAN_GROUP_NAME,
     );
@@ -129,26 +147,43 @@ export const toTrustedBoxProducts = (
         (sellingPlan) => sellingPlan.name === MILEYO_SELLING_PLAN_NAME,
       ) ?? null;
 
+    return {
+      id: product.id,
+      imageAlt: product.featuredImage?.altText ?? product.title,
+      imageUrl: product.featuredImage?.url ?? null,
+      mealCount,
+      sellingPlanId: weeklySellingPlan?.id ?? null,
+      subscriptionPrice: parseSubscriptionPrice(
+        product.subscriptionPriceMetafield?.value,
+      ),
+      title: product.title,
+      variantId: firstVariant?.id ?? "",
+      variantPrice: firstVariant?.price ?? null,
+      variantTitle: firstVariant?.title ?? "Variante standard",
+    };
+  });
+
+export const toTrustedBoxProducts = (
+  products: BoxCatalogProduct[],
+): TrustedBoxProduct[] => {
+  const trusted: TrustedBoxProduct[] = [];
+
+  for (const product of products) {
     if (
-      !firstVariant?.id ||
-      !subscriptionPrice ||
-      mealCount <= 0 ||
-      !weeklySellingPlan?.id
+      !product.variantId ||
+      product.mealCount === null ||
+      !product.subscriptionPrice ||
+      !product.sellingPlanId
     ) {
       continue;
     }
 
     trusted.push({
-      id: product.id,
-      imageAlt: product.featuredImage?.altText ?? product.title,
-      imageUrl: product.featuredImage?.url ?? null,
-      mealCount,
-      sellingPlanId: weeklySellingPlan.id,
-      subscriptionPrice,
-      title: product.title,
-      variantId: firstVariant.id,
-      variantPrice: firstVariant.price ?? null,
-      variantTitle: firstVariant.title ?? "Variante standard",
+      ...product,
+      mealCount: product.mealCount,
+      sellingPlanId: product.sellingPlanId,
+      subscriptionPrice: product.subscriptionPrice,
+      variantId: product.variantId,
     });
   }
 
@@ -156,7 +191,7 @@ export const toTrustedBoxProducts = (
 };
 
 export const toPortalBoxProducts = (
-  products: TrustedBoxProduct[],
+  products: BoxCatalogProduct[],
 ): PortalBoxProduct[] =>
   products.map((product) => ({
     id: product.id,
@@ -167,7 +202,7 @@ export const toPortalBoxProducts = (
     title: product.title,
   }));
 
-export const fetchTrustedBoxCatalog = async (
+export const fetchBoxCatalogProducts = async (
   admin: {
     graphql: (
       query: string,
@@ -190,7 +225,21 @@ export const fetchTrustedBoxCatalog = async (
     );
   }
 
-  return toTrustedBoxProducts(json.data?.collection?.products.nodes ?? []);
+  return toBoxCatalogProducts(json.data?.collection?.products.nodes ?? []);
+};
+
+export const fetchTrustedBoxCatalog = async (
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: { id: string } },
+    ) => Promise<Response>;
+  },
+  boxCollectionId: string,
+) => {
+  const catalog = await fetchBoxCatalogProducts(admin, boxCollectionId);
+
+  return toTrustedBoxProducts(catalog);
 };
 
 export const resolveTrustedBoxProduct = (

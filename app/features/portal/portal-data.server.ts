@@ -18,9 +18,10 @@ import {
   getSubscriptionBoxChangeBlockReason,
 } from "../../services/subscriptionContractBoxChange.server";
 import {
-  fetchTrustedBoxCatalog,
+  fetchBoxCatalogProducts,
   resolveCurrentBoxProduct,
   toPortalBoxProducts,
+  toTrustedBoxProducts,
   type PortalBoxProduct,
 } from "../../services/subscriptionBoxCatalog.server";
 import { getMerchantSupportContact } from "../../utils/merchantSupport.server";
@@ -33,6 +34,7 @@ import {
   extractOrderPrice,
   extractOrderStatusUrl,
   getSelectedMeals,
+  isPortalForecastEligible,
 } from "./portal-formatters";
 import type {
   PortalForecastCycle,
@@ -177,12 +179,13 @@ export const loadPortalData = async ({
   }
 
   const { admin } = await unauthenticated.admin(shop);
-  const [mealProducts, trustedBoxes] = await Promise.all([
+  const [mealProducts, boxCatalog] = await Promise.all([
     getCollectionProducts(admin, settings.mealCollectionId),
-    fetchTrustedBoxCatalog(admin, settings.boxCollectionId),
+    fetchBoxCatalogProducts(admin, settings.boxCollectionId),
   ]);
   const meals = toPortalMeals(mealProducts);
-  const boxes = toPortalBoxProducts(trustedBoxes);
+  const trustedBoxes = toTrustedBoxProducts(boxCatalog);
+  const boxes = toPortalBoxProducts(boxCatalog);
 
   const records = await prisma.subscriptionMealSelection.findMany({
     orderBy: { createdAt: "desc" },
@@ -260,6 +263,7 @@ export const loadPortalData = async ({
         let forecastCycles: PortalForecastCycle[] = [];
 
         if (
+          isPortalForecastEligible(portalState) &&
           reconciled.subscriptionContractId &&
           reconciled.nextBillingDate
         ) {

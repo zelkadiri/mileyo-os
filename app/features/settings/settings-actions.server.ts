@@ -1,9 +1,17 @@
 import prisma from "../../db.server";
 import {
+  parseBoxMealCountFormEntries,
+  saveBoxMealCountMetafields,
+} from "./settings-box-meal-counts.server";
+import {
+  getCollectionProducts,
   getFormString,
   getSelectedCollection,
 } from "./settings-catalog.server";
-import { createSubscriptionPriceMetafieldDefinition } from "./settings-metafields.server";
+import {
+  createMealCountMetafieldDefinition,
+  createSubscriptionPriceMetafieldDefinition,
+} from "./settings-metafields.server";
 import { createOrUpdateWeeklySellingPlans } from "./settings-selling-plans.server";
 import type { SettingsActionData } from "./settings-types";
 
@@ -34,6 +42,61 @@ export const handleSettingsAction = async ({
           ? "Définition de metafield Prix abonnement créée."
           : "La définition existe peut-être déjà ou Shopify a retourné un avertissement.",
       ok: errors.length === 0,
+    };
+  }
+
+  if (intent === "createMealCountMetafieldDefinition") {
+    const errors = await createMealCountMetafieldDefinition(admin);
+
+    return {
+      errors,
+      message:
+        errors.length === 0
+          ? "Définition de metafield Nombre de repas créée."
+          : "La définition existe peut-être déjà ou Shopify a retourné un avertissement.",
+      ok: errors.length === 0,
+    };
+  }
+
+  if (intent === "saveBoxMealCounts") {
+    const settings = await prisma.appSettings.findUnique({ where: { shop } });
+
+    if (!settings?.boxCollectionId) {
+      return {
+        errors: ["Sélectionnez une collection de box avant d’enregistrer les tailles."],
+        ok: false,
+      };
+    }
+
+    const boxProducts = await getCollectionProducts(admin, settings.boxCollectionId);
+    const { entries, errors: validationErrors } = parseBoxMealCountFormEntries(
+      formData,
+      boxProducts,
+    );
+
+    if (validationErrors.length > 0) {
+      return {
+        errors: validationErrors,
+        ok: false,
+      };
+    }
+
+    if (entries.length === 0) {
+      return {
+        errors: ["Aucune taille de box valide à enregistrer."],
+        ok: false,
+      };
+    }
+
+    const shopifyErrors = await saveBoxMealCountMetafields(admin, entries);
+
+    return {
+      errors: shopifyErrors,
+      message:
+        shopifyErrors.length === 0
+          ? `${entries.length} taille(s) de box enregistrée(s).`
+          : "Certaines tailles de box n’ont pas pu être enregistrées.",
+      ok: shopifyErrors.length === 0,
     };
   }
 
