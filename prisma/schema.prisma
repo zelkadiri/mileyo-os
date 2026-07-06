@@ -121,6 +121,7 @@ model SubscriptionMealSelection {
   paymentRecoveries SubscriptionPaymentRecovery[]
 
   @@unique([shop, shopifyOrderId])
+  @@unique([shop, subscriptionContractId])
   @@index([shop, customerShopifyId])
   @@index([shop, subscriptionContractId])
 }

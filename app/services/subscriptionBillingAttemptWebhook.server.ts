@@ -1,13 +1,14 @@
 import type { SubscriptionMealSelection } from "@prisma/client";
 
 import db from "../db.server";
-import { normalizeShopifyId, subscriptionContractIdOrFilter } from "../utils/shopifyIds.server";
+import { normalizeShopifyId } from "../utils/shopifyIds.server";
 import { unauthenticated } from "../shopify.server";
 import {
   closeRecoveryOnSuccessfulOrder,
   processBillingAttemptFailure,
 } from "./subscriptionPaymentRecovery.server";
 import { RECOVERY_STATUS } from "../constants/subscriptionPaymentRecovery";
+import { findCanonicalSubscriptionMealSelectionByContractId } from "./subscriptionMealSelection.server";
 import {
   completeResumeRenewalFromWebhook,
   fetchShopifyBillingAttempt,
@@ -50,11 +51,9 @@ export const findSelectionBySubscriptionContract = async (
     return null;
   }
 
-  return db.subscriptionMealSelection.findFirst({
-    where: {
-      shop,
-      ...subscriptionContractIdOrFilter(normalized),
-    },
+  return findCanonicalSubscriptionMealSelectionByContractId({
+    shop,
+    subscriptionContractId: normalized,
   });
 };
 

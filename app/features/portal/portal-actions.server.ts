@@ -46,6 +46,9 @@ import {
   completePortalScheduledResume,
   resolvePortalResumeMode,
 } from "./portal-resume.server";
+import {
+  syncAndAssertSubscriptionContractActionAllowed,
+} from "../../services/subscriptionContractSync.server";
 import { renderMessage, renderPortal } from "./portal-render";
 
 type SubscriptionContractStatusResponse = {
@@ -134,30 +137,69 @@ type PortalActionContext = {
   shop: string;
 };
 
-const handlePauseSubscriptionAction = async ({
+const loadSyncedSelectionForAction = async ({
+  admin,
   customerShopifyId,
-  formData,
   selectionId,
   shop,
-}: PortalActionContext) => {
-    const selection = await prisma.subscriptionMealSelection.findFirst({
-      where: {
-        customerShopifyId,
-        id: selectionId,
-        shop,
-        status: "active",
-      },
+  statusFilter,
+}: {
+  admin: Awaited<ReturnType<typeof unauthenticated.admin>>["admin"];
+  customerShopifyId: string;
+  selectionId: string;
+  shop: string;
+  statusFilter?: string | { in: string[] };
+}) => {
+  const selection = await prisma.subscriptionMealSelection.findFirst({
+    where: {
+      customerShopifyId,
+      id: selectionId,
+      shop,
+      ...(statusFilter ? { status: statusFilter } : {}),
+    },
+  });
+
+  if (!selection) {
+    return { error: "Abonnement introuvable.", selection: null };
+  }
+
+  const guard = await syncAndAssertSubscriptionContractActionAllowed({
+    admin,
+    selection,
+    shop,
+    source: "portal_action",
+  });
+
+  if (!guard.allowed) {
+    return { error: guard.message, selection: guard.selection };
+  }
+
+  return { error: null, selection: guard.selection };
+};
+
+const handlePauseSubscriptionAction = async ({
+  customerShopifyId,
+  selectionId,
+  shop,
+}: Omit<PortalActionContext, "formData">) => {
+    const { admin } = await unauthenticated.admin(shop);
+    const loaded = await loadSyncedSelectionForAction({
+      admin,
+      customerShopifyId,
+      selectionId,
+      shop,
+      statusFilter: "active",
     });
 
-    if (!selection) {
-      return renderMessage("Abonnement introuvable.");
+    if (loaded.error || !loaded.selection) {
+      return renderMessage(loaded.error ?? "Abonnement introuvable.");
     }
+
+    const selection = loaded.selection;
 
     if (!selection.subscriptionContractId) {
       return renderMessage("Contrat d’abonnement Shopify manquant.");
     }
-
-    const { admin } = await unauthenticated.admin(shop);
 
     const shopifyResult = await pauseSubscriptionContract(
       admin,
@@ -191,28 +233,27 @@ const handlePauseSubscriptionAction = async ({
 
 const handleSendPaymentUpdateEmailAction = async ({
   customerShopifyId,
-  formData,
   selectionId,
   shop,
-}: PortalActionContext) => {
-    const selection = await prisma.subscriptionMealSelection.findFirst({
-      where: {
-        customerShopifyId,
-        id: selectionId,
-        shop,
-        status: { in: ["active", "paused"] },
-      },
+}: Omit<PortalActionContext, "formData">) => {
+    const { admin } = await unauthenticated.admin(shop);
+    const loaded = await loadSyncedSelectionForAction({
+      admin,
+      customerShopifyId,
+      selectionId,
+      shop,
+      statusFilter: { in: ["active", "paused"] },
     });
 
-    if (!selection) {
-      return renderMessage("Abonnement introuvable.");
+    if (loaded.error || !loaded.selection) {
+      return renderMessage(loaded.error ?? "Abonnement introuvable.");
     }
+
+    const selection = loaded.selection;
 
     if (!selection.subscriptionContractId) {
       return renderMessage("Contrat d’abonnement Shopify manquant.");
     }
-
-    const { admin } = await unauthenticated.admin(shop);
 
     const eligibility = await resolvePaymentUpdateEligibility(
       admin,
@@ -273,16 +314,22 @@ const handleResumeSubscriptionAction = async ({
     return renderMessage(parsedQuantities.error);
   }
 
-  const selection = await prisma.subscriptionMealSelection.findFirst({
-    where: {
-      customerShopifyId,
-      id: selectionId,
-      shop,
-      status: "paused",
-    },
+  const { admin } = await unauthenticated.admin(shop);
+  const loaded = await loadSyncedSelectionForAction({
+    admin,
+    customerShopifyId,
+    selectionId,
+    shop,
+    statusFilter: "paused",
   });
 
-  if (!selection || typeof selection.mealsCount !== "number") {
+  if (loaded.error || !loaded.selection) {
+    return renderMessage(loaded.error ?? "Abonnement introuvable.");
+  }
+
+  const selection = loaded.selection;
+
+  if (typeof selection.mealsCount !== "number") {
     return renderMessage("Abonnement introuvable.");
   }
 
@@ -296,7 +343,6 @@ const handleResumeSubscriptionAction = async ({
     return renderMessage("Configuration incomplète.");
   }
 
-  const { admin } = await unauthenticated.admin(shop);
   const mealProducts = await getCollectionProducts(
     admin,
     settings.mealCollectionId,
@@ -384,16 +430,22 @@ const handleResumeSubscriptionAndPayAction = async ({
       return renderMessage(parsedQuantities.error);
     }
 
-    const selection = await prisma.subscriptionMealSelection.findFirst({
-      where: {
-        customerShopifyId,
-        id: selectionId,
-        shop,
-        status: "paused",
-      },
+    const { admin } = await unauthenticated.admin(shop);
+    const loaded = await loadSyncedSelectionForAction({
+      admin,
+      customerShopifyId,
+      selectionId,
+      shop,
+      statusFilter: "paused",
     });
 
-    if (!selection || typeof selection.mealsCount !== "number") {
+    if (loaded.error || !loaded.selection) {
+      return renderMessage(loaded.error ?? "Abonnement introuvable.");
+    }
+
+    const selection = loaded.selection;
+
+    if (typeof selection.mealsCount !== "number") {
       return renderMessage("Abonnement introuvable.");
     }
 
@@ -407,7 +459,6 @@ const handleResumeSubscriptionAndPayAction = async ({
       return renderMessage("Configuration incomplète.");
     }
 
-    const { admin } = await unauthenticated.admin(shop);
     const mealProducts = await getCollectionProducts(
       admin,
       settings.mealCollectionId,
@@ -839,16 +890,22 @@ const handleChangeSubscriptionBoxAction = async ({
       return renderMessage("Veuillez sélectionner une box.");
     }
 
-    const selection = await prisma.subscriptionMealSelection.findFirst({
-      where: {
-        customerShopifyId,
-        id: selectionId,
-        shop,
-        status: { in: ["active", "paused"] },
-      },
+    const { admin } = await unauthenticated.admin(shop);
+    const loaded = await loadSyncedSelectionForAction({
+      admin,
+      customerShopifyId,
+      selectionId,
+      shop,
+      statusFilter: { in: ["active", "paused"] },
     });
 
-    if (!selection || typeof selection.mealsCount !== "number") {
+    if (loaded.error || !loaded.selection) {
+      return renderMessage(loaded.error ?? "Abonnement introuvable.");
+    }
+
+    const selection = loaded.selection;
+
+    if (typeof selection.mealsCount !== "number") {
       return renderMessage("Abonnement introuvable.");
     }
 
@@ -862,7 +919,6 @@ const handleChangeSubscriptionBoxAction = async ({
       return renderMessage("Configuration incomplète.");
     }
 
-    const { admin } = await unauthenticated.admin(shop);
     const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
     const blockReason = getSubscriptionBoxChangeBlockReason(
       selection,
@@ -969,16 +1025,22 @@ const handleUpdateFutureMealSelectionAction = async ({
     return renderMessage(parsedQuantities.error);
   }
 
-  const selection = await prisma.subscriptionMealSelection.findFirst({
-    where: {
-      customerShopifyId,
-      id: selectionId,
-      shop,
-      status: { in: ["active", "paused"] },
-    },
+  const { admin } = await unauthenticated.admin(shop);
+  const loaded = await loadSyncedSelectionForAction({
+    admin,
+    customerShopifyId,
+    selectionId,
+    shop,
+    statusFilter: { in: ["active", "paused"] },
   });
 
-  if (!selection || typeof selection.mealsCount !== "number") {
+  if (loaded.error || !loaded.selection) {
+    return renderMessage(loaded.error ?? "Abonnement introuvable.");
+  }
+
+  const selection = loaded.selection;
+
+  if (typeof selection.mealsCount !== "number") {
     return renderMessage("Abonnement introuvable.");
   }
 
@@ -1002,7 +1064,6 @@ const handleUpdateFutureMealSelectionAction = async ({
     return renderMessage("Configuration incomplète.");
   }
 
-  const { admin } = await unauthenticated.admin(shop);
   const mealProducts = await getCollectionProducts(admin, settings.mealCollectionId);
   const meals = toPortalMeals(mealProducts);
 

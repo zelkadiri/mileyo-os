@@ -7,11 +7,13 @@
  *   npx tsx scripts/dev-backfill-subscription-from-box-order.ts --order 1013
  *   npx tsx scripts/dev-backfill-subscription-from-box-order.ts --order 1013 --execute
  */
-import type { Prisma } from "@prisma/client";
-
 import db from "../app/db.server";
 import { normalizeShopifyId } from "../app/utils/shopifyIds.server";
-import { fetchSubscriptionContractNextBillingDate } from "../app/services/subscriptionBillingWorker.server";
+import {
+  findCanonicalSubscriptionMealSelectionByContractId,
+  recoverSelectionFromOriginBoxOrder,
+  reconcileSubscriptionSelectionWithContract,
+} from "../app/services/subscriptionMealSelection.server";
 import { unauthenticated } from "../app/shopify.server";
 
 const args = process.argv.slice(2);
@@ -44,16 +46,13 @@ const main = async () => {
     process.exit(1);
   }
 
-  const existing = await db.subscriptionMealSelection.findFirst({
+  const existing = await findCanonicalSubscriptionMealSelectionByContractId({
+    shop: boxOrder.shop,
+    subscriptionContractId: contractId,
+  }) ?? await db.subscriptionMealSelection.findFirst({
     where: {
       shop: boxOrder.shop,
-      OR: [
-        { shopifyOrderId: boxOrder.shopifyOrderId },
-        { subscriptionContractId: contractId },
-        {
-          subscriptionContractId: `gid://shopify/SubscriptionContract/${contractId}`,
-        },
-      ],
+      shopifyOrderId: boxOrder.shopifyOrderId,
     },
   });
 
@@ -62,55 +61,61 @@ const main = async () => {
     return;
   }
 
-  const rawOrder = boxOrder.rawOrder as {
-    customer?: { id?: number | string; email?: string | null };
-  };
-  const customerShopifyId = normalizeShopifyId(rawOrder.customer?.id);
+  const { admin } = await unauthenticated.admin(boxOrder.shop);
 
-  let nextBillingDate: Date | null = null;
-
-  try {
-    const { admin } = await unauthenticated.admin(boxOrder.shop);
-    nextBillingDate = await fetchSubscriptionContractNextBillingDate(
-      admin,
-      contractId,
-    );
-  } catch (error) {
-    console.log("nextBillingDate fetch failed (non-fatal)", error);
-  }
-
-  const payload = {
-    active: true,
-    boxTitle: boxOrder.boxTitle,
-    customerEmail: boxOrder.customerEmail,
-    customerShopifyId,
-    mealsCount: boxOrder.mealsCount,
-    selectedMeals: (boxOrder.selectedMeals ?? []) as Prisma.InputJsonValue,
+  const plan = await reconcileSubscriptionSelectionWithContract({
+    admin,
+    currentShopifyOrderId: boxOrder.shopifyOrderId,
     shop: boxOrder.shop,
-    shopifyOrderId: boxOrder.shopifyOrderId,
-    shopifyOrderName: boxOrder.shopifyOrderName,
-    status: "active",
     subscriptionContractId: contractId,
-    ...(nextBillingDate ? { nextBillingDate } : {}),
-  };
+  });
 
-  console.log("Backfill plan:", payload);
+  if (!plan.selection) {
+    const fallback = await recoverSelectionFromOriginBoxOrder({
+      admin,
+      originShopifyOrderId: boxOrder.shopifyOrderId,
+      shop: boxOrder.shop,
+      subscriptionContractId: contractId,
+    });
 
-  if (!execute) {
-    console.log("Dry run. Re-run with --execute to create.");
+    console.log("Reconciliation plan:", fallback);
+
+    if (!execute) {
+      console.log("Dry run. Re-run with --execute to apply.");
+      return;
+    }
+
+    if (!fallback.selection) {
+      console.error("Could not recover selection:", fallback.reason);
+      process.exit(1);
+    }
+
+    await db.boxOrder.update({
+      data: { subscriptionSelectionId: fallback.selection.id },
+      where: { id: boxOrder.id },
+    });
+
+    console.log("Created/recovered SubscriptionMealSelection:", fallback.selection.id);
     return;
   }
 
-  const selection = await db.subscriptionMealSelection.create({
-    data: payload,
+  console.log("Reconciliation plan:", {
+    reason: plan.reason,
+    selectionId: plan.selection.id,
+    source: plan.source,
   });
 
+  if (!execute) {
+    console.log("Dry run. Re-run with --execute to link BoxOrder.");
+    return;
+  }
+
   await db.boxOrder.update({
-    data: { subscriptionSelectionId: selection.id },
+    data: { subscriptionSelectionId: plan.selection.id },
     where: { id: boxOrder.id },
   });
 
-  console.log("Created SubscriptionMealSelection:", selection.id);
+  console.log("Linked SubscriptionMealSelection:", plan.selection.id);
 };
 
 main()

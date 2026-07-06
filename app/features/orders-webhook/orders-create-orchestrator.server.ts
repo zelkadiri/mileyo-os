@@ -3,11 +3,14 @@ import type { Prisma } from "@prisma/client";
 import db from "../../db.server";
 import {
   findMatchingSubscriptionMealSelection,
+  hasSelectedMealContent,
   isFirstSubscriptionCheckoutOrder,
   isSubscriptionOrder,
-  resolveSubscriptionContractId,
+  reconcilePendingContractForSelection,
+  reconcileSubscriptionSelectionWithContract,
   type OrdersCreateDecision,
   upsertSubscriptionMealSelectionFromFirstOrder,
+  resolveSubscriptionContractId,
 } from "../../services/subscriptionMealSelection.server";
 import {
   completeResumeRenewalFromWebhook,
@@ -67,11 +70,17 @@ export const handleOrdersCreateWebhook = async ({
     rawOrder: order,
   });
 
+  const isFirstCheckout = isFirstSubscriptionCheckoutOrder({
+    lineItemProperties: boxLineItem.properties,
+    orderType,
+  });
+
   const subscriptionContractIdRaw = isSubscription
     ? await resolveSubscriptionContractId({
         isSubscription,
         lineItemProperties: boxLineItem.properties,
         rawOrder: order,
+        retryOnMiss: isFirstCheckout,
         shop,
         shopifyOrderId,
       })
@@ -80,17 +89,17 @@ export const handleOrdersCreateWebhook = async ({
     ? normalizeShopifyId(subscriptionContractIdRaw)
     : null;
 
-  console.log("[ORDERS_CREATE] Subscription contract lookup", {
+  console.log("[SUBSCRIPTION_SELECTION] contract lookup", {
+    contractDetected: Boolean(subscriptionContractId),
     isSubscription,
     orderId: shopifyOrderId,
     orderName: shopifyOrderName,
     shop,
     subscriptionContractId,
-    subscriptionContractIdFound: Boolean(subscriptionContractId),
     subscriptionContractIdRaw,
   });
 
-  const matchedSelection = isSubscription
+  let matchedSelection = isSubscription
     ? await findMatchingSubscriptionMealSelection({
         boxTitle,
         customerShopifyId,
@@ -102,19 +111,54 @@ export const handleOrdersCreateWebhook = async ({
       })
     : null;
 
+  let reconciliationReason: string | null = null;
+  let reconciliationSource: string | null = null;
+
+  if (
+    isSubscription &&
+    subscriptionContractId &&
+    !matchedSelection &&
+    !isFirstCheckout
+  ) {
+    const { admin } = await unauthenticated.admin(shop);
+    const reconciled = await reconcileSubscriptionSelectionWithContract({
+      admin,
+      currentShopifyOrderId: shopifyOrderId,
+      shop,
+      subscriptionContractId,
+    });
+
+    reconciliationReason = reconciled.reason;
+    reconciliationSource = reconciled.source;
+
+    if (reconciled.selection) {
+      matchedSelection = reconciled.selection;
+      console.log("[SUBSCRIPTION_SELECTION] orphan renewal recovered", {
+        action: "reconcile_orphan_renewal",
+        reason: reconciled.reason,
+        selectionId: reconciled.selection.id,
+        shopifyOrderId,
+        source: reconciled.source,
+        subscriptionContractId,
+      });
+    } else {
+      console.log("[SUBSCRIPTION_SELECTION] orphan renewal not recovered", {
+        action: "orphan_renewal",
+        reason: reconciled.reason,
+        shopifyOrderId,
+        source: reconciled.source,
+        subscriptionContractId,
+      });
+    }
+  }
+
   const isRenewal = Boolean(isSubscription && matchedSelection);
   let decision: OrdersCreateDecision = "not_subscription";
 
   if (isSubscription) {
     if (matchedSelection) {
       decision = "attach_existing";
-    } else if (
-      subscriptionContractId &&
-      !isFirstSubscriptionCheckoutOrder({
-        lineItemProperties: boxLineItem.properties,
-        orderType,
-      })
-    ) {
+    } else if (subscriptionContractId && !isFirstCheckout) {
       decision = "orphan_renewal";
     } else {
       decision = "create_first_subscription";
@@ -131,10 +175,13 @@ export const handleOrdersCreateWebhook = async ({
   const selectedMealsSource = isRenewal
     ? "saved_selection"
     : "order_properties";
+  const renewalMeals = freshMatchedSelection?.selectedMeals;
   const selectedMealsJson = (
-    isRenewal && freshMatchedSelection?.selectedMeals
-      ? freshMatchedSelection.selectedMeals
-      : lineItemSelectedMeals
+    isRenewal && hasSelectedMealContent(renewalMeals)
+      ? renewalMeals
+      : hasSelectedMealContent(lineItemSelectedMeals)
+        ? lineItemSelectedMeals
+        : renewalMeals ?? lineItemSelectedMeals
   ) as Prisma.InputJsonValue;
   const resolvedOrderType =
     orderType ?? (isSubscription ? "Abonnement hebdomadaire" : null);
@@ -152,7 +199,7 @@ export const handleOrdersCreateWebhook = async ({
       null)
     : null;
 
-  console.log("[ORDERS_CREATE] Processed order", {
+  console.log("[SUBSCRIPTION_SELECTION] order processed", {
     decision,
     isRenewal,
     isSubscription,
@@ -160,10 +207,10 @@ export const handleOrdersCreateWebhook = async ({
     mealSnapshotSource: selectedMealsSource,
     orderId: shopifyOrderId,
     orderName: shopifyOrderName,
+    reconciliationReason,
+    reconciliationSource,
     shop,
     subscriptionContractId: resolvedSubscriptionContractId,
-    subscriptionContractIdNormalized: subscriptionContractId,
-    subscriptionContractIdRaw,
   });
 
   await db.boxOrder.upsert({
@@ -183,7 +230,10 @@ export const handleOrdersCreateWebhook = async ({
       shopifyOrderId,
       shopifyOrderName,
       subscriptionContractId: resolvedSubscriptionContractId,
-      subscriptionSelectionId: isRenewal ? matchedSelection?.id ?? null : null,
+      subscriptionSelectionId:
+        isRenewal || decision === "attach_existing"
+          ? (matchedSelection?.id ?? null)
+          : null,
     },
     update: {
       boxTitle: resolvedBoxTitle,
@@ -199,7 +249,10 @@ export const handleOrdersCreateWebhook = async ({
       selectedMealsSource,
       shopifyOrderName,
       subscriptionContractId: resolvedSubscriptionContractId,
-      subscriptionSelectionId: isRenewal ? matchedSelection?.id ?? null : null,
+      subscriptionSelectionId:
+        isRenewal || decision === "attach_existing"
+          ? (matchedSelection?.id ?? null)
+          : null,
     },
     where: {
       shop_shopifyOrderId: {
@@ -210,7 +263,7 @@ export const handleOrdersCreateWebhook = async ({
   });
 
   if (decision === "create_first_subscription") {
-    await upsertSubscriptionMealSelectionFromFirstOrder({
+    const selection = await upsertSubscriptionMealSelectionFromFirstOrder({
       boxTitle,
       customerEmail,
       customerShopifyId,
@@ -225,6 +278,53 @@ export const handleOrdersCreateWebhook = async ({
       shopifyOrderName,
       subscriptionContractId: resolvedSubscriptionContractId,
     });
+
+    let linkedSelection = selection;
+
+    if (selection && !normalizeShopifyId(selection.subscriptionContractId)) {
+      const { admin } = await unauthenticated.admin(shop);
+      const pendingReconciliation = await reconcilePendingContractForSelection({
+        admin,
+        isSubscription,
+        lineItemProperties: boxLineItem.properties,
+        rawOrder: order,
+        selectionId: selection.id,
+        shop,
+        shopifyOrderId,
+      });
+
+      if (pendingReconciliation.selection) {
+        linkedSelection = pendingReconciliation.selection;
+        console.log("[SUBSCRIPTION_SELECTION] first order contract reconciled", {
+          action: "reconcile_pending_contract",
+          reason: pendingReconciliation.reason,
+          selectionId: pendingReconciliation.selection.id,
+          shopifyOrderId,
+          source: pendingReconciliation.source,
+          subscriptionContractId:
+            pendingReconciliation.selection.subscriptionContractId,
+        });
+      } else {
+        console.log("[SUBSCRIPTION_SELECTION] first order contract pending", {
+          action: "pending_contract",
+          reason: pendingReconciliation.reason,
+          selectionId: selection.id,
+          shopifyOrderId,
+        });
+      }
+    }
+
+    if (linkedSelection) {
+      await db.boxOrder.update({
+        data: { subscriptionSelectionId: linkedSelection.id },
+        where: {
+          shop_shopifyOrderId: {
+            shop,
+            shopifyOrderId,
+          },
+        },
+      });
+    }
   }
 
   if (isRenewal && matchedSelection) {

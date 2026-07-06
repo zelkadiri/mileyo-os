@@ -37,6 +37,17 @@ api_version = "2026-07"
   uri = "/webhooks/subscription-billing-attempts/challenged"
   topics = [ "subscription_billing_attempts/challenged" ]
 
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/subscription-contracts"
+  topics = [
+    "subscription_contracts/activate",
+    "subscription_contracts/cancel",
+    "subscription_contracts/expire",
+    "subscription_contracts/fail",
+    "subscription_contracts/pause",
+    "subscription_contracts/update",
+  ]
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # TODO(dunning): After merging, deploy updated Shopify app config and reinstall / approve

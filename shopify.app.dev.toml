@@ -2,7 +2,7 @@
 
 client_id = "f2f34d1691ccbc32d9abf403695d0f9c"
 name = "Mileyo Subcription Os Dev"
-application_url = "https://1d821ef8ea06.ngrok.app"
+application_url = "https://38130c1217bb.ngrok.app"
 embedded = true
 
 [build]
@@ -35,6 +35,17 @@ api_version = "2026-04"
   uri = "/webhooks/subscription-billing-attempts/challenged"
   topics = [ "subscription_billing_attempts/challenged" ]
 
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/subscription-contracts"
+  topics = [
+    "subscription_contracts/activate",
+    "subscription_contracts/cancel",
+    "subscription_contracts/expire",
+    "subscription_contracts/fail",
+    "subscription_contracts/pause",
+    "subscription_contracts/update",
+  ]
+
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 # TODO(dunning): After merging, deploy updated Shopify app config and reinstall / approve
@@ -48,6 +59,6 @@ use_legacy_install_flow = false
 redirect_urls = [ ]
 
 [app_proxy]
-url = "https://1d821ef8ea06.ngrok.app/apps/box-builder"
+url = "https://38130c1217bb.ngrok.app/apps/box-builder"
 subpath = "box-builder"
 prefix = "apps"

@@ -3,6 +3,10 @@ import { redirect } from "react-router";
 
 import db from "../../db.server";
 import { authenticate } from "../../shopify.server";
+import { isTerminalSubscriptionSelectionStatus } from "../../constants/subscriptionMealSelection";
+import {
+  syncSubscriptionContractState,
+} from "../../services/subscriptionContractSync.server";
 import { getSelectedMealsFromJson } from "../../utils/mealSelection";
 import { toSubscriptionContractGid } from "../../utils/shopifyIds.server";
 
@@ -78,20 +82,50 @@ export const handleSubscriptionsAction = async (request: Request) => {
       return redirectWithBillingError("Abonnement introuvable ou inactif.");
     }
 
+    if (isTerminalSubscriptionSelectionStatus(selection.status)) {
+      return redirectWithBillingError(
+        "Cet abonnement est terminé et ne peut plus être facturé.",
+      );
+    }
+
     if (!selection.subscriptionContractId) {
       return redirectWithBillingError(
         "Contrat d’abonnement Shopify manquant pour cet abonnement.",
       );
     }
 
-    const idempotencyKey = `mileyo_${selection.id}_${Date.now()}`;
+    const syncResult = await syncSubscriptionContractState({
+      admin,
+      shop,
+      source: "admin_action",
+      subscriptionContractId: selection.subscriptionContractId,
+    });
+
+    if (
+      syncResult.selection &&
+      isTerminalSubscriptionSelectionStatus(syncResult.selection.status)
+    ) {
+      return redirectWithBillingError(
+        "Cet abonnement est terminé côté Shopify et ne peut plus être facturé.",
+      );
+    }
+
+    const billableSelection = syncResult.selection ?? selection;
+
+    if (!billableSelection.active || billableSelection.status !== "active") {
+      return redirectWithBillingError(
+        "Cet abonnement n’est pas actif et ne peut pas être facturé.",
+      );
+    }
+
+    const idempotencyKey = `mileyo_${billableSelection.id}_${Date.now()}`;
 
     try {
       const response = await admin.graphql(billingAttemptCreateMutation, {
         variables: {
           subscriptionBillingAttemptInput: { idempotencyKey },
           subscriptionContractId: toSubscriptionContractGid(
-            selection.subscriptionContractId,
+            billableSelection.subscriptionContractId!,
           ),
         },
       });
