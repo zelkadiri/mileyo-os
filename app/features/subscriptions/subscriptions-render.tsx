@@ -15,7 +15,28 @@ import {
   listStyle,
   primaryButtonStyle,
   secondaryButtonStyle,
+  statusBadgeStyle,
+  terminalCardStyle,
 } from "./subscriptions-styles";
+
+const getStatusBadgeVariant = (
+  status: string,
+): "active" | "paused" | "cancelled" | "expired" | "failed" | "other" => {
+  switch (status) {
+    case "active":
+      return "active";
+    case "paused":
+      return "paused";
+    case "cancelled":
+      return "cancelled";
+    case "expired":
+      return "expired";
+    case "failed":
+      return "failed";
+    default:
+      return "other";
+  }
+};
 
 type SubscriptionsPageData = Awaited<ReturnType<typeof loadSubscriptionsPageData>>;
 
@@ -25,8 +46,21 @@ export default function SubscriptionsPage() {
     paymentRecoveries = [],
     selections = [],
     showSubscriptionTestActions = false,
+    statusCounts = {
+      active: 0,
+      cancelled: 0,
+      expired: 0,
+      failed: 0,
+      other: 0,
+      paused: 0,
+    },
   } = useLoaderData<SubscriptionsPageData>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusFilter = searchParams.get("status");
+  const filteredSelections =
+    statusFilter && statusFilter !== "all"
+      ? selections.filter((selection) => selection.status === statusFilter)
+      : selections;
   const error = searchParams.get("error");
   const billingError = searchParams.get("billingError");
   const billingSuccess = searchParams.get("billingSuccess") === "1";
@@ -95,6 +129,55 @@ export default function SubscriptionsPage() {
       </s-section>
       <s-section>
         <s-stack gap="base">
+          <s-text>
+            Répartition : {statusCounts.active} actif
+            {statusCounts.active > 1 ? "s" : ""}, {statusCounts.paused} en pause
+            {statusCounts.cancelled > 0
+              ? `, ${statusCounts.cancelled} annulé${statusCounts.cancelled > 1 ? "s" : ""}`
+              : ""}
+            {statusCounts.expired > 0
+              ? `, ${statusCounts.expired} expiré${statusCounts.expired > 1 ? "s" : ""}`
+              : ""}
+            {statusCounts.failed > 0
+              ? `, ${statusCounts.failed} échec${statusCounts.failed > 1 ? "s" : ""} définitif${statusCounts.failed > 1 ? "s" : ""}`
+              : ""}
+            {statusCounts.other > 0 ? `, ${statusCounts.other} autre(s)` : ""}
+          </s-text>
+          <div style={buttonRowStyle}>
+            {(
+              [
+                ["all", "Tous"],
+                ["active", "Actifs"],
+                ["paused", "En pause"],
+                ["cancelled", "Annulés"],
+                ["expired", "Expirés"],
+                ["failed", "Échecs définitifs"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+
+                  if (value === "all") {
+                    next.delete("status");
+                  } else {
+                    next.set("status", value);
+                  }
+
+                  setSearchParams(next);
+                }}
+                style={
+                  (statusFilter ?? "all") === value
+                    ? primaryButtonStyle
+                    : secondaryButtonStyle
+                }
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           {hiddenDuplicateCount > 0 ? (
             <p style={bannerStyle("warning")}>
               {hiddenDuplicateCount} fiche(s) doublon masquée(s) — seule la
@@ -118,22 +201,32 @@ export default function SubscriptionsPage() {
               abonnement.
             </s-text>
           ) : null}
-          {selections.length === 0 ? (
+          {filteredSelections.length === 0 ? (
             <s-text>Aucun abonnement enregistré pour le moment.</s-text>
           ) : (
-            selections.map((selection) => {
+            filteredSelections.map((selection) => {
               const selectedMeals = getSelectedMealsFromJson(selection.selectedMeals);
               const isActive = selection.active && selection.status === "active";
+              const isTerminal = selection.isTerminal;
               const canTriggerBilling = Boolean(selection.subscriptionContractId);
+              const statusBadgeVariant = getStatusBadgeVariant(selection.status);
 
               return (
-                <s-box
+                <div
                   key={selection.id}
-                  borderRadius="base"
-                  borderWidth="base"
-                  padding="base"
+                  style={isTerminal ? terminalCardStyle : undefined}
                 >
+                  <s-box borderRadius="base" borderWidth="base" padding="base">
                   <s-stack gap="small">
+                    <span style={statusBadgeStyle(statusBadgeVariant)}>
+                      {formatMealSelectionStatusLabel(selection.status)}
+                    </span>
+                    {isTerminal ? (
+                      <s-text>
+                        Abonnement terminé — consultation seule, aucune action
+                        de test disponible.
+                      </s-text>
+                    ) : null}
                     <s-text>
                       Client :{" "}
                       {selection.customerName
@@ -145,11 +238,11 @@ export default function SubscriptionsPage() {
                       {selection.shopifyOrderName ?? selection.shopifyOrderId}
                     </s-text>
                     <s-text>
-                      Prochaine box configurée :{" "}
+                      {isTerminal ? "Dernière box configurée" : "Prochaine box configurée"} :{" "}
                       {selection.boxTitle ?? "Non renseignée"}
                     </s-text>
                     <s-text>
-                      Nombre de repas (prochaine commande) :{" "}
+                      {isTerminal ? "Nombre de repas (dernière sélection)" : "Nombre de repas (prochaine commande)"} :{" "}
                       {selection.mealsCount ?? "Non renseigné"}
                     </s-text>
                     {selection.boxSubscriptionPrice ? (
@@ -157,7 +250,11 @@ export default function SubscriptionsPage() {
                         Prix abonnement : {selection.boxSubscriptionPrice} € / semaine
                       </s-text>
                     ) : null}
-                    <s-text>Plats prévus pour la prochaine commande :</s-text>
+                    <s-text>
+                      {isTerminal
+                        ? "Derniers plats enregistrés :"
+                        : "Plats prévus pour la prochaine commande :"}
+                    </s-text>
                     {selectedMeals.length > 0 ? (
                       <ul style={listStyle}>
                         {selectedMeals.map((meal, index) => (
@@ -168,7 +265,7 @@ export default function SubscriptionsPage() {
                       <s-text>Aucun plat trouvé.</s-text>
                     )}
                     <s-text>
-                      Statut :{" "}
+                      Statut détaillé :{" "}
                       {formatMealSelectionStatusLabel(selection.status)}
                     </s-text>
                     {selection.subscriptionContractId ? (
@@ -176,7 +273,7 @@ export default function SubscriptionsPage() {
                         Contrat : {selection.subscriptionContractId}
                       </s-text>
                     ) : null}
-                    {selection.nextBillingDate ? (
+                    {!isTerminal && selection.nextBillingDate ? (
                       <s-text>
                         Prochaine facturation :{" "}
                         {formatAdminDateTime(selection.nextBillingDate)}
@@ -205,7 +302,7 @@ export default function SubscriptionsPage() {
                     <s-text>
                       ID fiche : {selection.id}
                     </s-text>
-                    {isActive ? (
+                    {isActive && !isTerminal ? (
                       showSubscriptionTestActions ? (
                         <div style={buttonRowStyle}>
                           <Form method="post">
@@ -268,6 +365,7 @@ export default function SubscriptionsPage() {
                     ) : null}
                   </s-stack>
                 </s-box>
+                </div>
               );
             })
           )}

@@ -1,4 +1,7 @@
-import type { PortalSubscriptionState } from "../../constants/subscriptionStatus";
+import {
+  getTerminalStatusBadgeClass,
+  type PortalSubscriptionState,
+} from "../../constants/subscriptionStatus";
 import type { PortalMeal } from "./portal-types";
 import { escapeHtml, scriptJson } from "../../utils/html";
 import {
@@ -207,3 +210,5 @@ export const getUpcomingTabEmptyMessage = (
 
   return "Aucune box à venir pour le moment. Votre abonnement est en pause.";
 };
+
+export { getTerminalStatusBadgeClass };

@@ -63,3 +63,17 @@ export type PortalSelection = {
   shopifyOrderName: string | null;
   status: string;
 };
+
+/** Lecture seule — affichée depuis la base locale, sans sync Shopify. */
+export type PortalTerminalSelection = {
+  boxTitle: string | null;
+  id: string;
+  lastOrderDate: string | null;
+  mealsCount: number;
+  selectedMeals: string[];
+  shopifyOrderName: string | null;
+  status: string;
+  statusLabel: string;
+  subscriptionContractId: string | null;
+  updatedAt: string;
+};

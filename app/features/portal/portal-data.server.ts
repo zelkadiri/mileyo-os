@@ -26,6 +26,10 @@ import {
 } from "../../services/subscriptionBoxCatalog.server";
 import { getMerchantSupportContact } from "../../utils/merchantSupport.server";
 import type { PaymentUpdateUnavailableReason } from "../../constants/subscriptionPaymentRecovery";
+import {
+  formatMealSelectionStatusLabel,
+  TERMINAL_PORTAL_DISPLAY_STATUSES,
+} from "../../constants/subscriptionStatus";
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
 import { dedupeSubscriptionSelectionsByContract } from "../../services/subscriptionMealSelection.server";
 import { derivePortalResumeUi } from "./portal-resume.server";
@@ -41,6 +45,7 @@ import type {
   PortalHistoryOrder,
   PortalMeal,
   PortalSelection,
+  PortalTerminalSelection,
   MerchantSupportContact,
 } from "./portal-types";
 
@@ -50,6 +55,7 @@ export type PortalData = {
   meals: PortalMeal[];
   merchantSupport: MerchantSupportContact;
   selections: PortalSelection[];
+  terminalSelections: PortalTerminalSelection[];
 };
 
 const FORECAST_CYCLE_COUNT = 3;
@@ -187,7 +193,7 @@ export const loadPortalData = async ({
   const trustedBoxes = toTrustedBoxProducts(boxCatalog);
   const boxes = toPortalBoxProducts(boxCatalog);
 
-  const records = await prisma.subscriptionMealSelection.findMany({
+  const manageableRecords = await prisma.subscriptionMealSelection.findMany({
     orderBy: { createdAt: "desc" },
     where: {
       customerShopifyId,
@@ -196,16 +202,30 @@ export const loadPortalData = async ({
     },
   });
 
-  const visibleRecords = dedupeSubscriptionSelectionsByContract(records);
-  const hiddenCount = records.length - visibleRecords.length;
+  const terminalRecords = await prisma.subscriptionMealSelection.findMany({
+    orderBy: { updatedAt: "desc" },
+    where: {
+      customerShopifyId,
+      shop,
+      status: { in: [...TERMINAL_PORTAL_DISPLAY_STATUSES] },
+    },
+  });
+
+  const visibleManageable = dedupeSubscriptionSelectionsByContract(manageableRecords);
+  const visibleTerminal = dedupeSubscriptionSelectionsByContract(terminalRecords);
+  const hiddenCount =
+    manageableRecords.length -
+    visibleManageable.length +
+    (terminalRecords.length - visibleTerminal.length);
 
   if (hiddenCount > 0) {
     console.log("[portal] deduped duplicate contract selections", {
       hiddenCount,
-      hiddenSelectionIds: records
+      hiddenSelectionIds: [...manageableRecords, ...terminalRecords]
         .filter(
           (record) =>
-            !visibleRecords.some((visible) => visible.id === record.id),
+            !visibleManageable.some((visible) => visible.id === record.id) &&
+            !visibleTerminal.some((visible) => visible.id === record.id),
         )
         .map((record) => ({
           id: record.id,
@@ -217,7 +237,7 @@ export const loadPortalData = async ({
   const merchantSupport = getMerchantSupportContact();
 
   const selections: PortalSelection[] = await Promise.all(
-    visibleRecords
+    visibleManageable
       .filter((record) => typeof record.mealsCount === "number" && record.mealsCount > 0)
       .map(async (record) => {
         const reconciled = await reconcilePortalSelectionShopifyState(
@@ -332,8 +352,84 @@ export const loadPortalData = async ({
 
   const historyOrders = await loadPortalHistoryOrders({
     shop,
-    visibleRecords,
+    visibleRecords: [...visibleManageable, ...visibleTerminal],
   });
 
-  return { boxes, historyOrders, meals, merchantSupport, selections };
+  const lastOrderDateByContract = new Map<string, string>();
+
+  for (const order of historyOrders) {
+    const matchingSelection = [...visibleManageable, ...visibleTerminal].find(
+      (record) => record.shopifyOrderName === order.shopifyOrderName,
+    );
+    const contractId = normalizeShopifyId(matchingSelection?.subscriptionContractId);
+
+    if (!contractId) {
+      continue;
+    }
+
+    const existing = lastOrderDateByContract.get(contractId);
+
+    if (!existing || order.orderDate > existing) {
+      lastOrderDateByContract.set(contractId, order.orderDate);
+    }
+  }
+
+  const terminalContractIds = [
+    ...new Set(
+      visibleTerminal
+        .map((record) => normalizeShopifyId(record.subscriptionContractId))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  if (terminalContractIds.length > 0) {
+    const terminalOrders = await prisma.boxOrder.findMany({
+      orderBy: { createdAt: "desc" },
+      where: {
+        shop,
+        simulated: false,
+        subscriptionContractId: { in: terminalContractIds },
+      },
+    });
+
+    for (const order of terminalOrders) {
+      const contractId = normalizeShopifyId(order.subscriptionContractId);
+
+      if (!contractId || lastOrderDateByContract.has(contractId)) {
+        continue;
+      }
+
+      lastOrderDateByContract.set(contractId, order.createdAt.toISOString());
+    }
+  }
+
+  const terminalSelections: PortalTerminalSelection[] = visibleTerminal
+    .filter((record) => typeof record.mealsCount === "number" && record.mealsCount > 0)
+    .map((record) => {
+      const contractId = normalizeShopifyId(record.subscriptionContractId);
+
+      return {
+        boxTitle: record.boxTitle,
+        id: record.id,
+        lastOrderDate: contractId
+          ? (lastOrderDateByContract.get(contractId) ?? null)
+          : null,
+        mealsCount: record.mealsCount as number,
+        selectedMeals: getSelectedMeals(record.selectedMeals),
+        shopifyOrderName: record.shopifyOrderName,
+        status: record.status,
+        statusLabel: formatMealSelectionStatusLabel(record.status),
+        subscriptionContractId: contractId,
+        updatedAt: record.updatedAt.toISOString(),
+      };
+    });
+
+  return {
+    boxes,
+    historyOrders,
+    meals,
+    merchantSupport,
+    selections,
+    terminalSelections,
+  };
 };

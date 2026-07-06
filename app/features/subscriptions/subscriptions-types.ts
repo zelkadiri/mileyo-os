@@ -14,6 +14,15 @@ export type SubscriptionRecoveryDto = {
   status: string;
 };
 
+export type SubscriptionStatusCounts = {
+  active: number;
+  cancelled: number;
+  expired: number;
+  failed: number;
+  other: number;
+  paused: number;
+};
+
 export type SubscriptionSelectionDto = {
   active: boolean;
   boxSubscriptionPrice: string | null;
@@ -22,6 +31,7 @@ export type SubscriptionSelectionDto = {
   customerEmail: string | null;
   customerName: string | null;
   id: string;
+  isTerminal: boolean;
   lastBillingAttemptAt: Date | null;
   lastBillingAttemptError: string | null;
   lastBillingAttemptStatus: string | null;
@@ -40,4 +50,5 @@ export type SubscriptionsPageData = {
   paymentRecoveries: SubscriptionRecoveryDto[];
   selections: SubscriptionSelectionDto[];
   showSubscriptionTestActions: boolean;
+  statusCounts: SubscriptionStatusCounts;
 };

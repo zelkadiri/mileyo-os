@@ -55,3 +55,42 @@ export const billingWarningColumnStyle = {
   flexDirection: "column",
   gap: "0.5rem",
 } as const;
+
+export const statusBadgeStyle = (
+  variant: "active" | "paused" | "cancelled" | "expired" | "failed" | "other",
+) =>
+  ({
+    background:
+      variant === "active"
+        ? "#dcfce7"
+        : variant === "paused"
+          ? "#fef3c7"
+          : variant === "cancelled"
+            ? "#f3f4f6"
+            : variant === "expired"
+              ? "#e5e7eb"
+              : variant === "failed"
+                ? "#fee2e2"
+                : "#f3f4f6",
+    borderRadius: "999px",
+    color:
+      variant === "active"
+        ? "#166534"
+        : variant === "paused"
+          ? "#92400e"
+          : variant === "cancelled"
+            ? "#4b5563"
+            : variant === "expired"
+              ? "#374151"
+              : variant === "failed"
+                ? "#991b1b"
+                : "#4b5563",
+    display: "inline-block",
+    fontSize: "0.85rem",
+    fontWeight: 700,
+    padding: "4px 10px",
+  }) as const;
+
+export const terminalCardStyle = {
+  background: "#f9fafb",
+} as const;

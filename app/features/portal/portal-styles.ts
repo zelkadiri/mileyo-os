@@ -51,6 +51,32 @@ body { background: #fff; margin: 0; }
   background: #fef3c7;
   color: #92400e;
 }
+.status-badge.cancelled {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+.status-badge.expired {
+  background: #e5e7eb;
+  color: #374151;
+}
+.status-badge.failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+.terminal-selection-card {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+}
+.terminal-selection-card h2 {
+  color: #374151;
+}
+.terminal-notice {
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.terminal-intro h2 {
+  margin-bottom: 8px;
+}
 .processing-notice {
   background: #fef3c7;
   border-radius: 12px;

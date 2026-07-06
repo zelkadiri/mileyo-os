@@ -1,10 +1,13 @@
 import { RECOVERY_STATUS } from "../../constants/subscriptionPaymentRecovery";
+import {
+  isTerminalPortalDisplayStatus,
+} from "../../constants/subscriptionStatus";
 import db from "../../db.server";
 import { authenticate } from "../../shopify.server";
 import { dedupeSubscriptionSelectionsByContract } from "../../services/subscriptionMealSelection.server";
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
 import { isSubscriptionTestActionsEnabled } from "./subscriptions-test.server";
-import type { SubscriptionsPageData } from "./subscriptions-types";
+import type { SubscriptionsPageData, SubscriptionStatusCounts } from "./subscriptions-types";
 
 export const loadSubscriptionsPageData = async (
   request: Request,
@@ -47,6 +50,37 @@ export const loadSubscriptionsPageData = async (
       },
     },
   });
+
+  const statusCounts: SubscriptionStatusCounts = {
+    active: 0,
+    cancelled: 0,
+    expired: 0,
+    failed: 0,
+    other: 0,
+    paused: 0,
+  };
+
+  for (const selection of selections) {
+    switch (selection.status) {
+      case "active":
+        statusCounts.active += 1;
+        break;
+      case "paused":
+        statusCounts.paused += 1;
+        break;
+      case "cancelled":
+        statusCounts.cancelled += 1;
+        break;
+      case "expired":
+        statusCounts.expired += 1;
+        break;
+      case "failed":
+        statusCounts.failed += 1;
+        break;
+      default:
+        statusCounts.other += 1;
+    }
+  }
 
   return {
     hiddenDuplicateCount,
@@ -96,6 +130,7 @@ export const loadSubscriptionsPageData = async (
       customerEmail: selection.customerEmail,
       customerName: customerNameByOrderId.get(selection.shopifyOrderId) ?? null,
       id: selection.id,
+      isTerminal: isTerminalPortalDisplayStatus(selection.status),
       lastBillingAttemptAt: selection.lastBillingAttemptAt,
       lastBillingAttemptError: selection.lastBillingAttemptError,
       lastBillingAttemptStatus: selection.lastBillingAttemptStatus,
@@ -109,5 +144,6 @@ export const loadSubscriptionsPageData = async (
       updatedAt: selection.updatedAt,
     })),
     showSubscriptionTestActions: isSubscriptionTestActionsEnabled(),
+    statusCounts,
   };
 };

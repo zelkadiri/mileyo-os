@@ -7,6 +7,7 @@ import {
   formatFulfillmentStatus,
   formatOrderPrice,
   formatSubscriptionPrice,
+  getTerminalStatusBadgeClass,
   getUpcomingTabEmptyMessage,
   isPortalForecastEligible,
   titlesToQuantities,
@@ -21,6 +22,7 @@ import type {
   PortalRecovery,
   PortalSelection,
   PortalSubscriptionState,
+  PortalTerminalSelection,
 } from "./portal-types";
 
 const htmlResponse = (html: string) =>
@@ -309,6 +311,34 @@ const renderNextBoxCard = ({
     </section>`;
 };
 
+const renderTerminalSelectionCard = (selection: PortalTerminalSelection) =>
+  `<section class="portal-card terminal-selection-card" data-terminal-selection-id="${escapeHtml(selection.id)}">
+      <h2>${escapeHtml(selection.boxTitle ?? "Abonnement terminé")}</h2>
+      <p class="status-badge ${escapeHtml(getTerminalStatusBadgeClass(selection.status))}">${escapeHtml(selection.statusLabel)}</p>
+      <p class="terminal-notice muted">Cet abonnement est terminé. Aucune modification ni nouveau prélèvement n’est possible.</p>
+      <p><strong>Box :</strong> ${escapeHtml(selection.boxTitle ?? "Non renseignée")}</p>
+      <p><strong>Nombre de repas :</strong> ${selection.mealsCount}</p>
+      ${
+        selection.shopifyOrderName
+          ? `<p><strong>Première commande :</strong> ${escapeHtml(selection.shopifyOrderName)}</p>`
+          : ""
+      }
+      ${
+        selection.lastOrderDate
+          ? `<p><strong>Dernière commande :</strong> ${escapeHtml(formatFrenchDateTime(selection.lastOrderDate))}</p>`
+          : ""
+      }
+      <p><strong>Dernière mise à jour :</strong> ${escapeHtml(formatFrenchDateTime(selection.updatedAt))}</p>
+      <p><strong>Dernière sélection enregistrée :</strong></p>
+      ${
+        selection.selectedMeals.length > 0
+          ? `<ul class="meal-list">${selection.selectedMeals
+              .map((meal) => `<li>${escapeHtml(meal)}</li>`)
+              .join("")}</ul>`
+          : `<p class="muted">Aucun plat enregistré.</p>`
+      }
+    </section>`;
+
 const renderForecastCard = (
   cycle: PortalForecastCycle,
   cycleNumber: number,
@@ -366,6 +396,7 @@ export const renderPortal = ({
   processingMessage,
   selections,
   successMessage,
+  terminalSelections,
 }: {
   boxes: PortalBoxProduct[];
   errorMessage?: string | null;
@@ -375,6 +406,7 @@ export const renderPortal = ({
   processingMessage?: string | null;
   selections: PortalSelection[];
   successMessage?: string | null;
+  terminalSelections: PortalTerminalSelection[];
 }) => {
   const initialQuantities = Object.fromEntries(
     selections.map((selection) => [
@@ -391,6 +423,9 @@ export const renderPortal = ({
     selections,
     forecastCards.length,
   );
+  const hasManageable = selections.length > 0;
+  const hasTerminal = terminalSelections.length > 0;
+  const hasAnySubscription = hasManageable || hasTerminal;
 
   return htmlResponse(`<!doctype html>
 <html lang="fr">
@@ -426,15 +461,24 @@ export const renderPortal = ({
     </section>
 
     ${
-      selections.length === 0
+      !hasAnySubscription
         ? `<section class="portal-card"><p>Aucun abonnement trouvé pour ton compte.</p></section>`
         : `<nav aria-label="Sections du portail" class="portal-tabs" role="tablist">
       <button aria-selected="true" class="portal-tab active" data-tab="next" role="tab" type="button">Ma prochaine box</button>
       <button aria-selected="false" class="portal-tab" data-tab="upcoming" role="tab" type="button">À venir</button>
       <button aria-selected="false" class="portal-tab" data-tab="history" role="tab" type="button">Historique</button>
+      ${hasTerminal ? `<button aria-selected="false" class="portal-tab" data-tab="ended" role="tab" type="button">Abonnements terminés</button>` : ""}
     </nav>
     <div class="portal-tab-panel" data-tab-panel="next" role="tabpanel">
-      ${selections.map((selection) => renderNextBoxCard({ boxes, merchantSupport, selection })).join("")}
+      ${
+        hasManageable
+          ? selections
+              .map((selection) =>
+                renderNextBoxCard({ boxes, merchantSupport, selection }),
+              )
+              .join("")
+          : `<section class="portal-card"><p class="muted">Aucun abonnement actif ou en pause. Consultez l’onglet Abonnements terminés si votre abonnement a pris fin.</p></section>`
+      }
     </div>
     <div class="portal-tab-panel hidden" data-tab-panel="upcoming" role="tabpanel">
       <section class="portal-card forecast-intro">
@@ -457,7 +501,18 @@ export const renderPortal = ({
           ? historyOrders.map((order) => renderHistoryCard(order)).join("")
           : `<section class="portal-card"><p class="muted">Aucune commande passée pour le moment.</p></section>`
       }
+    </div>
+    ${
+      hasTerminal
+        ? `<div class="portal-tab-panel hidden" data-tab-panel="ended" role="tabpanel">
+      <section class="portal-card terminal-intro">
+        <h2>Abonnements terminés</h2>
+        <p class="intro">Ces abonnements sont clos. Vos repas et commandes passées restent consultables, sans action possible.</p>
+      </section>
+      ${terminalSelections.map((selection) => renderTerminalSelectionCard(selection)).join("")}
     </div>`
+        : ""
+    }`
     }
 
     <p class="back-link"><a href="/apps/box-builder">← Retour au composeur de box</a></p>
