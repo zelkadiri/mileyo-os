@@ -4,6 +4,7 @@ import prisma from "../db.server";
 import { unauthenticated } from "../shopify.server";
 import {
   getCollectionProducts,
+  toBuilderMeals,
   toBuilderProducts,
 } from "../features/builder/builder-catalog.server";
 import { renderBuilder, renderMessage } from "../features/builder/builder-render";
@@ -42,6 +43,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return renderBuilder({
     boxes: toBuilderProducts(boxProducts),
-    meals: toBuilderProducts(mealProducts),
+    meals: toBuilderMeals(mealProducts),
   });
 };

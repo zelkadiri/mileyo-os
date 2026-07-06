@@ -101,3 +101,22 @@ export const toBuilderProducts = (products: ShopifyProduct[]): BuilderProduct[] 
       variantTitle: firstVariant?.title ?? "Variante standard",
     };
   });
+
+/** Meal collection products — no mileyo.meal_count validation or warnings. */
+export const toBuilderMeals = (products: ShopifyProduct[]): BuilderProduct[] =>
+  products.map((product) => {
+    const firstVariant = product.variants.nodes[0];
+
+    return {
+      id: product.id,
+      imageAlt: product.featuredImage?.altText ?? product.title,
+      imageUrl: product.featuredImage?.url ?? null,
+      mealCount: null,
+      sellingPlanId: null,
+      subscriptionPrice: null,
+      title: product.title,
+      variantId: firstVariant?.id ?? "",
+      variantPrice: firstVariant?.price ?? null,
+      variantTitle: firstVariant?.title ?? "Variante standard",
+    };
+  });
