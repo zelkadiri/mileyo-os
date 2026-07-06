@@ -1,7 +1,12 @@
 import type { SubscriptionMealSelection } from "@prisma/client";
 
+import { isTerminalSubscriptionSelectionStatus } from "../constants/subscriptionMealSelection";
 import db from "../db.server";
+import { syncSubscriptionContractState } from "./subscriptionContractSync.server";
 import { unauthenticated } from "../shopify.server";
+import {
+  reconcilePendingContractForSelection,
+} from "./subscriptionMealSelection.server";
 import {
   handleAutomaticBillingFailure,
   isSelectionOwnedByRecoveryRetry,
@@ -244,7 +249,9 @@ export type BillingSkipReason =
   | "missing_next_billing_date"
   | "next_billing_date_in_future"
   | "payment_recovery"
-  | "recent_attempt";
+  | "recent_attempt"
+  | "terminal_contract"
+  | "contract_sync_error";
 
 export type BillingAttemptStatus =
   | "success"
@@ -291,12 +298,14 @@ export type ResumeLockStatus =
   (typeof RESUME_LOCK_STATUS)[keyof typeof RESUME_LOCK_STATUS];
 
 const EMPTY_SKIP_REASONS = (): Record<BillingSkipReason, number> => ({
+  contract_sync_error: 0,
   missing_contract_id: 0,
   missing_next_billing_date: 0,
   next_billing_date_in_future: 0,
   paused_or_inactive: 0,
   payment_recovery: 0,
   recent_attempt: 0,
+  terminal_contract: 0,
 });
 
 export const isShopifyBillingWorkerButtonEnabled = () =>
@@ -503,32 +512,14 @@ export const reconcilePortalSelectionShopifyState = async (
     return record;
   }
 
-  const shopifyStatus = await fetchSubscriptionContractStatus(
+  const syncResult = await syncSubscriptionContractState({
     admin,
-    record.subscriptionContractId,
-  );
-  const localSaysActive = record.status === "active" && record.active;
-  const shopifyPaused = shopifyStatus === "PAUSED";
+    shop: record.shop,
+    source: "portal_reconciliation",
+    subscriptionContractId: record.subscriptionContractId,
+  });
 
-  if (localSaysActive && shopifyPaused) {
-    console.log(
-      "[resumeBilling] portal reconciliation: local active but Shopify paused",
-      {
-        localActive: record.active,
-        localStatus: record.status,
-        resumeAttemptStatus: record.resumeAttemptStatus,
-        selectionId: record.id,
-        shopifyStatus,
-      },
-    );
-
-    return db.subscriptionMealSelection.update({
-      data: { active: false, status: "paused" },
-      where: { id: record.id },
-    });
-  }
-
-  return record;
+  return syncResult.selection ?? record;
 };
 
 export const fetchSubscriptionContractBillingPolicy = async (
@@ -1650,6 +1641,10 @@ export const getSelectionSkipReason = (
     return "missing_contract_id";
   }
 
+  if (isTerminalSubscriptionSelectionStatus(selection.status)) {
+    return "terminal_contract";
+  }
+
   if (recovery && isSelectionOwnedByRecoveryRetry(recovery)) {
     return "payment_recovery";
   }
@@ -2000,6 +1995,35 @@ export const processDueSubscriptionBillings = async (
     const activeRecovery =
       recoveryBySelectionId.get(currentSelection.id) ?? null;
 
+    if (!currentSelection.subscriptionContractId) {
+      try {
+        const pendingReconciliation = await reconcilePendingContractForSelection({
+          admin,
+          isSubscription: true,
+          rawOrder: null,
+          selectionId: currentSelection.id,
+          shop,
+          shopifyOrderId: currentSelection.shopifyOrderId,
+        });
+
+        if (pendingReconciliation.selection) {
+          currentSelection = pendingReconciliation.selection;
+          console.log("[SUBSCRIPTION_SELECTION] billing worker contract reconciled", {
+            action: "reconcile_pending_contract",
+            reason: pendingReconciliation.reason,
+            selectionId: currentSelection.id,
+            source: pendingReconciliation.source,
+            subscriptionContractId: currentSelection.subscriptionContractId,
+          });
+        }
+      } catch (error) {
+        console.log("[SUBSCRIPTION_SELECTION] billing worker reconciliation failed", {
+          error: error instanceof Error ? error.message : error,
+          selectionId: currentSelection.id,
+        });
+      }
+    }
+
     if (isSelectionOwnedByRecoveryRetry(activeRecovery)) {
       console.log(
         "[paymentRecovery] normal worker skipped due to active recovery",
@@ -2048,12 +2072,88 @@ export const processDueSubscriptionBillings = async (
       }
     }
 
+    const preSyncSkipReason = getSelectionSkipReason(
+      currentSelection,
+      recoveryBySelectionId.get(currentSelection.id) ?? null,
+    );
+
+    if (preSyncSkipReason) {
+      if (preSyncSkipReason === "terminal_contract") {
+        console.log("[SUBSCRIPTION_CONTRACT_SYNC] cron skipped terminal contract", {
+          selectionId: currentSelection.id,
+          skipReason: preSyncSkipReason,
+          status: currentSelection.status,
+          subscriptionContractId: currentSelection.subscriptionContractId,
+        });
+      }
+
+      summary.skipped += 1;
+      summary.skipReasons[preSyncSkipReason] += 1;
+      continue;
+    }
+
+    let contractSyncFailed = false;
+
+    if (currentSelection.subscriptionContractId) {
+      try {
+        const syncResult = await syncSubscriptionContractState({
+          admin,
+          shop,
+          source: "cron",
+          subscriptionContractId: currentSelection.subscriptionContractId,
+        });
+
+        if (syncResult.action === "error") {
+          contractSyncFailed = true;
+          console.log(
+            "[SUBSCRIPTION_CONTRACT_SYNC] cron billing blocked — contract sync failed",
+            {
+              error: syncResult.reason,
+              selectionId: currentSelection.id,
+              shop,
+              source: "cron",
+              subscriptionContractId: currentSelection.subscriptionContractId,
+            },
+          );
+        } else if (syncResult.selection) {
+          currentSelection = syncResult.selection;
+        }
+      } catch (error) {
+        contractSyncFailed = true;
+        console.log(
+          "[SUBSCRIPTION_CONTRACT_SYNC] cron billing blocked — contract sync failed",
+          {
+            error: error instanceof Error ? error.message : error,
+            selectionId: currentSelection.id,
+            shop,
+            source: "cron",
+            subscriptionContractId: currentSelection.subscriptionContractId,
+          },
+        );
+      }
+    }
+
+    if (contractSyncFailed) {
+      summary.skipped += 1;
+      summary.skipReasons.contract_sync_error += 1;
+      continue;
+    }
+
     const skipReason = getSelectionSkipReason(
       currentSelection,
       recoveryBySelectionId.get(currentSelection.id) ?? null,
     );
 
     if (skipReason) {
+      if (skipReason === "terminal_contract") {
+        console.log("[SUBSCRIPTION_CONTRACT_SYNC] cron skipped terminal contract", {
+          selectionId: currentSelection.id,
+          skipReason,
+          status: currentSelection.status,
+          subscriptionContractId: currentSelection.subscriptionContractId,
+        });
+      }
+
       summary.skipped += 1;
       summary.skipReasons[skipReason] += 1;
       continue;

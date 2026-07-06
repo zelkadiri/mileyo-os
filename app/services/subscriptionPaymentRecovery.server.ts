@@ -1,5 +1,6 @@
 import type { SubscriptionMealSelection } from "@prisma/client";
 
+import { isTerminalSubscriptionSelectionStatus } from "../constants/subscriptionMealSelection";
 import {
   ACTIVE_RECOVERY_STATUSES,
   isOpenRecoveryStatus,
@@ -630,7 +631,14 @@ export type RecoveryDiagnosticBranch =
   | "skipped_inactive"
   | "skipped_resume"
   | "stale_restore"
+  | "terminal_contract"
   | "terminal_failure";
+
+export type RecoverySkipReason = "terminal_contract";
+
+const EMPTY_RECOVERY_SKIP_REASONS = (): Record<RecoverySkipReason, number> => ({
+  terminal_contract: 0,
+});
 
 export type RecoveryDiagnosticItem = {
   branch: RecoveryDiagnosticBranch;
@@ -650,6 +658,7 @@ export type RecoveryWorkerSummary = {
   recovered: number;
   retried: number;
   skipped: number;
+  skipReasons: Record<RecoverySkipReason, number>;
 };
 
 export const isSelectionOwnedByRecoveryRetry = (
@@ -1005,6 +1014,7 @@ export const processDueRecoveryRetries = async (
     recovered: 0,
     retried: 0,
     skipped: 0,
+    skipReasons: EMPTY_RECOVERY_SKIP_REASONS(),
   };
 
   const now = new Date();
@@ -1057,6 +1067,23 @@ export const processDueRecoveryRetries = async (
           branch: "skipped_resume",
         });
         summary.skipped += 1;
+        continue;
+      }
+
+      if (isTerminalSubscriptionSelectionStatus(selection.status)) {
+        console.log("[PAYMENT_RECOVERY] skipped terminal contract", {
+          recoveryId: recovery.id,
+          selectionId: selection.id,
+          skipReason: "terminal_contract",
+          status: selection.status,
+          subscriptionContractId: selection.subscriptionContractId,
+        });
+        pushRecoveryDiagnostic(summary, {
+          ...diagnosticBase,
+          branch: "terminal_contract",
+        });
+        summary.skipped += 1;
+        summary.skipReasons.terminal_contract += 1;
         continue;
       }
 
