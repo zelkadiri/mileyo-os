@@ -7,7 +7,6 @@ import {
   archiveResumeAttemptOnPause,
   ensureResumeAttemptForBilling,
   handleResumeBillingFailure,
-  isResumeAttemptInFlight,
   prepareResumeBillingFlow,
   releaseResumeBillingLock,
   RESUME_LOCK_STATUS,
@@ -21,11 +20,11 @@ import {
   resolvePaymentUpdateEligibility,
   sendPaymentUpdateEmailForSelection,
 } from "../../services/subscriptionPaymentRecovery.server";
+import { updateSubscriptionContractBoxViaDraft } from "../../services/subscriptionContractBoxChange.server";
 import {
-  getSubscriptionBoxChangeBlockMessage,
-  getSubscriptionBoxChangeBlockReason,
-  updateSubscriptionContractBoxViaDraft,
-} from "../../services/subscriptionContractBoxChange.server";
+  getSubscriptionModificationBlockMessage,
+  getSubscriptionModificationBlockReason,
+} from "../../services/subscriptionModificationBlock.server";
 import {
   fetchTrustedBoxCatalog,
   resolveCurrentBoxProduct,
@@ -920,12 +919,22 @@ const handleChangeSubscriptionBoxAction = async ({
     }
 
     const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
-    const blockReason = getSubscriptionBoxChangeBlockReason(
+    const blockReason = getSubscriptionModificationBlockReason(
       selection,
       recoveryRecord,
     );
 
     if (blockReason) {
+      console.log(
+        "[portal] modification blocked by getSubscriptionModificationBlockReason",
+        {
+          blockReason,
+          intent: "changeSubscriptionBox",
+          selectionId: selection.id,
+          shop,
+        },
+      );
+
       const portalData = await loadPortalData({ customerShopifyId, shop });
 
       if (!portalData) {
@@ -934,7 +943,7 @@ const handleChangeSubscriptionBoxAction = async ({
 
       return renderPortal({
         ...portalData,
-        errorMessage: getSubscriptionBoxChangeBlockMessage(blockReason),
+        errorMessage: getSubscriptionModificationBlockMessage(blockReason),
       });
     }
 
@@ -1044,7 +1053,23 @@ const handleUpdateFutureMealSelectionAction = async ({
     return renderMessage("Abonnement introuvable.");
   }
 
-  if (isResumeAttemptInFlight(selection)) {
+  const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
+  const blockReason = getSubscriptionModificationBlockReason(
+    selection,
+    recoveryRecord,
+  );
+
+  if (blockReason) {
+    console.log(
+      "[portal] modification blocked by getSubscriptionModificationBlockReason",
+      {
+        blockReason,
+        intent: "updateFutureMealSelection",
+        selectionId: selection.id,
+        shop,
+      },
+    );
+
     const portalData = await loadPortalData({ customerShopifyId, shop });
 
     if (!portalData) {
@@ -1053,8 +1078,7 @@ const handleUpdateFutureMealSelectionAction = async ({
 
     return renderPortal({
       ...portalData,
-      processingMessage:
-        "Votre paiement est en cours de confirmation. Ne relancez pas la demande.",
+      errorMessage: getSubscriptionModificationBlockMessage(blockReason),
     });
   }
 

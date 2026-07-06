@@ -1,19 +1,14 @@
-import { RECOVERY_STATUS } from "../constants/subscriptionPaymentRecovery";
 import { getGraphqlUserErrors } from "../utils/graphql";
 import { toSubscriptionContractGid } from "../utils/shopifyIds.server";
-import {
-  derivePortalSubscriptionState,
-  isRecentBillingAttempt,
-  isResumeAttemptInFlight,
-  type ShopifyAdminGraphql,
-} from "./subscriptionBillingWorker.server";
+import type { ShopifyAdminGraphql } from "./subscriptionBillingWorker.server";
 import type { TrustedBoxProduct } from "./subscriptionBoxCatalog.server";
+import {
+  getSubscriptionModificationBlockMessage,
+  getSubscriptionModificationBlockReason,
+  type SubscriptionModificationBlockReason,
+} from "./subscriptionModificationBlock.server";
 
-export type BoxChangeBlockReason =
-  | "billing_processing"
-  | "missing_contract"
-  | "recovery_processing"
-  | "resume_processing";
+export type BoxChangeBlockReason = SubscriptionModificationBlockReason;
 
 const subscriptionContractLinesQuery = `#graphql
   query SubscriptionContractLinesForBoxChange($id: ID!) {
@@ -132,66 +127,11 @@ type SubscriptionDraftCommitResponse = {
   errors?: { message?: string | null }[];
 };
 
-export const getSubscriptionBoxChangeBlockReason = (
-  selection: {
-    active: boolean;
-    lastBillingAttemptAt: Date | null;
-    lastBillingAttemptStatus: string | null;
-    resumeAttemptOrderId: string | null;
-    resumeAttemptStatus: string | null;
-    status: string;
-    subscriptionContractId: string | null;
-  },
-  recovery?: {
-    status: string;
-  } | null,
-): BoxChangeBlockReason | null => {
-  if (!selection.subscriptionContractId) {
-    return "missing_contract";
-  }
-
-  if (
-    isResumeAttemptInFlight(selection) ||
-    derivePortalSubscriptionState(selection) === "resume_processing"
-  ) {
-    return "resume_processing";
-  }
-
-  if (recovery?.status === RECOVERY_STATUS.PROCESSING) {
-    return "recovery_processing";
-  }
-
-  if (isRecentBillingAttempt(selection.lastBillingAttemptAt)) {
-    const status = selection.lastBillingAttemptStatus;
-
-    if (
-      status === "submitted" ||
-      status === "challenged" ||
-      status === "processing"
-    ) {
-      return "billing_processing";
-    }
-  }
-
-  return null;
-};
+export const getSubscriptionBoxChangeBlockReason = getSubscriptionModificationBlockReason;
 
 export const getSubscriptionBoxChangeBlockMessage = (
   reason: BoxChangeBlockReason,
-) => {
-  switch (reason) {
-    case "resume_processing":
-      return "Un paiement de reprise est en cours. Réessayez une fois la confirmation terminée.";
-    case "billing_processing":
-      return "Un prélèvement est en cours de traitement. Réessayez dans quelques minutes.";
-    case "recovery_processing":
-      return "Une tentative de paiement automatique est en cours. Réessayez dans quelques minutes.";
-    case "missing_contract":
-      return "Contrat d’abonnement Shopify manquant.";
-    default:
-      return "Changement de box indisponible pour le moment.";
-  }
-};
+) => getSubscriptionModificationBlockMessage(reason);
 
 const fetchPrimarySubscriptionLine = async (
   admin: ShopifyAdminGraphql,

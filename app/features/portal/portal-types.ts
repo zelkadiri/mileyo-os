@@ -48,6 +48,8 @@ export type PortalHistoryOrder = {
 export type PortalSelection = {
   boxChangeBlocked: boolean;
   boxChangeBlockedReason: string | null;
+  modificationBlocked: boolean;
+  modificationBlockedReason: string | null;
   boxProductShopifyId: string | null;
   boxSubscriptionPrice: string | null;
   boxTitle: string | null;

@@ -7,42 +7,8 @@ import { isTerminalSubscriptionSelectionStatus } from "../../constants/subscript
 import {
   syncSubscriptionContractState,
 } from "../../services/subscriptionContractSync.server";
+import { triggerSubscriptionBillingAttempt } from "../../services/subscriptionBillingWorker.server";
 import { getSelectedMealsFromJson } from "../../utils/mealSelection";
-import { toSubscriptionContractGid } from "../../utils/shopifyIds.server";
-
-const billingAttemptCreateMutation = `#graphql
-  mutation SubscriptionBillingAttemptCreate(
-    $subscriptionContractId: ID!
-    $subscriptionBillingAttemptInput: SubscriptionBillingAttemptInput!
-  ) {
-    subscriptionBillingAttemptCreate(
-      subscriptionContractId: $subscriptionContractId
-      subscriptionBillingAttemptInput: $subscriptionBillingAttemptInput
-    ) {
-      subscriptionBillingAttempt {
-        id
-        ready
-      }
-      userErrors {
-        field
-        message
-      }
-    }
-  }
-`;
-
-type BillingAttemptCreateResponse = {
-  data?: {
-    subscriptionBillingAttemptCreate?: {
-      subscriptionBillingAttempt?: {
-        id?: string | null;
-        ready?: boolean | null;
-      } | null;
-      userErrors?: { field?: string[] | null; message?: string | null }[];
-    } | null;
-  };
-  errors?: { message?: string | null }[];
-};
 
 import { isSubscriptionTestActionsEnabled } from "./subscriptions-test.server";
 
@@ -118,42 +84,27 @@ export const handleSubscriptionsAction = async (request: Request) => {
       );
     }
 
-    const idempotencyKey = `mileyo_${billableSelection.id}_${Date.now()}`;
+    const idempotencyKey = `mileyo_admin_${billableSelection.id}_${Date.now()}`;
 
     try {
-      const response = await admin.graphql(billingAttemptCreateMutation, {
-        variables: {
-          subscriptionBillingAttemptInput: { idempotencyKey },
-          subscriptionContractId: toSubscriptionContractGid(
-            billableSelection.subscriptionContractId!,
-          ),
-        },
+      const billingResult = await triggerSubscriptionBillingAttempt({
+        admin,
+        idempotencyKey,
+        selectionId: billableSelection.id,
+        subscriptionContractId: billableSelection.subscriptionContractId!,
       });
-      const json = (await response.json()) as BillingAttemptCreateResponse;
 
-      if (json.errors?.length) {
+      if (
+        billingResult.status === "failure" ||
+        billingResult.status === "unknown"
+      ) {
         return redirectWithBillingError(
-          json.errors
-            .map((error) => error.message)
-            .filter(Boolean)
-            .join(" ") || "Erreur GraphQL lors du déclenchement.",
+          billingResult.errorMessage ??
+            "Shopify a refusé la tentative de facturation.",
         );
       }
 
-      const result = json.data?.subscriptionBillingAttemptCreate;
-      const userErrors = result?.userErrors ?? [];
-
-      if (userErrors.length > 0) {
-        return redirectWithBillingError(
-          userErrors
-            .map((error) => error.message)
-            .filter(Boolean)
-            .join(" ") || "Shopify a refusé la tentative de facturation.",
-        );
-      }
-
-      const attemptId =
-        result?.subscriptionBillingAttempt?.id ?? "inconnu";
+      const attemptId = billingResult.attemptId ?? "inconnu";
 
       return redirect(
         `/app/subscriptions?billingSuccess=1&attemptId=${encodeURIComponent(attemptId)}`,

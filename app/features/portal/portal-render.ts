@@ -164,6 +164,9 @@ const renderNextBoxCard = ({
   const isActive = portalState === "active";
   const isPaused = portalState === "paused";
   const isResumeProcessing = portalState === "resume_processing";
+  const isModificationBlocked = selection.modificationBlocked;
+  const modificationBlockedReason =
+    selection.modificationBlockedReason ?? selection.boxChangeBlockedReason;
   const resumeRequiresPayment = selection.resumeRequiresPayment;
   const resumeButtonLabel = resumeRequiresPayment
     ? "Reprendre mon abonnement et payer maintenant"
@@ -209,18 +212,18 @@ const renderNextBoxCard = ({
           : ""
       }
       ${
-        isActive
+        isActive && !isModificationBlocked
           ? `<button class="portal-button secondary edit-button" type="button">Modifier mes plats</button>`
           : ""
       }
       ${
-        !isResumeProcessing && !selection.boxChangeBlocked
+        !isResumeProcessing && !isModificationBlocked
           ? `<button class="portal-button secondary change-box-button" type="button">Changer de box</button>`
           : ""
       }
       ${
-        selection.boxChangeBlocked && selection.boxChangeBlockedReason
-          ? `<p class="muted box-change-blocked">${escapeHtml(selection.boxChangeBlockedReason)}</p>`
+        isModificationBlocked && modificationBlockedReason
+          ? `<p class="muted modification-blocked">${escapeHtml(modificationBlockedReason)}</p>`
           : ""
       }
       ${
@@ -252,7 +255,7 @@ const renderNextBoxCard = ({
           }
         </div>
       </div>
-      <div class="editor${isPaused && !isResumeProcessing ? " paused-editor" : " hidden"}">
+      <div class="editor${isPaused && !isResumeProcessing && !isModificationBlocked ? " paused-editor" : " hidden"}">
         <div class="editor-heading">
           <div>
             <h3>${isPaused || isResumeProcessing ? "Préparez votre prochaine box" : "Modifier vos plats"}</h3>
@@ -287,7 +290,7 @@ const renderNextBoxCard = ({
         }
         <div class="meal-grid meal-editor-grid"></div>
         ${
-          isPaused && !selection.resumeBlockedMessage
+          isPaused && !selection.resumeBlockedMessage && !isModificationBlocked
             ? `<button class="portal-button resume-button" disabled type="button">${escapeHtml(resumeButtonLabel)}</button>
         <p class="resume-note">${escapeHtml(resumeNote)}</p>`
             : ""
@@ -303,7 +306,7 @@ const renderNextBoxCard = ({
             : ""
         }
         ${
-          isPaused
+          isPaused && !isModificationBlocked
             ? `<button class="portal-button secondary save-button" disabled type="button">Enregistrer mes choix</button>`
             : ""
         }
