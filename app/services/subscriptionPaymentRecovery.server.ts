@@ -410,7 +410,6 @@ const scheduleRecoveryAfterFailure = async ({
   admin,
   billingCycleKey,
   billingResult,
-  dueBillingDate,
   selection,
 }: {
   admin: ShopifyAdminGraphql;
