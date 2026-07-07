@@ -4,8 +4,42 @@ Contrat de référence **à ne jamais utiliser** pour ces scénarios : `25688637
 
 Utiliser un contrat jetable dédié (nouveau checkout box-builder ou contrat de test existant).
 
-Shop dev : `mileyo-ok1bszwz.myshopify.com`  
-Cron local : `curl -s "http://localhost:3000/api/cron/process-subscriptions?secret=$CRON_SECRET"`
+Shop dev : `mileyo-ok1bszwz.myshopify.com`
+
+Variables cron obligatoires (`.env` local et Vercel Production) :
+
+- `CRON_SECRET` — secret d’authentification du endpoint cron
+- `CRON_SHOP` — boutique ciblée, ex. `mileyo-ok1bszwz.myshopify.com` (dev) ou `vraie-boutique.myshopify.com` (prod). Pas de fallback hardcodé.
+
+### Cron local — important
+
+Le endpoint cron lit `CRON_SHOP` et `CRON_SECRET` depuis l’environnement **du processus serveur** au démarrage.
+
+`CRON_SHOP=... curl ...` en préfixe de commande **ne modifie pas** l’environnement d’un `shopify app dev` déjà lancé.
+
+Pour tester localement :
+
+1. définir `CRON_SHOP` et `CRON_SECRET` dans `.env` (ou les exporter dans le shell qui lance le serveur) ;
+2. **redémarrer** `shopify app dev` ;
+3. puis appeler :
+
+```bash
+curl -s \
+  -H "Authorization: Bearer $CRON_SECRET" \
+  "http://localhost:3000/api/cron/process-subscriptions" | jq .
+```
+
+Alternative : démarrer l’app avec les variables voulues **avant** le `curl`, dans le même shell :
+
+```bash
+export CRON_SHOP=mileyo-ok1bszwz.myshopify.com
+export CRON_SECRET=...
+shopify app dev --config shopify.app.dev.toml ...
+```
+
+Puis, dans un autre terminal, le `curl` ci-dessus (le serveur doit déjà tourner avec ces variables).
+
+Pour un appel sec sans prélèvement, vérifier d’abord que tous les abonnements actifs ont une `nextBillingDate` dans le futur. Sinon le worker peut facturer un contrat dû.
 
 ---
 

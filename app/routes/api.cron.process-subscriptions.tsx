@@ -1,8 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import { processDueSubscriptionBillings } from "../services/subscriptionBillingWorker.server";
-
-const CRON_SHOP = "mileyo-ok1bszwz.myshopify.com";
+import { resolveCronShop } from "../utils/cronShop.server";
 
 const validateCronSecret = (request: Request): Response | null => {
   const cronSecret = process.env.CRON_SECRET;
@@ -29,6 +28,20 @@ const validateCronSecret = (request: Request): Response | null => {
   return null;
 };
 
+const validateCronShop = (): { shop: string } | Response => {
+  const result = resolveCronShop(process.env.CRON_SHOP);
+
+  if (!result.ok) {
+    console.error("[CRON_CONFIG]", result.error);
+
+    return Response.json({ error: result.error }, { status: 500 });
+  }
+
+  console.log("[CRON_CONFIG] targeting shop", { shop: result.shop });
+
+  return { shop: result.shop };
+};
+
 const runProcessSubscriptionsCron = async (request: Request) => {
   const authError = validateCronSecret(request);
 
@@ -36,8 +49,14 @@ const runProcessSubscriptionsCron = async (request: Request) => {
     return authError;
   }
 
+  const shopConfig = validateCronShop();
+
+  if (shopConfig instanceof Response) {
+    return shopConfig;
+  }
+
   try {
-    const summary = await processDueSubscriptionBillings(CRON_SHOP);
+    const summary = await processDueSubscriptionBillings(shopConfig.shop);
     return Response.json(summary);
   } catch (error) {
     const message =
