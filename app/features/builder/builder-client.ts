@@ -1,13 +1,14 @@
 export const builderClientScript = `
 (function () {
   var data = window.__MILEYO_BOX_BUILDER__;
-  var orderType = "one-time";
+  var orderType = "subscription";
   var selectedBox = null;
   var requiredMeals = 0;
   var selectedMeals = {};
   var currentStep = "formule";
   var mealsRendered = false;
   var FIRST_WEEK_DISCOUNT_EUR = 20;
+  var RECOMMENDED_MEAL_COUNT = 12;
 
   var boxGrid = document.getElementById("box-grid");
   var boxRailViewport = document.getElementById("box-rail-viewport");
@@ -29,6 +30,7 @@ export const builderClientScript = `
   var formulaContinue = document.getElementById("formula-continue");
   var formulaFooter = document.getElementById("formula-footer");
   var mealsLead = document.getElementById("meals-lead");
+  var tunnelPromo = document.getElementById("tunnel-promo");
 
   function formatEuros(price) {
     if (!price) return "";
@@ -74,6 +76,33 @@ export const builderClientScript = `
       if (aCount !== bCount) return aCount - bCount;
       return a.title.localeCompare(b.title, "fr");
     });
+  }
+
+  function isRecommendedBox(box) {
+    return isBoxAvailable(box) && box.mealCount === RECOMMENDED_MEAL_COUNT;
+  }
+
+  function getDefaultBox() {
+    var sorted = sortBoxes(data.boxes);
+    var recommended = sorted.find(function (box) {
+      return isRecommendedBox(box);
+    });
+    if (recommended) return recommended;
+    return sorted.find(isBoxAvailable) || null;
+  }
+
+  function initializeDefaultSelection() {
+    if (selectedBox) return;
+    var defaultBox = getDefaultBox();
+    if (!defaultBox) return;
+    selectedBox = defaultBox;
+    requiredMeals = defaultBox.mealCount;
+    boxHelper.textContent = requiredMeals + " repas à sélectionner";
+  }
+
+  function updatePromoBanner() {
+    if (!tunnelPromo) return;
+    tunnelPromo.classList.toggle("hidden", orderType === "one-time");
   }
 
   function getWeeklyPriceValue(subscriptionPrice) {
@@ -236,11 +265,21 @@ export const builderClientScript = `
       if (existingBadge) existingBadge.remove();
     });
 
-    button.classList.add("selected");
+    var badgeRow = button.querySelector(".card-badge-row");
+    if (!badgeRow) {
+      badgeRow = document.createElement("div");
+      badgeRow.className = "card-badge-row";
+      button.insertBefore(badgeRow, button.firstChild);
+    }
+    badgeRow.querySelectorAll(".selected-badge").forEach(function (badge) {
+      badge.remove();
+    });
+
     var badge = document.createElement("span");
     badge.className = "selected-badge";
     badge.textContent = "Sélectionnée";
-    button.insertBefore(badge, button.firstChild);
+    badgeRow.appendChild(badge);
+    button.classList.add("selected");
 
     updateFormulaCta();
     updateSummary();
@@ -248,11 +287,42 @@ export const builderClientScript = `
     window.requestAnimationFrame(updateBoxRailNav);
   }
 
+  function appendRecommendedBadge(badgeRow) {
+    var recommendedBadge = document.createElement("span");
+    recommendedBadge.className = "recommended-badge";
+    recommendedBadge.textContent = "Le meilleur équilibre";
+    badgeRow.appendChild(recommendedBadge);
+  }
+
+  function appendBoxBenefits(button) {
+    var benefits = document.createElement("ul");
+    benefits.className = "box-benefits";
+    var items =
+      orderType === "subscription"
+        ? ["Repas halal", "Sans engagement", "Modifiable chaque semaine"]
+        : ["Repas halal", "Livraison offerte"];
+    items.forEach(function (item) {
+      var li = document.createElement("li");
+      li.textContent = item;
+      benefits.appendChild(li);
+    });
+    button.appendChild(benefits);
+  }
+
   function appendSubscriptionPricing(button, box) {
     var weeklyPrice = getWeeklyPriceValue(box.subscriptionPrice);
     if (weeklyPrice === null) return;
 
     var firstWeekPrice = getFirstWeekDisplayPrice(box.subscriptionPrice);
+    var priceRow = document.createElement("div");
+    priceRow.className = "box-price-row";
+
+    var perMeal = document.createElement("span");
+    perMeal.className = "box-price-per-meal";
+    perMeal.textContent = formatPricePerMeal(String(firstWeekPrice), box.mealCount) + " / repas";
+    priceRow.appendChild(perMeal);
+    button.appendChild(priceRow);
+
     var promo = document.createElement("p");
     promo.className = "box-promo-price";
     promo.innerHTML =
@@ -265,10 +335,10 @@ export const builderClientScript = `
     weekly.textContent = "Puis " + formatEuros(weeklyPrice) + " / semaine";
     button.appendChild(weekly);
 
-    var note = document.createElement("p");
-    note.className = "box-promo-note";
-    note.textContent = "Réduction de 20 € appliquée automatiquement au paiement";
-    button.appendChild(note);
+    var promoNote = document.createElement("p");
+    promoNote.className = "box-promo-note";
+    promoNote.textContent = "Réduction appliquée automatiquement au paiement";
+    button.appendChild(promoNote);
   }
 
   function appendOneTimePricing(button, box) {
@@ -295,35 +365,39 @@ export const builderClientScript = `
     sortBoxes(data.boxes).forEach(function (box) {
       var isAvailable = isBoxAvailable(box);
       var button = document.createElement("button");
-      button.className = "product-card selectable" + (isAvailable ? "" : " unavailable");
+      button.className = "product-card formula-card selectable" + (isAvailable ? "" : " unavailable");
       button.type = "button";
       button.disabled = !isAvailable;
 
+      var badgeRow = null;
+      if (isAvailable) {
+        badgeRow = document.createElement("div");
+        badgeRow.className = "card-badge-row";
+        button.appendChild(badgeRow);
+
+        if (isRecommendedBox(box)) {
+          appendRecommendedBadge(badgeRow);
+        }
+      }
+
       if (selectedBox && selectedBox.id === box.id) {
         button.classList.add("selected");
+        if (!badgeRow) {
+          badgeRow = document.createElement("div");
+          badgeRow.className = "card-badge-row";
+          button.insertBefore(badgeRow, button.firstChild);
+        }
         var selectedBadge = document.createElement("span");
         selectedBadge.className = "selected-badge";
         selectedBadge.textContent = "Sélectionnée";
-        button.insertBefore(selectedBadge, button.firstChild);
-      }
-
-      if (box.imageUrl) {
-        var image = document.createElement("img");
-        image.alt = box.imageAlt;
-        image.src = box.imageUrl;
-        button.appendChild(image);
+        badgeRow.appendChild(selectedBadge);
       }
 
       if (isAvailable) {
         var mealCount = document.createElement("span");
         mealCount.className = "box-meal-count";
-        mealCount.textContent = box.mealCount + (orderType === "subscription" ? " repas par semaine" : " repas");
+        mealCount.textContent = box.mealCount + (orderType === "subscription" ? " repas / semaine" : " repas");
         button.appendChild(mealCount);
-
-        var tagline = document.createElement("span");
-        tagline.className = "box-tagline";
-        tagline.textContent = box.title;
-        button.appendChild(tagline);
 
         if (orderType === "subscription") {
           if (isBoxSubscriptionReady(box)) {
@@ -337,6 +411,8 @@ export const builderClientScript = `
         } else {
           appendOneTimePricing(button, box);
         }
+
+        appendBoxBenefits(button);
       } else {
         var title = document.createElement("span");
         title.className = "product-title";
@@ -383,6 +459,7 @@ export const builderClientScript = `
     orderType = nextOrderType;
     oneTimeToggle.classList.toggle("active", orderType === "one-time");
     subscriptionToggle.classList.toggle("active", orderType === "subscription");
+    updatePromoBanner();
     renderBoxes();
     updateFormulaCta();
     updateSummary();
@@ -543,6 +620,8 @@ export const builderClientScript = `
   window.addEventListener("popstate", handleHistoryNavigation);
   window.addEventListener("hashchange", handleHistoryNavigation);
 
+  initializeDefaultSelection();
+  updatePromoBanner();
   renderBoxes();
   updateFormulaCta();
   updateSummary();

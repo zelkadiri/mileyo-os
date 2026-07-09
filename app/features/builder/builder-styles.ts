@@ -15,10 +15,10 @@ export const builderStyles = `
   --mileyo-muted: rgba(58, 44, 69, 0.62);
   --mileyo-shadow: 0 4px 24px rgba(90, 27, 105, 0.08);
   --mileyo-shadow-soft: 0 2px 12px rgba(90, 27, 105, 0.06);
-  --tunnel-footer-height: 84px;
-  --box-rail-gap: 14px;
-  --box-rail-card-width-mobile: 82%;
-  --box-rail-card-width-desktop: calc((100% - (3 * var(--box-rail-gap))) / 4.15);
+  --tunnel-footer-height: 108px;
+  --box-rail-gap: 12px;
+  --box-rail-card-width-mobile: 78%;
+  --box-rail-card-width-desktop: calc((100% - (3 * var(--box-rail-gap))) / 4.28);
 }
 
 * { box-sizing: border-box; }
@@ -37,25 +37,25 @@ body {
 }
 
 .tunnel-promo {
-  background: linear-gradient(90deg, rgba(124, 201, 167, 0.22), rgba(220, 194, 240, 0.35));
-  border-bottom: 1px solid rgba(185, 138, 215, 0.14);
-  padding: 8px 16px;
+  background: linear-gradient(90deg, rgba(124, 201, 167, 0.2), rgba(220, 194, 240, 0.28));
+  border-bottom: 1px solid rgba(185, 138, 215, 0.12);
+  padding: 6px 16px;
   text-align: center;
 }
 
 .tunnel-promo-title {
   color: var(--mileyo-purple-black);
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.25;
   margin: 0;
 }
 
 .tunnel-promo-subtitle {
   color: var(--mileyo-muted);
-  font-size: 0.76rem;
-  line-height: 1.3;
-  margin: 2px 0 0;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  margin: 1px 0 0;
 }
 
 .visually-hidden {
@@ -71,9 +71,14 @@ body {
 }
 
 .tunnel-header {
+  align-items: center;
   background: var(--mileyo-cream);
-  border-bottom: 1px solid rgba(185, 138, 215, 0.18);
-  padding: 12px 16px 14px;
+  border-bottom: 1px solid rgba(185, 138, 215, 0.14);
+  display: grid;
+  gap: 6px 12px;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-rows: auto auto;
+  padding: 8px 16px 10px;
   position: sticky;
   top: 0;
   z-index: 20;
@@ -86,9 +91,12 @@ body {
   color: var(--mileyo-purple-black);
   cursor: pointer;
   font: inherit;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 600;
-  padding: 4px 0;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  padding: 2px 0;
   text-align: left;
   text-decoration: none;
 }
@@ -103,25 +111,30 @@ body {
 .tunnel-wordmark {
   color: var(--mileyo-purple-black);
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.55rem;
+  font-size: 1.28rem;
   font-style: italic;
   font-weight: 600;
+  grid-column: 2;
+  grid-row: 1;
   letter-spacing: 0.04em;
-  margin: 6px 0 12px;
+  margin: 0;
   text-align: center;
 }
 
 .tunnel-progress-block {
+  grid-column: 1 / -1;
+  grid-row: 2;
   margin: 0 auto;
-  max-width: 280px;
+  max-width: 260px;
+  width: 100%;
 }
 
 .tunnel-step-label {
   color: var(--mileyo-muted);
-  font-size: 0.82rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.03em;
-  margin: 0 0 8px;
+  letter-spacing: 0.04em;
+  margin: 0 0 5px;
   text-align: center;
   text-transform: uppercase;
 }
@@ -129,7 +142,7 @@ body {
 .tunnel-progress {
   background: var(--mileyo-lilac);
   border-radius: 999px;
-  height: 6px;
+  height: 5px;
   overflow: hidden;
 }
 
@@ -148,12 +161,12 @@ body {
 .builder-shell {
   margin: 0 auto;
   max-width: 720px;
-  padding: 20px 16px calc(var(--tunnel-footer-height) + 24px);
+  padding: 16px 16px calc(var(--tunnel-footer-height) + 20px);
 }
 
 .tunnel-body:not(.is-step-meals) .builder-shell {
-  max-width: 1240px;
-  padding-bottom: calc(var(--tunnel-footer-height) + 32px);
+  max-width: 1180px;
+  padding-bottom: calc(var(--tunnel-footer-height) + 16px);
 }
 
 .tunnel-body.is-step-meals .tunnel-footer,
@@ -167,7 +180,42 @@ body {
 
 .formula-intro,
 .meals-intro {
-  margin-bottom: 22px;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.formula-lead {
+  color: var(--mileyo-muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
+  margin: 0 auto;
+  max-width: 34rem;
+}
+
+.formula-benefits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.formula-benefits li {
+  background: var(--mileyo-white);
+  border: 1px solid rgba(185, 138, 215, 0.16);
+  border-radius: 999px;
+  color: var(--mileyo-text);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 5px 10px;
+}
+
+.formula-hint {
+  color: var(--mileyo-muted);
+  font-size: 0.82rem;
+  margin: 0 0 10px;
   text-align: center;
 }
 
@@ -175,38 +223,23 @@ body {
 .meals-intro h1,
 .setup-card h1 {
   color: var(--mileyo-purple-black);
-  font-size: clamp(1.35rem, 4.2vw, 1.95rem);
+  font-size: clamp(1.2rem, 3.2vw, 1.55rem);
   font-weight: 700;
   letter-spacing: -0.02em;
-  line-height: 1.25;
-  margin: 0 0 14px;
+  line-height: 1.22;
+  margin: 0 0 8px;
 }
 
 .formula-reassurance {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 18px;
-  justify-content: center;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.formula-reassurance li {
-  align-items: center;
   color: var(--mileyo-text);
-  display: inline-flex;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
   font-weight: 600;
-  gap: 6px;
+  margin: 0;
 }
 
-.formula-reassurance-icon {
-  align-items: center;
-  color: var(--mileyo-green);
-  display: inline-flex;
-  font-size: 0.95rem;
-  justify-content: center;
+.formula-reassurance span {
+  color: var(--mileyo-muted);
+  margin: 0 8px;
 }
 
 .formula-lead,
@@ -232,7 +265,8 @@ body {
   display: grid;
   gap: 4px;
   grid-template-columns: 1fr 1fr;
-  margin-bottom: 22px;
+  margin: 0 auto 14px;
+  max-width: 520px;
   padding: 4px;
 }
 
@@ -251,9 +285,9 @@ body {
 .toggle {
   background: transparent;
   color: var(--mileyo-muted);
-  font-size: 0.82rem;
-  line-height: 1.25;
-  padding: 12px 10px;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  padding: 10px 8px;
 }
 
 .toggle.active {
@@ -274,19 +308,17 @@ body {
 .box-rail {
   align-items: center;
   display: grid;
-  gap: 8px;
+  gap: 10px;
   grid-template-columns: 1fr;
-  margin-bottom: 8px;
-  position: relative;
+  margin-bottom: 6px;
 }
 
 .box-rail-viewport {
   -ms-overflow-style: none;
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
+  overflow: visible;
   scroll-behavior: smooth;
-  scroll-padding-inline: 16px;
-  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 0;
+  scroll-snap-type: none;
   scrollbar-width: none;
   width: 100%;
 }
@@ -296,43 +328,61 @@ body {
 }
 
 #box-grid.box-rail-track {
-  display: flex;
+  display: grid;
   gap: var(--box-rail-gap);
-  grid-template-columns: unset;
-  padding: 4px 16px 8px;
-  width: max-content;
+  grid-template-columns: 1fr;
+  padding: 2px 0 4px;
+  width: 100%;
 }
 
-#box-grid .product-card {
-  flex: 0 0 var(--box-rail-card-width-mobile);
-  max-width: 320px;
-  scroll-snap-align: center;
-  scroll-snap-stop: always;
+#box-grid .formula-card {
+  gap: 6px;
+  max-width: none;
+  min-height: 0;
+  padding: 14px 16px;
+  scroll-snap-align: none;
+  scroll-snap-stop: normal;
+}
+
+.card-badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.recommended-badge {
+  background: rgba(230, 192, 138, 0.28);
+  border-radius: 999px;
+  color: var(--mileyo-purple-black);
+  display: inline-flex;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 9px;
 }
 
 .box-rail-nav {
   align-items: center;
   appearance: none;
   background: var(--mileyo-white);
-  border: 1px solid rgba(185, 138, 215, 0.28);
+  border: 1px solid rgba(185, 138, 215, 0.22);
   border-radius: 999px;
   box-shadow: var(--mileyo-shadow-soft);
   color: var(--mileyo-purple-black);
   cursor: pointer;
   display: none;
-  font-size: 1.35rem;
-  height: 42px;
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  height: 36px;
   justify-content: center;
   line-height: 1;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 42px;
+  width: 36px;
   z-index: 2;
 }
 
-.box-rail-nav-prev { left: 0; }
-.box-rail-nav-next { right: 0; }
+.box-rail-nav-prev { left: auto; }
+.box-rail-nav-next { right: auto; }
 
 .box-rail-nav:disabled {
   cursor: not-allowed;
@@ -389,11 +439,19 @@ body {
   border-radius: 999px;
   color: var(--mileyo-white);
   display: inline-flex;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   font-weight: 700;
   justify-self: start;
   letter-spacing: 0.02em;
-  padding: 5px 12px;
+  padding: 3px 10px;
+}
+
+#box-grid .formula-card .box-meal-count {
+  color: var(--mileyo-purple-black);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
 .box-meal-count {
@@ -402,6 +460,13 @@ body {
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
+}
+
+#box-grid .formula-card .box-tagline {
+  color: var(--mileyo-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.25;
 }
 
 .box-tagline {
@@ -426,6 +491,27 @@ body {
 .box-price-total {
   color: var(--mileyo-muted);
   font-size: 0.9rem;
+}
+
+#box-grid .formula-card .box-price-per-meal {
+  font-size: 1.02rem;
+}
+
+#box-grid .formula-card .box-promo-price {
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+#box-grid .formula-card .box-promo-price strong {
+  font-size: 0.9rem;
+}
+
+#box-grid .formula-card .box-weekly-price {
+  font-size: 0.8rem;
+}
+
+#box-grid .formula-card .box-price-total {
+  font-size: 0.82rem;
 }
 
 .box-promo-price {
@@ -465,6 +551,10 @@ body {
   font-weight: 600;
 }
 
+#box-grid .formula-card .box-benefits li {
+  font-size: 0.78rem;
+}
+
 .box-benefits {
   display: grid;
   gap: 4px;
@@ -488,7 +578,7 @@ body {
   position: absolute;
 }
 
-.product-card img {
+#meal-grid .product-card img {
   aspect-ratio: 16 / 10;
   border-radius: 14px;
   object-fit: cover;
@@ -504,8 +594,12 @@ body {
 }
 
 .portal-link {
-  margin: 20px 0 0;
+  margin: 8px 0 0;
   text-align: center;
+}
+
+.tunnel-footer .portal-link {
+  margin-top: 8px;
 }
 
 .portal-link a {
@@ -523,33 +617,44 @@ body {
 .hidden { display: none !important; }
 
 .tunnel-footer {
-  background: linear-gradient(180deg, rgba(252, 248, 246, 0) 0%, var(--mileyo-cream) 28%);
+  background: linear-gradient(180deg, rgba(252, 248, 246, 0) 0%, var(--mileyo-cream) 22%);
   bottom: 0;
   left: 0;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  margin: 0 auto;
+  max-width: 1180px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
   position: fixed;
   right: 0;
   z-index: 30;
 }
 
+.tunnel-footer-inner {
+  margin: 0 auto;
+  max-width: 520px;
+  width: 100%;
+}
+
 .tunnel-cta {
-  background: var(--mileyo-purple);
-  box-shadow: 0 4px 20px rgba(185, 138, 215, 0.4);
+  background: var(--mileyo-purple-black);
+  box-shadow: 0 4px 18px rgba(90, 27, 105, 0.28);
   color: var(--mileyo-white);
-  font-size: 1rem;
-  padding: 16px 20px;
+  font-size: 0.98rem;
+  letter-spacing: 0.01em;
+  padding: 14px 20px;
   width: 100%;
 }
 
 .tunnel-cta:not(:disabled):hover {
-  background: var(--mileyo-purple-dark);
+  background: var(--mileyo-purple-dark-black);
 }
 
 .tunnel-cta:disabled {
-  background: var(--mileyo-lilac);
+  background: #e6d9ef;
+  border: 1px solid rgba(90, 27, 105, 0.14);
   box-shadow: none;
-  color: rgba(255, 255, 255, 0.85);
+  color: #6f5a7d;
   cursor: not-allowed;
+  font-weight: 600;
   opacity: 1;
 }
 
@@ -647,32 +752,57 @@ button:disabled {
   .builder-shell {
     padding-left: 32px;
     padding-right: 32px;
+    padding-top: 12px;
+  }
+
+  .tunnel-body:not(.is-step-meals) .builder-shell {
+    padding-top: 10px;
+  }
+
+  .formula-intro {
+    margin-bottom: 8px;
+  }
+
+  .formula-intro h1 {
+    font-size: 1.48rem;
+    margin-bottom: 6px;
+  }
+
+  .formula-benefits {
+    margin-bottom: 10px;
+  }
+
+  .toggle-row {
+    margin-bottom: 10px;
   }
 
   .box-rail {
+    align-items: stretch;
     gap: 0;
-    grid-template-columns: auto 1fr auto;
-    padding: 0 8px;
+    grid-template-columns: 1fr;
+    margin-bottom: 0;
   }
 
   .box-rail-nav {
-    display: inline-flex;
-    position: static;
-    transform: none;
+    display: none;
   }
 
   .box-rail-viewport {
-    scroll-padding-inline: 0;
+    overflow: visible;
+    scroll-snap-type: none;
   }
 
   #box-grid.box-rail-track {
-    padding-inline: 0;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 2px 0 4px;
+    width: 100%;
   }
 
-  #box-grid .product-card {
-    flex-basis: var(--box-rail-card-width-desktop);
-    max-width: none;
-    scroll-snap-align: start;
+  #box-grid .formula-card {
+    flex: unset;
+    scroll-snap-align: unset;
   }
 
   #meal-grid.card-grid {

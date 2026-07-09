@@ -18,9 +18,9 @@ export const renderMessage = (message: string, shop?: string) =>
   <style>${builderStyles}</style>
 </head>
 <body class="tunnel-body">
-  <div class="tunnel-promo" role="note">
-    <p class="tunnel-promo-title">🎁 20 € offerts sur votre première commande</p>
-    <p class="tunnel-promo-subtitle">Appliqués automatiquement au paiement</p>
+  <div class="tunnel-promo" id="tunnel-promo" role="note">
+    <p class="tunnel-promo-title">🎁 20 € offerts sur votre 1ʳᵉ box d'abonnement</p>
+    <p class="tunnel-promo-subtitle">Appliqué automatiquement au paiement</p>
   </div>
   <header class="tunnel-header">
     <a class="tunnel-back" href="/">← Retour</a>
@@ -53,9 +53,9 @@ export const renderBuilder = ({
   <style>${builderStyles}</style>
 </head>
 <body class="tunnel-body">
-  <div class="tunnel-promo" role="note">
-    <p class="tunnel-promo-title">🎁 20 € offerts sur votre première commande</p>
-    <p class="tunnel-promo-subtitle">Appliqués automatiquement au paiement</p>
+  <div class="tunnel-promo" id="tunnel-promo" role="note">
+    <p class="tunnel-promo-title">🎁 20 € offerts sur votre 1ʳᵉ box d'abonnement</p>
+    <p class="tunnel-promo-subtitle">Appliqué automatiquement au paiement</p>
   </div>
   <header class="tunnel-header">
     <button class="tunnel-back" id="tunnel-back" type="button">← Retour</button>
@@ -74,19 +74,24 @@ export const renderBuilder = ({
 
     <section id="step-formula">
       <div class="formula-intro">
-        <h1>Combien de repas souhaitez-vous recevoir chaque semaine ?</h1>
-        <ul aria-label="Avantages Mileyo" class="formula-reassurance">
-          <li><span aria-hidden="true" class="formula-reassurance-icon">✓</span> Sans engagement</li>
-          <li><span aria-hidden="true" class="formula-reassurance-icon">🚚</span> Livraison offerte</li>
-        </ul>
+        <h1>Choisissez votre formule</h1>
+        <p class="formula-lead">Des repas halal, cuisinés et livrés chez vous. Modifiable chaque semaine.</p>
       </div>
 
+      <ul class="formula-benefits" aria-label="Avantages Mileyo">
+        <li>Repas halal</li>
+        <li>Sans engagement</li>
+        <li>Modifiable chaque semaine</li>
+        <li>Livraison offerte</li>
+      </ul>
+
       <section class="toggle-row" aria-label="Type de commande">
-        <button class="toggle active" id="one-time-toggle" type="button">Commande unique</button>
-        <button class="toggle" id="subscription-toggle" type="button">Abonnement hebdomadaire</button>
+        <button class="toggle active" id="subscription-toggle" type="button">Abonnement hebdomadaire</button>
+        <button class="toggle" id="one-time-toggle" type="button">Commande unique</button>
       </section>
 
-      <p class="visually-hidden" id="box-helper">Sélectionnez une box pour commencer.</p>
+      <p class="formula-hint">Vous choisissez vos plats à l'étape suivante.</p>
+      <p class="visually-hidden" id="box-helper">12 repas à sélectionner</p>
       <div class="box-rail">
         <button aria-label="Formule précédente" class="box-rail-nav box-rail-nav-prev" id="box-rail-prev" type="button">‹</button>
         <div class="box-rail-viewport" id="box-rail-viewport">
@@ -94,10 +99,6 @@ export const renderBuilder = ({
         </div>
         <button aria-label="Formule suivante" class="box-rail-nav box-rail-nav-next" id="box-rail-next" type="button">›</button>
       </div>
-
-      <p class="portal-link">
-        <a href="/apps/box-builder/portal">Déjà abonné(e) ? Gérer mon abonnement</a>
-      </p>
     </section>
 
     <section class="hidden" id="step-meals">
@@ -120,7 +121,10 @@ export const renderBuilder = ({
   </main>
 
   <footer class="tunnel-footer" id="formula-footer">
-    <button class="tunnel-cta" disabled id="formula-continue" type="button">Choisissez votre formule</button>
+    <button class="tunnel-cta" id="formula-continue" type="button">Continuer avec 12 repas →</button>
+    <p class="portal-link">
+      <a href="/apps/box-builder/portal">Déjà abonné(e) ? Gérer mon abonnement</a>
+    </p>
   </footer>
 
   <script>window.__MILEYO_BOX_BUILDER__ = ${scriptJson({ boxes, meals })};</script>
