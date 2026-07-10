@@ -47,6 +47,14 @@ export type BuilderProduct = {
   variantTitle: string;
 };
 
+export type BuilderDeliveryConfig = {
+  availableDates: string[];
+  defaultDate: string;
+  maxOffsetDays: number;
+  minOffsetDays: number;
+  timezone: string;
+};
+
 export type BuilderMeal = {
   allergenes: string[];
   badges: string[];

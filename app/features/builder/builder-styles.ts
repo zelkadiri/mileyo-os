@@ -19,6 +19,7 @@ export const builderStyles = `
   --meals-gauge-footer-height: 164px;
   --meals-toolbar-sticky-top: 72px;
   --formula-step-max-width: 1120px;
+  --delivery-step-max-width: 720px;
   --meals-step-max-width: 1440px;
   --meals-step-gutter: 16px;
   --box-rail-gap: 12px;
@@ -111,7 +112,11 @@ body {
   display: none;
 }
 
-.tunnel-back:not(.is-meals-step) .tunnel-back-text--formula {
+.tunnel-back:not(.is-delivery-step):not(.is-meals-step) .tunnel-back-text--formula {
+  display: inline;
+}
+
+.tunnel-back.is-delivery-step .tunnel-back-text--delivery {
   display: inline;
 }
 
@@ -169,10 +174,14 @@ body {
   border-radius: inherit;
   height: 100%;
   transition: width 0.28s ease;
-  width: 50%;
+  width: 33.333%;
 }
 
 .tunnel-progress-fill.is-step-2 {
+  width: 66.666%;
+}
+
+.tunnel-progress-fill.is-step-3 {
   width: 100%;
 }
 
@@ -188,18 +197,32 @@ body {
   width: 100%;
 }
 
+.builder-step--delivery {
+  margin: 0 auto;
+  max-width: var(--delivery-step-max-width);
+  width: 100%;
+}
+
 .builder-step--meals {
   margin: 0 auto;
   max-width: none;
   width: 100%;
 }
 
-.tunnel-body:not(.is-step-meals) .builder-shell {
+.tunnel-body:not(.is-step-meals):not(.is-step-livraison) .builder-shell {
   max-width: calc(var(--formula-step-max-width) + 80px);
   padding-bottom: calc(var(--tunnel-footer-height) + 16px);
 }
 
+.tunnel-body.is-step-livraison .builder-shell {
+  max-width: calc(var(--delivery-step-max-width) + 80px);
+  padding-bottom: calc(var(--tunnel-footer-height) + 16px);
+}
+
 .tunnel-body.is-step-meals #formula-footer,
+.tunnel-body.is-step-meals #delivery-footer,
+.tunnel-body.is-step-livraison #formula-footer,
+.tunnel-body.is-step-livraison #meals-gauge-footer,
 .tunnel-footer.hidden {
   display: none;
 }
@@ -386,7 +409,76 @@ body {
   margin-top: 12px;
 }
 
+.delivery-decision {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(252, 248, 246, 0.96));
+  border: 1px solid rgba(185, 138, 215, 0.14);
+  border-radius: 24px;
+  box-shadow: var(--mileyo-shadow-soft);
+  margin: 0 auto;
+  max-width: var(--delivery-step-max-width);
+  padding: 28px 22px 24px;
+}
+
+.delivery-intro {
+  margin-bottom: 22px;
+  text-align: center;
+}
+
+.delivery-intro h1 {
+  margin-bottom: 10px;
+}
+
+.delivery-lead {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 34rem;
+}
+
+.delivery-date-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 auto;
+  max-width: 520px;
+}
+
+.delivery-date-chip {
+  appearance: none;
+  background: var(--mileyo-white);
+  border: 2px solid rgba(185, 138, 215, 0.22);
+  border-radius: 16px;
+  color: var(--mileyo-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.35;
+  min-height: 56px;
+  padding: 12px 14px;
+  text-align: center;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.delivery-date-chip:hover,
+.delivery-date-chip:focus-visible {
+  border-color: rgba(185, 138, 215, 0.55);
+  box-shadow: 0 4px 16px rgba(90, 27, 105, 0.08);
+  outline: none;
+}
+
+.delivery-date-chip.selected {
+  background: rgba(220, 194, 240, 0.28);
+  border-color: var(--mileyo-purple);
+  box-shadow: 0 4px 18px rgba(185, 138, 215, 0.18);
+}
+
+.delivery-footer .tunnel-cta {
+  width: 100%;
+}
+
 .formula-intro h1,
+.delivery-intro h1,
 .meals-intro h1,
 .setup-card h1 {
   color: var(--mileyo-purple-black);
@@ -410,6 +502,7 @@ body {
 }
 
 .formula-lead,
+.delivery-lead,
 .meals-lead,
 .setup-card p {
   color: var(--mileyo-muted);
@@ -1489,6 +1582,16 @@ button:disabled {
     padding-right: 24px;
   }
 
+  .delivery-date-grid {
+    gap: 14px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: 640px;
+  }
+
+  .delivery-decision {
+    padding: 32px 28px 28px;
+  }
+
   #meal-grid.meal-grid {
     gap: 16px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1568,12 +1671,26 @@ button:disabled {
     padding-top: 24px;
   }
 
-  .tunnel-body:not(.is-step-meals) .builder-shell {
+  .tunnel-body:not(.is-step-meals):not(.is-step-livraison) .builder-shell {
     max-width: calc(var(--formula-step-max-width) + 96px);
     padding-bottom: calc(var(--tunnel-footer-height) + 28px);
     padding-left: 48px;
     padding-right: 48px;
     padding-top: 20px;
+  }
+
+  .tunnel-body.is-step-livraison .builder-shell {
+    max-width: calc(var(--delivery-step-max-width) + 96px);
+    padding-bottom: calc(var(--tunnel-footer-height) + 28px);
+    padding-left: 48px;
+    padding-right: 48px;
+    padding-top: 20px;
+  }
+
+  .delivery-date-grid {
+    gap: 16px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    max-width: 720px;
   }
 
   .tunnel-body.is-step-meals .builder-shell {

@@ -1,7 +1,7 @@
 import { builderClientScript } from "./builder-client";
 import { escapeHtml, scriptJson } from "./builder-formatters";
 import { builderStyles } from "./builder-styles";
-import type { BuilderMeal, BuilderProduct } from "./builder-types";
+import type { BuilderDeliveryConfig, BuilderMeal, BuilderProduct } from "./builder-types";
 
 const htmlResponse = (html: string) =>
   new Response(html, {
@@ -39,9 +39,11 @@ export const renderMessage = (message: string, shop?: string) =>
 
 export const renderBuilder = ({
   boxes,
+  deliveryConfig,
   meals,
 }: {
   boxes: BuilderProduct[];
+  deliveryConfig: BuilderDeliveryConfig;
   meals: BuilderMeal[];
 }) =>
   htmlResponse(`<!doctype html>
@@ -60,13 +62,14 @@ export const renderBuilder = ({
   <header class="tunnel-header">
     <button class="tunnel-back" id="tunnel-back" type="button">
       <span class="tunnel-back-text tunnel-back-text--formula">← Retour</span>
-      <span class="tunnel-back-text tunnel-back-text--meals-long">← Modifier ma formule</span>
-      <span class="tunnel-back-text tunnel-back-text--meals-short">← Formule</span>
+      <span class="tunnel-back-text tunnel-back-text--delivery">← Formule</span>
+      <span class="tunnel-back-text tunnel-back-text--meals-long">← Livraison</span>
+      <span class="tunnel-back-text tunnel-back-text--meals-short">← Livraison</span>
     </button>
     <!-- Wordmark temporaire : aucun asset logo Mileyo trouvé dans le projet -->
     <p class="tunnel-wordmark" aria-label="Mileyo">Mileyo</p>
     <div class="tunnel-progress-block">
-      <p class="tunnel-step-label" id="tunnel-step-label">Étape 1 sur 2</p>
+      <p class="tunnel-step-label" id="tunnel-step-label">Étape 1 sur 3</p>
       <div aria-hidden="true" class="tunnel-progress">
         <div class="tunnel-progress-fill" id="tunnel-progress-fill"></div>
       </div>
@@ -95,7 +98,7 @@ export const renderBuilder = ({
           <button class="toggle" id="one-time-toggle" type="button">Commande unique</button>
         </section>
 
-        <p class="formula-hint">Vous choisissez vos plats à l'étape suivante.</p>
+        <p class="formula-hint">Vous choisissez votre date de livraison à l'étape suivante.</p>
         <p class="visually-hidden" id="box-helper">12 repas à sélectionner</p>
         <div class="box-rail">
           <button aria-label="Formule précédente" class="box-rail-nav box-rail-nav-prev" id="box-rail-prev" type="button">‹</button>
@@ -150,6 +153,16 @@ export const renderBuilder = ({
       </div>
     </section>
 
+    <section class="builder-step builder-step--delivery hidden" id="step-delivery">
+      <div class="delivery-decision">
+        <div class="delivery-intro">
+          <h1>Choisissez votre première livraison</h1>
+          <p class="delivery-lead">Votre abonnement démarre aujourd'hui. Votre première box sera livrée à la date choisie.</p>
+        </div>
+        <div class="delivery-date-grid" id="delivery-date-grid" role="group" aria-label="Dates de livraison disponibles"></div>
+      </div>
+    </section>
+
     <section class="builder-step builder-step--meals hidden" id="step-meals">
       <div class="meals-toolbar-sticky" id="meals-toolbar-sticky">
         <div class="meals-intro">
@@ -198,6 +211,10 @@ export const renderBuilder = ({
     <button class="tunnel-cta" id="formula-continue" type="button">Continuer avec 12 repas →</button>
   </footer>
 
+  <footer class="tunnel-footer delivery-footer hidden" id="delivery-footer">
+    <button class="tunnel-cta" id="delivery-continue" type="button">Continuer vers mes repas →</button>
+  </footer>
+
   <footer class="tunnel-footer meals-gauge-footer hidden" id="meals-gauge-footer">
     <div class="meals-gauge">
       <p class="meals-gauge-count" id="meals-gauge-count">0 / 12 plats</p>
@@ -208,7 +225,7 @@ export const renderBuilder = ({
     </div>
   </footer>
 
-  <script>window.__MILEYO_BOX_BUILDER__ = ${scriptJson({ boxes, meals })};</script>
+  <script>window.__MILEYO_BOX_BUILDER__ = ${scriptJson({ boxes, deliveryConfig, meals })};</script>
   <script>${builderClientScript}</script>
 </body>
 </html>`);

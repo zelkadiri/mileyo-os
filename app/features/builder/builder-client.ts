@@ -7,6 +7,7 @@ export const builderClientScript = `
   var selectedBox = null;
   var requiredMeals = 0;
   var selectedMeals = {};
+  var selectedDeliveryDate = null;
   var currentStep = "formule";
   var mealsRendered = false;
   var FIRST_WEEK_DISCOUNT_EUR = 20;
@@ -19,6 +20,7 @@ export const builderClientScript = `
   var mealGrid = document.getElementById("meal-grid");
   var mealsSection = document.getElementById("meals-section");
   var stepFormula = document.getElementById("step-formula");
+  var stepDelivery = document.getElementById("step-delivery");
   var stepMeals = document.getElementById("step-meals");
   var selectedCount = document.getElementById("selected-count");
   var addToCart = document.getElementById("add-to-cart");
@@ -31,6 +33,9 @@ export const builderClientScript = `
   var tunnelProgressFill = document.getElementById("tunnel-progress-fill");
   var formulaContinue = document.getElementById("formula-continue");
   var formulaFooter = document.getElementById("formula-footer");
+  var deliveryContinue = document.getElementById("delivery-continue");
+  var deliveryFooter = document.getElementById("delivery-footer");
+  var deliveryDateGrid = document.getElementById("delivery-date-grid");
   var mealsLead = document.getElementById("meals-lead");
   var tunnelPromo = document.getElementById("tunnel-promo");
   var allergenFilters = document.getElementById("allergen-filters");
@@ -49,6 +54,82 @@ export const builderClientScript = `
   var selectedBadgeFilters = [];
 
   ${mealFilterRuntimeScript}
+
+  function formatDeliveryDateLabelShort(dateStr) {
+    var parts = dateStr.split("-");
+    var year = Number(parts[0]);
+    var month = Number(parts[1]);
+    var day = Number(parts[2]);
+    var utcNoon = new Date(Date.UTC(year, month - 1, day, 12));
+    var weekday = new Intl.DateTimeFormat("fr-FR", {
+      timeZone: "UTC",
+      weekday: "short"
+    }).format(utcNoon);
+    var rest = new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      timeZone: "UTC"
+    }).format(utcNoon);
+
+    return weekday.charAt(0).toUpperCase() + weekday.slice(1).replace(/\\.$/, ".") + " " + rest;
+  }
+
+  function formatDeliveryDateLabelLong(dateStr) {
+    var parts = dateStr.split("-");
+    var year = Number(parts[0]);
+    var month = Number(parts[1]);
+    var day = Number(parts[2]);
+    var utcNoon = new Date(Date.UTC(year, month - 1, day, 12));
+
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      timeZone: "UTC",
+      weekday: "long",
+      year: "numeric"
+    }).format(utcNoon);
+  }
+
+  function ensureSelectedDeliveryDate() {
+    var config = data.deliveryConfig;
+    if (!config) return;
+    var available = config.availableDates || [];
+    if (selectedDeliveryDate && available.indexOf(selectedDeliveryDate) !== -1) {
+      return;
+    }
+    selectedDeliveryDate = config.defaultDate || available[0] || null;
+  }
+
+  function renderDeliveryDates() {
+    if (!deliveryDateGrid || !data.deliveryConfig) return;
+    deliveryDateGrid.innerHTML = "";
+    data.deliveryConfig.availableDates.forEach(function (dateStr) {
+      var chip = document.createElement("button");
+      var isSelected = selectedDeliveryDate === dateStr;
+      chip.className = "delivery-date-chip" + (isSelected ? " selected" : "");
+      chip.type = "button";
+      chip.textContent = formatDeliveryDateLabelShort(dateStr);
+      chip.setAttribute("aria-pressed", isSelected ? "true" : "false");
+      chip.addEventListener("click", function () {
+        selectedDeliveryDate = dateStr;
+        renderDeliveryDates();
+        updateDeliveryCta();
+        setError("");
+      });
+      deliveryDateGrid.appendChild(chip);
+    });
+  }
+
+  function updateDeliveryCta() {
+    if (!deliveryContinue) return;
+    if (!selectedDeliveryDate) {
+      deliveryContinue.disabled = true;
+      deliveryContinue.textContent = "Choisissez une date de livraison";
+      return;
+    }
+    deliveryContinue.disabled = false;
+    deliveryContinue.textContent = "Continuer vers mes repas →";
+  }
 
   function formatEuros(price) {
     if (!price) return "";
@@ -120,8 +201,8 @@ export const builderClientScript = `
 
   function updatePromoBanner() {
     if (!tunnelPromo) return;
-    var hideOnMeals = currentStep === "repas";
-    tunnelPromo.classList.toggle("hidden", hideOnMeals || orderType === "one-time");
+    var hideOnTunnelSteps = currentStep === "repas" || currentStep === "livraison";
+    tunnelPromo.classList.toggle("hidden", hideOnTunnelSteps || orderType === "one-time");
   }
 
   function getVisibleMeals() {
@@ -254,27 +335,39 @@ export const builderClientScript = `
 
   function updateTunnelChrome(step) {
     var isFormula = step === "formule";
+    var isDelivery = step === "livraison";
+    var isMeals = step === "repas";
     currentStep = step;
-    document.body.classList.toggle("is-step-meals", !isFormula);
+    document.body.classList.toggle("is-step-meals", isMeals);
+    document.body.classList.toggle("is-step-livraison", isDelivery);
 
     if (tunnelStepLabel) {
-      tunnelStepLabel.textContent = isFormula ? "Étape 1 sur 2" : "Étape 2 sur 2";
+      if (isFormula) {
+        tunnelStepLabel.textContent = "Étape 1 sur 3";
+      } else if (isDelivery) {
+        tunnelStepLabel.textContent = "Étape 2 sur 3";
+      } else {
+        tunnelStepLabel.textContent = "Étape 3 sur 3";
+      }
     }
     if (tunnelProgressFill) {
-      tunnelProgressFill.classList.toggle("is-step-2", !isFormula);
+      tunnelProgressFill.classList.toggle("is-step-2", isDelivery);
+      tunnelProgressFill.classList.toggle("is-step-3", isMeals);
     }
     if (tunnelBack) {
-      tunnelBack.classList.toggle("is-meals-step", !isFormula);
+      tunnelBack.classList.toggle("is-delivery-step", isDelivery);
+      tunnelBack.classList.toggle("is-meals-step", isMeals);
     }
     if (formulaFooter) {
       formulaFooter.classList.toggle("hidden", !isFormula);
     }
+    if (deliveryFooter) {
+      deliveryFooter.classList.toggle("hidden", !isDelivery);
+    }
     if (mealsGaugeFooter) {
-      mealsGaugeFooter.classList.toggle("hidden", isFormula);
+      mealsGaugeFooter.classList.toggle("hidden", !isMeals);
     }
-    if (tunnelPromo) {
-      tunnelPromo.classList.toggle("hidden", !isFormula || orderType === "one-time");
-    }
+    updatePromoBanner();
     if (mealsLead && selectedBox && requiredMeals) {
       mealsLead.textContent = "Pour votre box de " + requiredMeals + " repas";
     }
@@ -290,12 +383,20 @@ export const builderClientScript = `
     if (step === "repas" && !selectedBox) {
       step = "formule";
     }
+    if (step === "repas" && !selectedDeliveryDate) {
+      step = "livraison";
+    }
+    if (step === "livraison" && !selectedBox) {
+      step = "formule";
+    }
 
     updateTunnelChrome(step);
 
+    stepFormula.classList.toggle("hidden", step !== "formule");
+    stepDelivery.classList.toggle("hidden", step !== "livraison");
+    stepMeals.classList.toggle("hidden", step !== "repas");
+
     if (step === "formule") {
-      stepFormula.classList.remove("hidden");
-      stepMeals.classList.add("hidden");
       window.requestAnimationFrame(function () {
         if (selectedBox) {
           var selectedCard = boxGrid.querySelector(".product-card.selected");
@@ -303,9 +404,11 @@ export const builderClientScript = `
         }
         updateBoxRailNav();
       });
+    } else if (step === "livraison") {
+      ensureSelectedDeliveryDate();
+      renderDeliveryDates();
+      updateDeliveryCta();
     } else {
-      stepFormula.classList.add("hidden");
-      stepMeals.classList.remove("hidden");
       renderMealFilters();
       if (!mealsRendered) {
         renderMeals();
@@ -320,17 +423,23 @@ export const builderClientScript = `
     }
   }
 
-  function goToFormulaFromMeals() {
-    if (location.hash === "#repas") {
+  function goToPreviousStep() {
+    if (location.hash === "#" + currentStep) {
       history.back();
       return;
     }
-    showStep("formule", { pushHistory: false });
+    if (currentStep === "repas") {
+      showStep("livraison", { pushHistory: false });
+      return;
+    }
+    if (currentStep === "livraison") {
+      showStep("formule", { pushHistory: false });
+    }
   }
 
   function handleTunnelBack() {
-    if (currentStep === "repas") {
-      goToFormulaFromMeals();
+    if (currentStep === "repas" || currentStep === "livraison") {
+      goToPreviousStep();
       return;
     }
     window.location.href = "/";
@@ -338,8 +447,12 @@ export const builderClientScript = `
 
   function handleHistoryNavigation() {
     var hash = (location.hash || "#formule").replace("#", "");
-    if (hash === "repas" && selectedBox) {
+    if (hash === "repas" && selectedBox && selectedDeliveryDate) {
       showStep("repas", { pushHistory: false });
+      return;
+    }
+    if (hash === "livraison" && selectedBox) {
+      showStep("livraison", { pushHistory: false });
       return;
     }
     showStep("formule", { pushHistory: false });
@@ -379,6 +492,7 @@ export const builderClientScript = `
     button.classList.add("selected");
 
     updateFormulaCta();
+    ensureSelectedDeliveryDate();
     updateSummary();
     scrollBoxIntoView(button);
     window.requestAnimationFrame(updateBoxRailNav);
@@ -693,6 +807,12 @@ export const builderClientScript = `
   addToCart.addEventListener("click", function () {
     if (!selectedBox || selectedTotal() !== requiredMeals) return;
 
+    if (!selectedDeliveryDate) {
+      setError("Choisissez une date de livraison avant d'ajouter votre box au panier.");
+      showStep("livraison");
+      return;
+    }
+
     var variantId = getVariantCartId(selectedBox.variantId);
     if (!variantId) {
       setError("Cette box n’a pas de variante disponible.");
@@ -701,7 +821,13 @@ export const builderClientScript = `
 
     var properties = {
       "Type de commande": orderType === "subscription" ? "Abonnement hebdomadaire" : "Commande unique",
-      "Nombre de repas": String(requiredMeals)
+      "Nombre de repas": String(requiredMeals),
+      "_mileyo_delivery_date": selectedDeliveryDate,
+      "Date de livraison souhaitée":
+        formatDeliveryDateLabelLong(selectedDeliveryDate) +
+        " (" +
+        selectedDeliveryDate +
+        ")"
     };
     var propertyIndex = 1;
     data.meals.forEach(function (meal) {
@@ -759,8 +885,19 @@ export const builderClientScript = `
 
   formulaContinue.addEventListener("click", function () {
     if (!selectedBox || !requiredMeals) return;
-    showStep("repas");
+    showStep("livraison");
   });
+
+  if (deliveryContinue) {
+    deliveryContinue.addEventListener("click", function () {
+      if (!selectedDeliveryDate) {
+        setError("Choisissez une date de livraison pour continuer.");
+        updateDeliveryCta();
+        return;
+      }
+      showStep("repas");
+    });
+  }
 
   if (mealFiltersReset) {
     mealFiltersReset.addEventListener("click", resetMealFilters);
@@ -792,13 +929,19 @@ export const builderClientScript = `
   window.addEventListener("hashchange", handleHistoryNavigation);
 
   initializeDefaultSelection();
+  if (data.deliveryConfig && data.deliveryConfig.defaultDate) {
+    selectedDeliveryDate = data.deliveryConfig.defaultDate;
+  }
   updatePromoBanner();
   renderBoxes();
   updateFormulaCta();
+  updateDeliveryCta();
   updateSummary();
 
-  if (location.hash === "#repas" && selectedBox) {
+  if (location.hash === "#repas" && selectedBox && selectedDeliveryDate) {
     showStep("repas", { replaceHistory: true });
+  } else if (location.hash === "#livraison" && selectedBox) {
+    showStep("livraison", { replaceHistory: true });
   } else {
     showStep("formule", { replaceHistory: true });
   }
