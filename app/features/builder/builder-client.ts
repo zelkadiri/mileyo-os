@@ -1,3 +1,5 @@
+import { mealFilterRuntimeScript } from "./builder-filter-runtime";
+
 export const builderClientScript = `
 (function () {
   var data = window.__MILEYO_BOX_BUILDER__;
@@ -31,6 +33,22 @@ export const builderClientScript = `
   var formulaFooter = document.getElementById("formula-footer");
   var mealsLead = document.getElementById("meals-lead");
   var tunnelPromo = document.getElementById("tunnel-promo");
+  var allergenFilters = document.getElementById("allergen-filters");
+  var badgeFilters = document.getElementById("badge-filters");
+  var mealFiltersReset = document.getElementById("meal-filters-reset");
+  var mealsEmpty = document.getElementById("meals-empty");
+  var mealsEmptyReset = document.getElementById("meals-empty-reset");
+  var mealsGaugeFooter = document.getElementById("meals-gauge-footer");
+  var mealsGaugeCount = document.getElementById("meals-gauge-count");
+  var mealsGaugeFill = document.getElementById("meals-gauge-fill");
+  var mealsProgressBox = document.getElementById("meals-progress-box");
+  var mealsProgressCount = document.getElementById("meals-progress-count");
+  var mealsProgressFill = document.getElementById("meals-progress-fill");
+  var mealsProgressStrip = document.getElementById("meals-progress-strip");
+  var selectedAllergenFilters = [];
+  var selectedBadgeFilters = [];
+
+  ${mealFilterRuntimeScript}
 
   function formatEuros(price) {
     if (!price) return "";
@@ -102,7 +120,78 @@ export const builderClientScript = `
 
   function updatePromoBanner() {
     if (!tunnelPromo) return;
-    tunnelPromo.classList.toggle("hidden", orderType === "one-time");
+    var hideOnMeals = currentStep === "repas";
+    tunnelPromo.classList.toggle("hidden", hideOnMeals || orderType === "one-time");
+  }
+
+  function getVisibleMeals() {
+    return data.meals.filter(mealMatchesFilter);
+  }
+
+  function hasActiveMealFilters() {
+    return selectedAllergenFilters.length > 0 || selectedBadgeFilters.length > 0;
+  }
+
+  function resetMealFilters() {
+    selectedAllergenFilters = [];
+    selectedBadgeFilters = [];
+    renderMealFilters();
+    renderMeals();
+  }
+
+  function toggleAllergenFilter(filterId) {
+    var index = selectedAllergenFilters.indexOf(filterId);
+    if (index === -1) selectedAllergenFilters.push(filterId);
+    else selectedAllergenFilters.splice(index, 1);
+    renderMealFilters();
+    renderMeals();
+  }
+
+  function toggleBadgeFilter(filterId) {
+    var index = selectedBadgeFilters.indexOf(filterId);
+    if (index === -1) selectedBadgeFilters.push(filterId);
+    else selectedBadgeFilters.splice(index, 1);
+    renderMealFilters();
+    renderMeals();
+  }
+
+  function renderMealFilters() {
+    if (!allergenFilters || !badgeFilters) return;
+
+    allergenFilters.innerHTML = "";
+    ALLERGEN_FILTER_OPTIONS.forEach(function (filter) {
+      var chip = document.createElement("button");
+      var isActive = selectedAllergenFilters.indexOf(filter.id) !== -1;
+      chip.className = "filter-chip filter-chip--allergen" + (isActive ? " active" : "");
+      chip.type = "button";
+      chip.textContent = filter.label;
+      chip.setAttribute("aria-pressed", isActive ? "true" : "false");
+      chip.addEventListener("click", function () {
+        toggleAllergenFilter(filter.id);
+      });
+      allergenFilters.appendChild(chip);
+    });
+
+    badgeFilters.innerHTML = "";
+    BADGE_FILTER_OPTIONS.forEach(function (filter) {
+      var chip = document.createElement("button");
+      var isActive = selectedBadgeFilters.indexOf(filter.id) !== -1;
+      chip.className =
+        "filter-chip filter-chip--badge filter-chip--badge-" +
+        filter.id +
+        (isActive ? " active" : "");
+      chip.type = "button";
+      chip.textContent = filter.label;
+      chip.setAttribute("aria-pressed", isActive ? "true" : "false");
+      chip.addEventListener("click", function () {
+        toggleBadgeFilter(filter.id);
+      });
+      badgeFilters.appendChild(chip);
+    });
+
+    if (mealFiltersReset) {
+      mealFiltersReset.classList.toggle("hidden", !hasActiveMealFilters());
+    }
   }
 
   function getWeeklyPriceValue(subscriptionPrice) {
@@ -175,13 +264,22 @@ export const builderClientScript = `
       tunnelProgressFill.classList.toggle("is-step-2", !isFormula);
     }
     if (tunnelBack) {
-      tunnelBack.textContent = isFormula ? "← Retour" : "← Modifier ma formule";
+      tunnelBack.classList.toggle("is-meals-step", !isFormula);
     }
     if (formulaFooter) {
       formulaFooter.classList.toggle("hidden", !isFormula);
     }
+    if (mealsGaugeFooter) {
+      mealsGaugeFooter.classList.toggle("hidden", isFormula);
+    }
+    if (tunnelPromo) {
+      tunnelPromo.classList.toggle("hidden", !isFormula || orderType === "one-time");
+    }
     if (mealsLead && selectedBox && requiredMeals) {
       mealsLead.textContent = "Pour votre box de " + requiredMeals + " repas";
+    }
+    if (mealsProgressBox && selectedBox && requiredMeals) {
+      mealsProgressBox.textContent = "Box " + requiredMeals + " repas";
     }
   }
 
@@ -198,7 +296,6 @@ export const builderClientScript = `
     if (step === "formule") {
       stepFormula.classList.remove("hidden");
       stepMeals.classList.add("hidden");
-      mealsSection.classList.add("hidden");
       window.requestAnimationFrame(function () {
         if (selectedBox) {
           var selectedCard = boxGrid.querySelector(".product-card.selected");
@@ -209,7 +306,7 @@ export const builderClientScript = `
     } else {
       stepFormula.classList.add("hidden");
       stepMeals.classList.remove("hidden");
-      mealsSection.classList.remove("hidden");
+      renderMealFilters();
       if (!mealsRendered) {
         renderMeals();
         mealsRendered = true;
@@ -294,21 +391,6 @@ export const builderClientScript = `
     badgeRow.appendChild(recommendedBadge);
   }
 
-  function appendBoxBenefits(button) {
-    var benefits = document.createElement("ul");
-    benefits.className = "box-benefits";
-    var items =
-      orderType === "subscription"
-        ? ["Repas halal", "Sans engagement", "Modifiable chaque semaine"]
-        : ["Repas halal", "Livraison offerte"];
-    items.forEach(function (item) {
-      var li = document.createElement("li");
-      li.textContent = item;
-      benefits.appendChild(li);
-    });
-    button.appendChild(benefits);
-  }
-
   function appendSubscriptionPricing(button, box) {
     var weeklyPrice = getWeeklyPriceValue(box.subscriptionPrice);
     if (weeklyPrice === null) return;
@@ -323,12 +405,20 @@ export const builderClientScript = `
     priceRow.appendChild(perMeal);
     button.appendChild(priceRow);
 
+    var promoBadge = document.createElement("span");
+    promoBadge.className = "box-promo-badge";
+    promoBadge.textContent = "🎁 20 € offerts";
+    button.appendChild(promoBadge);
+
     var promo = document.createElement("p");
     promo.className = "box-promo-price";
-    promo.innerHTML =
-      "<strong>" + formatEuros(firstWeekPrice) + "</strong> au lieu de <s>" +
-      formatEuros(weeklyPrice) + "</s> la première semaine";
+    promo.innerHTML = "<strong>" + formatEuros(firstWeekPrice) + "</strong> la 1ère semaine";
     button.appendChild(promo);
+
+    var crossedPrice = document.createElement("p");
+    crossedPrice.className = "box-crossed-price";
+    crossedPrice.innerHTML = "au lieu de <s>" + formatEuros(weeklyPrice) + "</s>";
+    button.appendChild(crossedPrice);
 
     var weekly = document.createElement("p");
     weekly.className = "box-weekly-price";
@@ -337,7 +427,7 @@ export const builderClientScript = `
 
     var promoNote = document.createElement("p");
     promoNote.className = "box-promo-note";
-    promoNote.textContent = "Réduction appliquée automatiquement au paiement";
+    promoNote.textContent = "Appliqué automatiquement au paiement";
     button.appendChild(promoNote);
   }
 
@@ -366,6 +456,9 @@ export const builderClientScript = `
       var isAvailable = isBoxAvailable(box);
       var button = document.createElement("button");
       button.className = "product-card formula-card selectable" + (isAvailable ? "" : " unavailable");
+      if (isAvailable && isRecommendedBox(box)) {
+        button.classList.add("is-recommended");
+      }
       button.type = "button";
       button.disabled = !isAvailable;
 
@@ -411,8 +504,6 @@ export const builderClientScript = `
         } else {
           appendOneTimePricing(button, box);
         }
-
-        appendBoxBenefits(button);
       } else {
         var title = document.createElement("span");
         title.className = "product-title";
@@ -445,9 +536,42 @@ export const builderClientScript = `
 
   function updateSummary() {
     var total = selectedTotal();
+    var remaining = Math.max(0, requiredMeals - total);
+    var progress = requiredMeals > 0 ? (total / requiredMeals) * 100 : 0;
     selectedCount.textContent = total + " / " + requiredMeals + " plats sélectionnés";
+
+    if (mealsGaugeCount) {
+      mealsGaugeCount.textContent = total + " / " + requiredMeals + " repas";
+    }
+    if (mealsProgressCount) {
+      mealsProgressCount.textContent = total + " / " + requiredMeals + " repas sélectionnés";
+    }
+    if (mealsGaugeFill) {
+      mealsGaugeFill.style.width = Math.min(100, progress) + "%";
+    }
+    if (mealsProgressFill) {
+      mealsProgressFill.style.width = Math.min(100, progress) + "%";
+    }
+
     var subscriptionUnavailable = orderType === "subscription" && selectedBox && (!selectedBox.sellingPlanId || !selectedBox.subscriptionPrice);
-    addToCart.disabled = !selectedBox || requiredMeals === 0 || total !== requiredMeals || subscriptionUnavailable;
+    var isComplete = Boolean(selectedBox && requiredMeals > 0 && total === requiredMeals && !subscriptionUnavailable);
+    addToCart.disabled = !isComplete;
+
+    if (addToCart.textContent !== "Ajout en cours...") {
+      if (!isComplete) {
+        addToCart.textContent = "Encore " + remaining + " plat" + (remaining > 1 ? "s" : "");
+      } else {
+        addToCart.textContent = "Ajouter ma box au panier";
+      }
+    }
+
+    if (mealsGaugeFooter) {
+      mealsGaugeFooter.classList.toggle("is-complete", isComplete);
+    }
+    if (mealsProgressStrip) {
+      mealsProgressStrip.classList.toggle("is-complete", isComplete);
+    }
+
     if (subscriptionUnavailable) {
       setError("Abonnement bientôt disponible pour cette box.");
     } else if (errorMessage.textContent === "Abonnement bientôt disponible pour cette box.") {
@@ -466,12 +590,19 @@ export const builderClientScript = `
   }
 
   function renderMeals() {
+    var visibleMeals = getVisibleMeals();
     mealGrid.innerHTML = "";
-    data.meals.forEach(function (meal) {
+
+    if (mealsEmpty) {
+      mealsEmpty.classList.toggle("hidden", visibleMeals.length > 0);
+    }
+    mealGrid.classList.toggle("hidden", visibleMeals.length === 0);
+
+    visibleMeals.forEach(function (meal) {
       selectedMeals[meal.id] = selectedMeals[meal.id] || 0;
 
       var card = document.createElement("article");
-      card.className = "product-card";
+      card.className = "product-card meal-card";
 
       if (meal.imageUrl) {
         var image = document.createElement("img");
@@ -480,15 +611,46 @@ export const builderClientScript = `
         card.appendChild(image);
       }
 
-      var title = document.createElement("span");
-      title.className = "product-title";
-      title.textContent = meal.title;
-      card.appendChild(title);
+      var content = document.createElement("div");
+      content.className = "meal-card-content";
 
-      var variant = document.createElement("span");
-      variant.className = "muted";
-      variant.textContent = meal.variantTitle;
-      card.appendChild(variant);
+      var title = document.createElement("h2");
+      title.className = "meal-title";
+      title.textContent = meal.title;
+      content.appendChild(title);
+
+      if (meal.calories) {
+        var calories = document.createElement("p");
+        calories.className = "meal-kcal";
+        calories.textContent = meal.calories + " kcal";
+        content.appendChild(calories);
+      }
+
+      if (meal.badges && meal.badges.length) {
+        var badges = document.createElement("div");
+        badges.className = "meal-badges";
+        meal.badges.forEach(function (badgeText) {
+          var badge = document.createElement("span");
+          var slug = getBadgeColorSlug(badgeText);
+          badge.className = "meal-badge meal-badge--" + slug;
+          badge.textContent = badgeText;
+          badges.appendChild(badge);
+        });
+        content.appendChild(badges);
+      }
+
+      if (meal.allergenes && meal.allergenes.length) {
+        var allergens = document.createElement("p");
+        allergens.className = "meal-allergenes";
+        allergens.textContent =
+          "Contient : " +
+          meal.allergenes.map(function (entry) {
+            return formatAllergenDisplay(entry);
+          }).join(", ");
+        content.appendChild(allergens);
+      }
+
+      card.appendChild(content);
 
       var quantityRow = document.createElement("div");
       quantityRow.className = "quantity-row";
@@ -505,6 +667,7 @@ export const builderClientScript = `
       });
 
       var quantity = document.createElement("span");
+      quantity.className = "meal-quantity";
       quantity.textContent = String(selectedMeals[meal.id]);
 
       var plus = document.createElement("button");
@@ -578,7 +741,7 @@ export const builderClientScript = `
       if (!response.ok) throw new Error("Add to cart failed");
       window.location.href = "/cart";
     }).catch(function () {
-      addToCart.textContent = "Ajouter au panier";
+      addToCart.textContent = "Ajouter ma box au panier";
       updateSummary();
       setError("Impossible d’ajouter la box au panier. Réessayez dans un instant.");
     });
@@ -598,6 +761,14 @@ export const builderClientScript = `
     if (!selectedBox || !requiredMeals) return;
     showStep("repas");
   });
+
+  if (mealFiltersReset) {
+    mealFiltersReset.addEventListener("click", resetMealFilters);
+  }
+
+  if (mealsEmptyReset) {
+    mealsEmptyReset.addEventListener("click", resetMealFilters);
+  }
 
   if (boxRailViewport) {
     boxRailViewport.addEventListener("scroll", updateBoxRailNav, { passive: true });
