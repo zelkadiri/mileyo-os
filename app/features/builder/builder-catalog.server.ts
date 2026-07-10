@@ -1,8 +1,15 @@
 import {
+  parseAllergenesMetafield,
+  parseCaloriesMetafield,
+  parseListMetafield,
+  parseMealBadges,
+} from "../../utils/mealMetafields";
+import {
   parseMealCountMetafield,
   warnMissingMealCountMetafield,
 } from "../../utils/mealCountMetafield";
 import type {
+  BuilderMeal,
   BuilderProduct,
   CollectionProductsResponse,
   ShopifyProduct,
@@ -26,6 +33,24 @@ const collectionProductsQuery = `#graphql
             value
           }
           mealCountMetafield: metafield(namespace: "mileyo", key: "meal_count") {
+            value
+          }
+          caloriesMetafield: metafield(namespace: "custom", key: "calories") {
+            value
+          }
+          badge1Metafield: metafield(namespace: "custom", key: "badge_1") {
+            value
+          }
+          badge2Metafield: metafield(namespace: "custom", key: "badge_2") {
+            value
+          }
+          badge3Metafield: metafield(namespace: "custom", key: "badge_3") {
+            value
+          }
+          allergenesMetafield: metafield(namespace: "custom", key: "allergenes") {
+            value
+          }
+          ingredientsMetafield: metafield(namespace: "custom", key: "ingredients") {
             value
           }
           sellingPlanGroups(first: 10) {
@@ -103,17 +128,22 @@ export const toBuilderProducts = (products: ShopifyProduct[]): BuilderProduct[] 
   });
 
 /** Meal collection products — no mileyo.meal_count validation or warnings. */
-export const toBuilderMeals = (products: ShopifyProduct[]): BuilderProduct[] =>
+export const toBuilderMeals = (products: ShopifyProduct[]): BuilderMeal[] =>
   products.map((product) => {
     const firstVariant = product.variants.nodes[0];
 
     return {
+      allergenes: parseAllergenesMetafield(product.allergenesMetafield?.value),
+      badges: parseMealBadges(
+        product.badge1Metafield?.value,
+        product.badge2Metafield?.value,
+        product.badge3Metafield?.value,
+      ),
+      calories: parseCaloriesMetafield(product.caloriesMetafield?.value),
       id: product.id,
       imageAlt: product.featuredImage?.altText ?? product.title,
       imageUrl: product.featuredImage?.url ?? null,
-      mealCount: null,
-      sellingPlanId: null,
-      subscriptionPrice: null,
+      ingredients: parseListMetafield(product.ingredientsMetafield?.value),
       title: product.title,
       variantId: firstVariant?.id ?? "",
       variantPrice: firstVariant?.price ?? null,

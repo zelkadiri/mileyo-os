@@ -8,6 +8,12 @@ export type ShopifyProduct = {
   subscriptionPriceMetafield?: {
     value: string;
   } | null;
+  caloriesMetafield?: { value: string } | null;
+  badge1Metafield?: { value: string } | null;
+  badge2Metafield?: { value: string } | null;
+  badge3Metafield?: { value: string } | null;
+  allergenesMetafield?: { value: string } | null;
+  ingredientsMetafield?: { value: string } | null;
   sellingPlanGroups?: {
     nodes: {
       name: string;
@@ -35,6 +41,20 @@ export type BuilderProduct = {
   mealCount: number | null;
   sellingPlanId: string | null;
   subscriptionPrice: string | null;
+  title: string;
+  variantId: string;
+  variantPrice: string | null;
+  variantTitle: string;
+};
+
+export type BuilderMeal = {
+  allergenes: string[];
+  badges: string[];
+  calories: number | null;
+  id: string;
+  imageAlt: string;
+  imageUrl: string | null;
+  ingredients: string[];
   title: string;
   variantId: string;
   variantPrice: string | null;
