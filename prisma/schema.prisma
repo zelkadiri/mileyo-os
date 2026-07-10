@@ -80,10 +80,14 @@ model BoxOrder {
   subscriptionSelectionId String?
   subscriptionContractId  String?
   simulated               Boolean  @default(false)
+  desiredDeliveryDate     String?  @db.VarChar(10)
+  scheduledDeliveryDate   String?  @db.VarChar(10)
+  deliveryRescheduleReason  String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
   @@unique([shop, shopifyOrderId])
+  @@index([shop, scheduledDeliveryDate])
 }
 
 model SubscriptionMealSelection {
@@ -115,6 +119,8 @@ model SubscriptionMealSelection {
   resumeAttemptBillingAttemptId   String?
   resumeAttemptRetryNumber        Int       @default(1)
   resumeAttemptLastFailedBillingAttemptId String?
+  preferredDeliveryWeekday                Int?
+  nextScheduledDeliveryDate               String?   @db.VarChar(10)
   createdAt                       DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 
