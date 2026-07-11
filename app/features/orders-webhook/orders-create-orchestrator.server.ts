@@ -25,8 +25,68 @@ import {
 } from "../../utils/orderLineItemProperties";
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
 import { unauthenticated } from "../../shopify.server";
+import {
+  logDeliveryScheduleEvent,
+  resolveFirstOrderDeliverySchedule,
+  resolveRenewalDeliverySchedule,
+  type FirstOrderDeliveryScheduleResolution,
+  type RenewalDeliveryScheduleResolution,
+} from "../../services/deliverySchedule.server";
 import { findBoxLineItem, getCustomerName } from "./orders-create-parsers";
 import type { OrdersCreateWebhookPayload } from "./orders-create-types";
+
+const buildBoxOrderDeliveryData = (
+  schedule:
+    | FirstOrderDeliveryScheduleResolution
+    | RenewalDeliveryScheduleResolution
+    | null,
+) => {
+  if (!schedule) {
+    return {};
+  }
+
+  return {
+    deliveryRescheduleReason: schedule.deliveryRescheduleReason,
+    desiredDeliveryDate: schedule.desiredDeliveryDate,
+    scheduledDeliveryDate: schedule.scheduledDeliveryDate,
+  };
+};
+
+const logResolvedDeliverySchedule = ({
+  isRenewal,
+  schedule,
+  shop,
+  shopifyOrderId,
+}: {
+  isRenewal: boolean;
+  schedule:
+    | FirstOrderDeliveryScheduleResolution
+    | RenewalDeliveryScheduleResolution
+    | null;
+  shop: string;
+  shopifyOrderId: string;
+}) => {
+  if (!schedule) {
+    logDeliveryScheduleEvent({
+      event: "skipped",
+      isRenewal,
+      shop,
+      shopifyOrderId,
+    });
+    return;
+  }
+
+  logDeliveryScheduleEvent({
+    deliveryRescheduleReason: schedule.deliveryRescheduleReason,
+    desiredDeliveryDate: schedule.desiredDeliveryDate,
+    event: schedule.deliveryRescheduleReason ? "rescheduled" : "scheduled",
+    isRenewal,
+    referenceDate: schedule.referenceDate,
+    scheduledDeliveryDate: schedule.scheduledDeliveryDate,
+    shop,
+    shopifyOrderId,
+  });
+};
 
 export const handleOrdersCreateWebhook = async ({
   payload,
@@ -199,6 +259,38 @@ export const handleOrdersCreateWebhook = async ({
       null)
     : null;
 
+  const orderCreatedAt = order.created_at
+    ? new Date(order.created_at)
+    : new Date();
+
+  const firstOrderDeliverySchedule = !isRenewal
+    ? resolveFirstOrderDeliverySchedule({
+        lineItemProperties: boxLineItem.properties,
+        orderCreatedAt,
+      })
+    : null;
+
+  const renewalDeliverySchedule =
+    isRenewal && matchedSelection
+      ? resolveRenewalDeliverySchedule({
+          orderCreatedAt,
+          preferredDeliveryWeekday: matchedSelection.preferredDeliveryWeekday,
+        })
+      : null;
+
+  const deliverySchedule = isRenewal
+    ? renewalDeliverySchedule
+    : firstOrderDeliverySchedule;
+
+  logResolvedDeliverySchedule({
+    isRenewal,
+    schedule: deliverySchedule,
+    shop,
+    shopifyOrderId,
+  });
+
+  const boxOrderDeliveryData = buildBoxOrderDeliveryData(deliverySchedule);
+
   console.log("[SUBSCRIPTION_SELECTION] order processed", {
     decision,
     isRenewal,
@@ -234,6 +326,7 @@ export const handleOrdersCreateWebhook = async ({
         isRenewal || decision === "attach_existing"
           ? (matchedSelection?.id ?? null)
           : null,
+      ...boxOrderDeliveryData,
     },
     update: {
       boxTitle: resolvedBoxTitle,
@@ -253,6 +346,7 @@ export const handleOrdersCreateWebhook = async ({
         isRenewal || decision === "attach_existing"
           ? (matchedSelection?.id ?? null)
           : null,
+      ...boxOrderDeliveryData,
     },
     where: {
       shop_shopifyOrderId: {
@@ -324,10 +418,32 @@ export const handleOrdersCreateWebhook = async ({
           },
         },
       });
+
+      if (firstOrderDeliverySchedule) {
+        await db.subscriptionMealSelection.update({
+          data: {
+            nextScheduledDeliveryDate:
+              firstOrderDeliverySchedule.scheduledDeliveryDate,
+            preferredDeliveryWeekday:
+              firstOrderDeliverySchedule.preferredDeliveryWeekday,
+          },
+          where: { id: linkedSelection.id },
+        });
+      }
     }
   }
 
   if (isRenewal && matchedSelection) {
+    if (renewalDeliverySchedule) {
+      await db.subscriptionMealSelection.update({
+        data: {
+          nextScheduledDeliveryDate:
+            renewalDeliverySchedule.scheduledDeliveryDate,
+        },
+        where: { id: matchedSelection.id },
+      });
+    }
+
     if (
       subscriptionContractId &&
       normalizeShopifyId(matchedSelection.subscriptionContractId) !==
@@ -368,9 +484,6 @@ export const handleOrdersCreateWebhook = async ({
       });
 
       const { admin } = await unauthenticated.admin(shop);
-      const orderCreatedAt = order.created_at
-        ? new Date(order.created_at)
-        : new Date();
 
       if (freshSelection && isResumeRenewalOrder(freshSelection)) {
         console.log("[ORDERS_CREATE] resume renewal — scheduling from order date", {
