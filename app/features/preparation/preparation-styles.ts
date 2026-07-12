@@ -3,19 +3,6 @@ export const listStyle = {
   paddingLeft: "1.25rem",
 } as const;
 
-export const exportButtonStyle = {
-  background: "#111827",
-  border: 0,
-  borderRadius: "999px",
-  color: "white",
-  cursor: "pointer",
-  display: "inline-block",
-  font: "inherit",
-  fontWeight: 700,
-  padding: "0.65rem 1rem",
-  textDecoration: "none",
-} as const;
-
 export const secondaryButtonStyle = {
   background: "#f3f4f6",
   border: "1px solid #d1d5db",
@@ -26,6 +13,19 @@ export const secondaryButtonStyle = {
   font: "inherit",
   fontWeight: 600,
   padding: "0.5rem 0.9rem",
+  textDecoration: "none",
+} as const;
+
+export const exportButtonStyle = {
+  background: "#111827",
+  border: 0,
+  borderRadius: "999px",
+  color: "white",
+  cursor: "pointer",
+  display: "inline-block",
+  font: "inherit",
+  fontWeight: 700,
+  padding: "0.65rem 1rem",
   textDecoration: "none",
 } as const;
 

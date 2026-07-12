@@ -88,3 +88,29 @@ export const getPreparationProductionExportFilename = (
 
 export const getPreparationOrdersExportFilename = (scheduledDeliveryDate: string) =>
   `preparation-orders-${scheduledDeliveryDate}.csv`;
+
+const downloadPreparationCsv = (csv: string, filename: string) => {
+  const url = URL.createObjectURL(
+    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+  );
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
+export const downloadPreparationProductionCsv = (data: PreparationDayData) => {
+  downloadPreparationCsv(
+    buildPreparationProductionCsvContent(data),
+    getPreparationProductionExportFilename(data.summary.scheduledDeliveryDate),
+  );
+};
+
+export const downloadPreparationDeliveryOrdersCsv = (data: PreparationDayData) => {
+  downloadPreparationCsv(
+    buildPreparationDeliveryOrdersCsvContent(data),
+    getPreparationOrdersExportFilename(data.summary.scheduledDeliveryDate),
+  );
+};

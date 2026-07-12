@@ -4,6 +4,10 @@ import {
   formatDeliveryDateLabel,
   parseDeliveryDate,
 } from "../../utils/deliveryDate";
+import {
+  downloadPreparationDeliveryOrdersCsv,
+  downloadPreparationProductionCsv,
+} from "./preparation-csv";
 import type { loadPreparationPageData } from "./preparation-data.server";
 import {
   formatPreparationOrderTypeLabel,
@@ -34,21 +38,9 @@ import {
 
 type PreparationPageData = Awaited<ReturnType<typeof loadPreparationPageData>>;
 
-const isPageData = (
-  data: PreparationPageData,
-): data is Exclude<PreparationPageData, Response> => !(data instanceof Response);
-
-const buildExportHref = (date: string, exportType: "production" | "orders") =>
-  `/app/preparation?date=${encodeURIComponent(date)}&export=${exportType}`;
-
 export default function PreparationPage() {
-  const loaderData = useLoaderData<PreparationPageData>();
-
-  if (!isPageData(loaderData)) {
-    return null;
-  }
-
-  const { dateQueryInvalid, dayData, selectedDate, upcomingDates } = loaderData;
+  const { dateQueryInvalid, dayData, selectedDate, upcomingDates } =
+    useLoaderData<PreparationPageData>();
   const summary = dayData?.summary ?? null;
   const hasOrders = (summary?.totalOrders ?? 0) > 0;
   const hasMeals = (summary?.totalMeals ?? 0) > 0;
@@ -156,12 +148,18 @@ export default function PreparationPage() {
                   }}
                 >
                   <h2 style={productionHeadingStyle}>À préparer</h2>
-                  <a
-                    href={buildExportHref(selectedDate, "production")}
+                  <button
+                    disabled={!dayData}
+                    onClick={() => {
+                      if (dayData) {
+                        downloadPreparationProductionCsv(dayData);
+                      }
+                    }}
                     style={exportButtonStyle}
+                    type="button"
                   >
                     Exporter production CSV
-                  </a>
+                  </button>
                 </div>
 
                 {!hasOrders ? (
@@ -184,12 +182,18 @@ export default function PreparationPage() {
 
               <s-section heading="Commandes de cette livraison">
                 <s-stack gap="base">
-                  <a
-                    href={buildExportHref(selectedDate, "orders")}
+                  <button
+                    disabled={!dayData}
+                    onClick={() => {
+                      if (dayData) {
+                        downloadPreparationDeliveryOrdersCsv(dayData);
+                      }
+                    }}
                     style={secondaryButtonStyle}
+                    type="button"
                   >
                     Exporter commandes CSV
-                  </a>
+                  </button>
 
                   {!hasOrders ? (
                     <p style={emptyStateStyle}>

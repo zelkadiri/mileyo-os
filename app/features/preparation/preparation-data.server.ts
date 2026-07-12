@@ -6,12 +6,6 @@ import {
   type DeliveryDateString,
 } from "../../utils/deliveryDate";
 import {
-  buildPreparationDeliveryOrdersCsvContent,
-  buildPreparationProductionCsvContent,
-  getPreparationOrdersExportFilename,
-  getPreparationProductionExportFilename,
-} from "./preparation-csv";
-import {
   isSubscriptionPreparationOrder,
   normalizeSelectedMealsForPreparation,
 } from "./preparation-formatters";
@@ -193,43 +187,13 @@ export const getUpcomingPreparationDates = async (
   return dates;
 };
 
-const buildEmptyPreparationDayData = (
-  scheduledDeliveryDate: DeliveryDateString,
-): PreparationDayData => ({
-  mealTotals: [],
-  orders: [],
-  summary: {
-    oneTimeOrders: 0,
-    rescheduledOrders: 0,
-    scheduledDeliveryDate,
-    subscriptionOrders: 0,
-    totalMeals: 0,
-    totalOrders: 0,
-  },
-});
-
-const buildPreparationCsvResponse = ({
-  content,
-  filename,
-}: {
-  content: string;
-  filename: string;
-}) =>
-  new Response(content, {
-    headers: {
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Content-Type": "text/csv; charset=utf-8",
-    },
-  });
-
 export const loadPreparationPageData = async (
   request: Request,
-): Promise<PreparationPageData | Response> => {
+): Promise<PreparationPageData> => {
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
   const url = new URL(request.url);
   const dateParam = url.searchParams.get("date");
-  const exportParam = url.searchParams.get("export");
   const upcomingDates = await getUpcomingPreparationDates(shop);
 
   let selectedDate: DeliveryDateString | null = null;
@@ -248,28 +212,6 @@ export const loadPreparationPageData = async (
   if (!selectedDate && !dateQueryInvalid) {
     selectedDate =
       upcomingDates[0]?.scheduledDeliveryDate ?? getTodayDeliveryDate();
-  }
-
-  if (
-    exportParam &&
-    selectedDate &&
-    (exportParam === "production" || exportParam === "orders")
-  ) {
-    const dayData =
-      (await getPreparationDayData(shop, selectedDate)) ??
-      buildEmptyPreparationDayData(selectedDate);
-
-    if (exportParam === "production") {
-      return buildPreparationCsvResponse({
-        content: buildPreparationProductionCsvContent(dayData),
-        filename: getPreparationProductionExportFilename(selectedDate),
-      });
-    }
-
-    return buildPreparationCsvResponse({
-      content: buildPreparationDeliveryOrdersCsvContent(dayData),
-      filename: getPreparationOrdersExportFilename(selectedDate),
-    });
   }
 
   const dayData =
