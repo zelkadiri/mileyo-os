@@ -27,8 +27,8 @@ const collectionProductsQuery = `#graphql
             url
           }
           subscriptionPriceMetafield: metafield(
-            namespace: "mileyo"
-            key: "subscription_price"
+            namespace: "custom"
+            key: "prix_abonnement"
           ) {
             value
           }

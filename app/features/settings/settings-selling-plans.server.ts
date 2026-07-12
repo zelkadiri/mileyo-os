@@ -9,7 +9,7 @@ const boxSellingPlanProductsQuery = `#graphql
       products(first: 50, sortKey: TITLE) {
         nodes {
           id
-          metafield(namespace: "mileyo", key: "subscription_price") {
+          metafield(namespace: "custom", key: "prix_abonnement") {
             value
           }
           title
@@ -55,9 +55,8 @@ const sellingPlanGroupUpdateMutation = `#graphql
   mutation UpdateWeeklySellingPlanGroup(
     $id: ID!
     $input: SellingPlanGroupInput!
-    $resources: SellingPlanGroupResourceInput!
   ) {
-    sellingPlanGroupUpdate(id: $id, input: $input, resources: $resources) {
+    sellingPlanGroupUpdate(id: $id, input: $input) {
       userErrors {
         field
         message
@@ -178,16 +177,16 @@ export const createOrUpdateWeeklySellingPlans = async (
 
     if (subscriptionPrice === null) {
       errors.push(
-        `${product.title}: metafield mileyo.subscription_price manquant.`,
+        `${product.title}: metafield custom.prix_abonnement manquant.`,
       );
       continue;
     }
 
     const fixedDiscountAmount = variantPrice - subscriptionPrice;
 
-    if (fixedDiscountAmount <= 0) {
+    if (fixedDiscountAmount < 0) {
       errors.push(
-        `${product.title}: le prix abonnement doit être inférieur au prix achat unique.`,
+        `${product.title}: le prix abonnement ne peut pas dépasser le prix achat unique.`,
       );
       continue;
     }
@@ -198,19 +197,22 @@ export const createOrUpdateWeeklySellingPlans = async (
     const existingSellingPlan = existingGroup?.sellingPlans.nodes.find(
       (sellingPlan) => sellingPlan.name === weeklySellingPlanName,
     );
-    const variables = {
-      input: getSellingPlanInput(fixedDiscountAmount, existingSellingPlan?.id),
-      resources: {
-        productIds: [product.id],
-        productVariantIds: [variantId],
-      },
-      ...(existingGroup ? { id: existingGroup.id } : {}),
-    };
+    const input = getSellingPlanInput(fixedDiscountAmount, existingSellingPlan?.id);
     const response = await admin.graphql(
       existingGroup
         ? sellingPlanGroupUpdateMutation
         : sellingPlanGroupCreateMutation,
-      { variables },
+      {
+        variables: existingGroup
+          ? { id: existingGroup.id, input }
+          : {
+              input,
+              resources: {
+                productIds: [product.id],
+                productVariantIds: [variantId],
+              },
+            },
+      },
     );
     const json = (await response.json()) as SellingPlanMutationResponse;
     const userErrors =

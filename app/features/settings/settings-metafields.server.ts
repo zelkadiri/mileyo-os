@@ -25,11 +25,11 @@ export const createSubscriptionPriceMetafieldDefinition = async (admin: {
   const response = await admin.graphql(metafieldDefinitionCreateMutation, {
     variables: {
       definition: {
-        key: "subscription_price",
+        key: "prix_abonnement",
         name: "Prix abonnement",
-        namespace: "mileyo",
+        namespace: "custom",
         ownerType: "PRODUCT",
-        type: "number_decimal",
+        type: "number_integer",
       },
     },
   });
