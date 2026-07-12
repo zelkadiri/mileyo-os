@@ -1,3 +1,5 @@
+import { DELIVERY_RESCHEDULE_REASON_LABELS } from "../../constants/deliverySchedule";
+
 const MEAL_OBJECT_TITLE_KEYS = ["title", "name", "mealTitle", "label"] as const;
 
 const extractMealTitle = (item: unknown): string | null => {
@@ -77,3 +79,27 @@ export const isSubscriptionPreparationOrder = ({
 
 export const formatSelectedMealsForCsv = (selectedMeals: string[]) =>
   selectedMeals.join(" | ");
+
+export const formatPreparationOrderTypeLabel = (orderType: string | null) => {
+  if (orderType?.toLowerCase().includes("abonnement")) {
+    return "Abonnement";
+  }
+
+  if (orderType?.toLowerCase().includes("unique")) {
+    return "Commande unique";
+  }
+
+  return orderType ?? "Non renseigné";
+};
+
+export const formatPreparationRescheduleReason = (reason: string | null) => {
+  if (!reason) {
+    return null;
+  }
+
+  return (
+    DELIVERY_RESCHEDULE_REASON_LABELS[
+      reason as keyof typeof DELIVERY_RESCHEDULE_REASON_LABELS
+    ] ?? reason
+  );
+};

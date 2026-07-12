@@ -40,6 +40,13 @@ export type UpcomingPreparationDate = {
   scheduledDeliveryDate: DeliveryDateString;
 };
 
+export type PreparationPageData = {
+  dateQueryInvalid: boolean;
+  dayData: PreparationDayData | null;
+  selectedDate: DeliveryDateString | null;
+  upcomingDates: UpcomingPreparationDate[];
+};
+
 export type PreparationBoxOrderRecord = {
   id: string;
   shopifyOrderName: string | null;

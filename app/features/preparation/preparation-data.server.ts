@@ -1,8 +1,16 @@
 import db from "../../db.server";
+import { authenticate } from "../../shopify.server";
 import {
+  getTodayDeliveryDate,
   parseDeliveryDate,
   type DeliveryDateString,
 } from "../../utils/deliveryDate";
+import {
+  buildPreparationDeliveryOrdersCsvContent,
+  buildPreparationProductionCsvContent,
+  getPreparationOrdersExportFilename,
+  getPreparationProductionExportFilename,
+} from "./preparation-csv";
 import {
   isSubscriptionPreparationOrder,
   normalizeSelectedMealsForPreparation,
@@ -13,6 +21,7 @@ import type {
   PreparationDaySummary,
   PreparationMealTotal,
   PreparationOrder,
+  PreparationPageData,
   UpcomingPreparationDate,
 } from "./preparation-types";
 
@@ -182,4 +191,96 @@ export const getUpcomingPreparationDates = async (
   }
 
   return dates;
+};
+
+const buildEmptyPreparationDayData = (
+  scheduledDeliveryDate: DeliveryDateString,
+): PreparationDayData => ({
+  mealTotals: [],
+  orders: [],
+  summary: {
+    oneTimeOrders: 0,
+    rescheduledOrders: 0,
+    scheduledDeliveryDate,
+    subscriptionOrders: 0,
+    totalMeals: 0,
+    totalOrders: 0,
+  },
+});
+
+const buildPreparationCsvResponse = ({
+  content,
+  filename,
+}: {
+  content: string;
+  filename: string;
+}) =>
+  new Response(content, {
+    headers: {
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Type": "text/csv; charset=utf-8",
+    },
+  });
+
+export const loadPreparationPageData = async (
+  request: Request,
+): Promise<PreparationPageData | Response> => {
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
+  const url = new URL(request.url);
+  const dateParam = url.searchParams.get("date");
+  const exportParam = url.searchParams.get("export");
+  const upcomingDates = await getUpcomingPreparationDates(shop);
+
+  let selectedDate: DeliveryDateString | null = null;
+  let dateQueryInvalid = false;
+
+  if (dateParam) {
+    const parsedDate = parseDeliveryDate(dateParam);
+
+    if (parsedDate) {
+      selectedDate = parsedDate;
+    } else {
+      dateQueryInvalid = true;
+    }
+  }
+
+  if (!selectedDate && !dateQueryInvalid) {
+    selectedDate =
+      upcomingDates[0]?.scheduledDeliveryDate ?? getTodayDeliveryDate();
+  }
+
+  if (
+    exportParam &&
+    selectedDate &&
+    (exportParam === "production" || exportParam === "orders")
+  ) {
+    const dayData =
+      (await getPreparationDayData(shop, selectedDate)) ??
+      buildEmptyPreparationDayData(selectedDate);
+
+    if (exportParam === "production") {
+      return buildPreparationCsvResponse({
+        content: buildPreparationProductionCsvContent(dayData),
+        filename: getPreparationProductionExportFilename(selectedDate),
+      });
+    }
+
+    return buildPreparationCsvResponse({
+      content: buildPreparationDeliveryOrdersCsvContent(dayData),
+      filename: getPreparationOrdersExportFilename(selectedDate),
+    });
+  }
+
+  const dayData =
+    selectedDate && !dateQueryInvalid
+      ? await getPreparationDayData(shop, selectedDate)
+      : null;
+
+  return {
+    dateQueryInvalid,
+    dayData,
+    selectedDate: dateQueryInvalid ? null : selectedDate,
+    upcomingDates,
+  };
 };

@@ -81,3 +81,10 @@ export const buildPreparationDeliveryOrdersCsvContent = (
     .map((row) => row.map((value) => escapeCsvValue(value)).join(","))
     .join("\n");
 };
+
+export const getPreparationProductionExportFilename = (
+  scheduledDeliveryDate: string,
+) => `preparation-production-${scheduledDeliveryDate}.csv`;
+
+export const getPreparationOrdersExportFilename = (scheduledDeliveryDate: string) =>
+  `preparation-orders-${scheduledDeliveryDate}.csv`;
