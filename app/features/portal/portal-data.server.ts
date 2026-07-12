@@ -334,6 +334,7 @@ export const loadPortalData = async ({
           id: reconciled.id,
           mealsCount: reconciled.mealsCount as number,
           nextBillingDate: reconciled.nextBillingDate?.toISOString() ?? null,
+          nextScheduledDeliveryDate: reconciled.nextScheduledDeliveryDate ?? null,
           portalState,
           recovery: recoveryRecord
             ? {

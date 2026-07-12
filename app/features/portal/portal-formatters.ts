@@ -2,6 +2,10 @@ import {
   getTerminalStatusBadgeClass,
   type PortalSubscriptionState,
 } from "../../constants/subscriptionStatus";
+import {
+  formatDeliveryDateLabel,
+  parseDeliveryDate,
+} from "../../utils/deliveryDate";
 import type { PortalMeal } from "./portal-types";
 import { escapeHtml, scriptJson } from "../../utils/html";
 import {
@@ -21,6 +25,22 @@ export const formatFrenchDateTime = (isoDate: string) =>
 
 export const formatFrenchDate = (isoDate: string) =>
   new Date(isoDate).toLocaleDateString("fr-FR", { dateStyle: "long" });
+
+export const formatScheduledDeliveryLabel = (
+  scheduledDeliveryDate: string | null,
+) => {
+  if (!scheduledDeliveryDate) {
+    return null;
+  }
+
+  const parsed = parseDeliveryDate(scheduledDeliveryDate);
+
+  if (!parsed) {
+    return null;
+  }
+
+  return formatDeliveryDateLabel(parsed);
+};
 
 export const formatOrderPrice = (price: string | null) => {
   if (!price) {

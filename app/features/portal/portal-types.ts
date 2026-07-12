@@ -57,6 +57,8 @@ export type PortalSelection = {
   id: string;
   mealsCount: number;
   nextBillingDate: string | null;
+  /** ISO date `YYYY-MM-DD` — prochaine livraison planifiée. */
+  nextScheduledDeliveryDate: string | null;
   portalState: PortalSubscriptionState;
   recovery: PortalRecovery | null;
   resumeBlockedMessage: string | null;

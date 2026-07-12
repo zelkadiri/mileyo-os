@@ -6,6 +6,7 @@ import {
   formatFrenchDateTime,
   formatFulfillmentStatus,
   formatOrderPrice,
+  formatScheduledDeliveryLabel,
   formatSubscriptionPrice,
   getTerminalStatusBadgeClass,
   getUpcomingTabEmptyMessage,
@@ -141,14 +142,72 @@ export const renderPortalSubscriptionStatus = (
 ) => {
   switch (portalState) {
     case "active":
-      return `<p class="status-badge active">Abonnement actif</p>`;
+      return `<span class="status-badge active">Abonnement actif</span>`;
     case "paused":
-      return `<p class="status-badge paused">Abonnement en pause</p>`;
+      return `<span class="status-badge paused">En pause</span>`;
     case "resume_processing":
-      return `<p class="status-badge processing">Reprise en cours</p>`;
+      return `<span class="status-badge processing">Reprise en cours</span>`;
     default:
       return "";
   }
+};
+
+const renderMealChips = (meals: string[], emptyMessage: string) => {
+  if (meals.length === 0) {
+    return `<p class="muted">${escapeHtml(emptyMessage)}</p>`;
+  }
+
+  return `<ul class="meal-chips">${meals
+    .map((meal) => `<li class="meal-chip">${escapeHtml(meal)}</li>`)
+    .join("")}</ul>`;
+};
+
+const renderDeliveryInfoItem = (selection: PortalSelection) => {
+  const deliveryLabel = formatScheduledDeliveryLabel(
+    selection.nextScheduledDeliveryDate,
+  );
+
+  if (deliveryLabel) {
+    return `<div class="key-info-item key-info-item--highlight">
+        <span class="key-info-label">Prochaine livraison</span>
+        <span class="key-info-value">${escapeHtml(deliveryLabel)}</span>
+      </div>`;
+  }
+
+  return `<div class="key-info-item key-info-item--highlight">
+      <span class="key-info-label">Prochaine livraison</span>
+      <span class="key-info-value key-info-value--pending">Livraison à confirmer</span>
+    </div>`;
+};
+
+const renderKeyInfoGrid = (selection: PortalSelection) => {
+  const billingValue = selection.nextBillingDate
+    ? escapeHtml(formatFrenchDate(selection.nextBillingDate))
+    : `<span class="key-info-value--pending">À confirmer</span>`;
+
+  return `<div class="key-info-grid">
+      ${renderDeliveryInfoItem(selection)}
+      <div class="key-info-item">
+        <span class="key-info-label">Prochain prélèvement</span>
+        <span class="key-info-value">${billingValue}</span>
+      </div>
+      <div class="key-info-item">
+        <span class="key-info-label">Box</span>
+        <span class="key-info-value">${escapeHtml(selection.boxTitle ?? "Non renseignée")}</span>
+      </div>
+      <div class="key-info-item">
+        <span class="key-info-label">Nombre de repas</span>
+        <span class="key-info-value">${selection.mealsCount}</span>
+      </div>
+      ${
+        selection.boxSubscriptionPrice
+          ? `<div class="key-info-item">
+        <span class="key-info-label">Prix abonnement</span>
+        <span class="key-info-value">${escapeHtml(formatSubscriptionPrice(selection.boxSubscriptionPrice))}</span>
+      </div>`
+          : ""
+      }
+    </div>`;
 };
 
 const renderNextBoxCard = ({
@@ -178,28 +237,16 @@ const renderNextBoxCard = ({
       : "Votre abonnement sera repris sans prélèvement immédiat.";
 
   return `<section class="portal-card selection-card" data-selection-id="${escapeHtml(selection.id)}">
-      <h2>Ma prochaine box</h2>
-      ${renderPortalSubscriptionStatus(portalState)}
-      ${
-        selection.nextBillingDate
-          ? `<p><strong>Prochain prélèvement :</strong> ${escapeHtml(formatFrenchDate(selection.nextBillingDate))}</p>`
-          : ""
-      }
-      <p><strong>Box :</strong> ${escapeHtml(selection.boxTitle ?? "Non renseignée")}</p>
-      <p><strong>Nombre de repas :</strong> ${selection.mealsCount}</p>
-      ${
-        selection.boxSubscriptionPrice
-          ? `<p><strong>Prix abonnement :</strong> ${escapeHtml(formatSubscriptionPrice(selection.boxSubscriptionPrice))}</p>`
-          : ""
-      }
-      <p><strong>Plats sélectionnés :</strong></p>
-      ${
-        selection.selectedMeals.length > 0
-          ? `<ul class="meal-list">${selection.selectedMeals
-              .map((meal) => `<li>${escapeHtml(meal)}</li>`)
-              .join("")}</ul>`
-          : `<p class="muted">Aucun plat sélectionné pour le moment.</p>`
-      }
+      <div class="card-top">
+        <h2>Ma prochaine box</h2>
+        ${renderPortalSubscriptionStatus(portalState)}
+      </div>
+      ${renderKeyInfoGrid(selection)}
+      <h3 class="section-heading">Plats sélectionnés</h3>
+      ${renderMealChips(
+        selection.selectedMeals,
+        "Aucun plat sélectionné pour le moment.",
+      )}
       <p class="editor-notice next-box-notice">Les modifications sont appliquées uniquement à votre prochaine commande.</p>
       ${
         selection.recovery
@@ -211,6 +258,7 @@ const renderNextBoxCard = ({
           ? `<p class="processing-notice">Votre paiement est en cours de confirmation. Ne relancez pas la demande.</p>`
           : ""
       }
+      <div class="card-actions">
       ${
         isActive && !isModificationBlocked
           ? `<button class="portal-button secondary edit-button" type="button">Modifier mes plats</button>`
@@ -222,13 +270,14 @@ const renderNextBoxCard = ({
           : ""
       }
       ${
-        isModificationBlocked && modificationBlockedReason
-          ? `<p class="muted modification-blocked">${escapeHtml(modificationBlockedReason)}</p>`
-          : ""
-      }
-      ${
         isActive
           ? `<button class="portal-button secondary pause-button" type="button">Mettre mon abonnement en pause</button>`
+          : ""
+      }
+      </div>
+      ${
+        isModificationBlocked && modificationBlockedReason
+          ? `<p class="muted modification-blocked">${escapeHtml(modificationBlockedReason)}</p>`
           : ""
       }
       <div class="box-change-editor hidden">
@@ -316,30 +365,43 @@ const renderNextBoxCard = ({
 
 const renderTerminalSelectionCard = (selection: PortalTerminalSelection) =>
   `<section class="portal-card terminal-selection-card" data-terminal-selection-id="${escapeHtml(selection.id)}">
-      <h2>${escapeHtml(selection.boxTitle ?? "Abonnement terminé")}</h2>
-      <p class="status-badge ${escapeHtml(getTerminalStatusBadgeClass(selection.status))}">${escapeHtml(selection.statusLabel)}</p>
+      <div class="card-top">
+        <h2>${escapeHtml(selection.boxTitle ?? "Abonnement terminé")}</h2>
+        <span class="status-badge ${escapeHtml(getTerminalStatusBadgeClass(selection.status))}">${escapeHtml(selection.statusLabel)}</span>
+      </div>
       <p class="terminal-notice muted">Cet abonnement est terminé. Aucune modification ni nouveau prélèvement n’est possible.</p>
-      <p><strong>Box :</strong> ${escapeHtml(selection.boxTitle ?? "Non renseignée")}</p>
-      <p><strong>Nombre de repas :</strong> ${selection.mealsCount}</p>
-      ${
-        selection.shopifyOrderName
-          ? `<p><strong>Première commande :</strong> ${escapeHtml(selection.shopifyOrderName)}</p>`
-          : ""
-      }
-      ${
-        selection.lastOrderDate
-          ? `<p><strong>Dernière commande :</strong> ${escapeHtml(formatFrenchDateTime(selection.lastOrderDate))}</p>`
-          : ""
-      }
-      <p><strong>Dernière mise à jour :</strong> ${escapeHtml(formatFrenchDateTime(selection.updatedAt))}</p>
-      <p><strong>Dernière sélection enregistrée :</strong></p>
-      ${
-        selection.selectedMeals.length > 0
-          ? `<ul class="meal-list">${selection.selectedMeals
-              .map((meal) => `<li>${escapeHtml(meal)}</li>`)
-              .join("")}</ul>`
-          : `<p class="muted">Aucun plat enregistré.</p>`
-      }
+      <div class="key-info-grid">
+        <div class="key-info-item">
+          <span class="key-info-label">Box</span>
+          <span class="key-info-value">${escapeHtml(selection.boxTitle ?? "Non renseignée")}</span>
+        </div>
+        <div class="key-info-item">
+          <span class="key-info-label">Nombre de repas</span>
+          <span class="key-info-value">${selection.mealsCount}</span>
+        </div>
+        ${
+          selection.shopifyOrderName
+            ? `<div class="key-info-item">
+          <span class="key-info-label">Première commande</span>
+          <span class="key-info-value">${escapeHtml(selection.shopifyOrderName)}</span>
+        </div>`
+            : ""
+        }
+        ${
+          selection.lastOrderDate
+            ? `<div class="key-info-item">
+          <span class="key-info-label">Dernière commande</span>
+          <span class="key-info-value">${escapeHtml(formatFrenchDateTime(selection.lastOrderDate))}</span>
+        </div>`
+            : ""
+        }
+        <div class="key-info-item">
+          <span class="key-info-label">Dernière mise à jour</span>
+          <span class="key-info-value">${escapeHtml(formatFrenchDateTime(selection.updatedAt))}</span>
+        </div>
+      </div>
+      <h3 class="section-heading">Dernière sélection enregistrée</h3>
+      ${renderMealChips(selection.selectedMeals, "Aucun plat enregistré.")}
     </section>`;
 
 const renderForecastCard = (
@@ -374,14 +436,8 @@ const renderHistoryCard = (order: PortalHistoryOrder) => {
       <p><strong>Box :</strong> ${escapeHtml(order.boxTitle ?? "Non renseignée")}</p>
       <p><strong>Prix :</strong> ${escapeHtml(formatOrderPrice(order.price))}</p>
       <p><strong>Statut :</strong> ${escapeHtml(statusParts.join(" · "))}</p>
-      <p><strong>Plats :</strong></p>
-      ${
-        order.selectedMeals.length > 0
-          ? `<ul class="meal-list">${order.selectedMeals
-              .map((meal) => `<li>${escapeHtml(meal)}</li>`)
-              .join("")}</ul>`
-          : `<p class="muted">Aucun plat enregistré.</p>`
-      }
+      <h3 class="section-heading">Plats</h3>
+      ${renderMealChips(order.selectedMeals, "Aucun plat enregistré.")}
       ${
         order.statusPageUrl
           ? `<p><a class="portal-button secondary history-order-link" href="${escapeHtml(order.statusPageUrl)}" rel="noopener noreferrer" target="_blank">Voir le suivi de commande</a></p>`
@@ -444,7 +500,7 @@ export const renderPortal = ({
       <p class="eyebrow">Mileyo</p>
       <h1>Mes box Mileyo</h1>
       <p class="intro">
-        Gérez votre prochaine box, consultez vos livraisons à venir et retrouvez l’historique de vos commandes.
+        Gérez votre prochaine box, consultez vos livraisons à venir et retrouvez l’historique de vos commandes — en toute clarté.
       </p>
       ${
         processingMessage
