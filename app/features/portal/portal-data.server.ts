@@ -26,6 +26,7 @@ import {
 } from "../../services/subscriptionBoxCatalog.server";
 import { getMerchantSupportContact } from "../../utils/merchantSupport.server";
 import type { PaymentUpdateUnavailableReason } from "../../constants/subscriptionPaymentRecovery";
+import { getDeliveryCutoffStatus } from "../../utils/deliveryDate";
 import {
   formatMealSelectionStatusLabel,
   TERMINAL_PORTAL_DISPLAY_STATUSES,
@@ -326,6 +327,17 @@ export const loadPortalData = async ({
           modificationBlockedReason: modificationBlockReason
             ? getPortalModificationBlockMessage(modificationBlockReason)
             : null,
+          deliveryCutoff: (() => {
+            const cutoff = getDeliveryCutoffStatus(
+              reconciled.nextScheduledDeliveryDate,
+            );
+
+            return {
+              deadlineLabel: cutoff.deadlineLabel,
+              isKnown: cutoff.isKnown,
+              isPassed: cutoff.isPassed,
+            };
+          })(),
           boxProductShopifyId:
             reconciled.boxProductShopifyId ?? currentBox?.id ?? null,
           boxSubscriptionPrice,

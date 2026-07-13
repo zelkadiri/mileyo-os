@@ -296,6 +296,39 @@ body {
   padding: 14px 16px;
 }
 
+.cutoff-notice {
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  margin: -8px 0 18px;
+  padding: 14px 16px;
+}
+
+.cutoff-notice--open {
+  background: rgba(124, 201, 167, 0.14);
+  border: 1px solid rgba(124, 201, 167, 0.32);
+  color: #2f6f57;
+}
+
+.cutoff-notice--closed {
+  background: linear-gradient(
+    135deg,
+    rgba(243, 203, 184, 0.28) 0%,
+    rgba(220, 194, 240, 0.22) 100%
+  );
+  border: 1px solid rgba(243, 203, 184, 0.58);
+  color: #7a3f22;
+}
+
+.cutoff-title {
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.cutoff-message {
+  font-weight: 650;
+  margin: 0;
+}
+
 .processing-inline {
   color: #8b4f2f;
   font-weight: 600;

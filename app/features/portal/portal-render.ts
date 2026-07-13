@@ -180,6 +180,29 @@ const renderDeliveryInfoItem = (selection: PortalSelection) => {
     </div>`;
 };
 
+const renderDeliveryCutoffNotice = (selection: PortalSelection) => {
+  const cutoff = selection.deliveryCutoff;
+
+  if (!cutoff?.isKnown) {
+    return "";
+  }
+
+  if (cutoff.isPassed) {
+    return `<div class="cutoff-notice cutoff-notice--closed" role="note">
+        <p class="cutoff-title">Cette box est en préparation.</p>
+        <p class="cutoff-message">Les modifications ne sont plus possibles pour cette livraison.</p>
+      </div>`;
+  }
+
+  if (!cutoff.deadlineLabel) {
+    return "";
+  }
+
+  return `<div class="cutoff-notice cutoff-notice--open" role="note">
+      <p class="cutoff-message">Modifications possibles jusqu’au ${escapeHtml(cutoff.deadlineLabel)}</p>
+    </div>`;
+};
+
 const renderKeyInfoGrid = (selection: PortalSelection) => {
   const billingValue = selection.nextBillingDate
     ? escapeHtml(formatFrenchDate(selection.nextBillingDate))
@@ -242,6 +265,7 @@ const renderNextBoxCard = ({
         ${renderPortalSubscriptionStatus(portalState)}
       </div>
       ${renderKeyInfoGrid(selection)}
+      ${renderDeliveryCutoffNotice(selection)}
       <h3 class="section-heading">Plats sélectionnés</h3>
       ${renderMealChips(
         selection.selectedMeals,
@@ -270,7 +294,7 @@ const renderNextBoxCard = ({
           : ""
       }
       ${
-        isActive
+        isActive && !isModificationBlocked
           ? `<button class="portal-button secondary pause-button" type="button">Mettre mon abonnement en pause</button>`
           : ""
       }

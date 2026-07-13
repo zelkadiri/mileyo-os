@@ -45,11 +45,18 @@ export type PortalHistoryOrder = {
   statusPageUrl: string | null;
 };
 
+export type PortalDeliveryCutoffStatus = {
+  deadlineLabel: string | null;
+  isKnown: boolean;
+  isPassed: boolean;
+};
+
 export type PortalSelection = {
   boxChangeBlocked: boolean;
   boxChangeBlockedReason: string | null;
   modificationBlocked: boolean;
   modificationBlockedReason: string | null;
+  deliveryCutoff: PortalDeliveryCutoffStatus;
   boxProductShopifyId: string | null;
   boxSubscriptionPrice: string | null;
   boxTitle: string | null;
