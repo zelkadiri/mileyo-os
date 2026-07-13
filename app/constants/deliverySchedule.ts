@@ -3,6 +3,11 @@ export const DELIVERY_TIMEZONE = "Europe/Paris" as const;
 export const DELIVERY_MIN_OFFSET_DAYS = 3;
 export const DELIVERY_MAX_OFFSET_DAYS = 10;
 
+/** Last calendar day for portal modifications before delivery (J-3 at 23:59 Paris). */
+export const DELIVERY_CUTOFF_OFFSET_DAYS = 3;
+export const DELIVERY_CUTOFF_HOUR = 23;
+export const DELIVERY_CUTOFF_MINUTE = 59;
+
 /** 0 = Sunday, 6 = Saturday */
 export const DELIVERY_BLOCKED_WEEKDAYS = [0] as const;
 

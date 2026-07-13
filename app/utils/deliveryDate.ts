@@ -1,5 +1,8 @@
 import {
   DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+  DELIVERY_CUTOFF_HOUR,
+  DELIVERY_CUTOFF_MINUTE,
+  DELIVERY_CUTOFF_OFFSET_DAYS,
   DELIVERY_RESCHEDULE_REASON,
   type DeliveryRescheduleReason,
   type DeliveryScheduleConfig,
@@ -12,6 +15,13 @@ export type DeliveryScheduleResult = {
   deliveryRescheduleReason: DeliveryRescheduleReason | null;
   desiredDeliveryDate: DeliveryDateString;
   scheduledDeliveryDate: DeliveryDateString;
+};
+
+export type DeliveryCutoffStatus = {
+  cutoffDate: DeliveryDateString | null;
+  deadlineLabel: string | null;
+  isKnown: boolean;
+  isPassed: boolean;
 };
 
 export type ScheduleDeliveryDateInput = {
@@ -319,6 +329,111 @@ export const computeRenewalDeliveryDate = ({
     fromCustomerChoice: false,
     referenceDate,
   });
+};
+
+const getParisTimeParts = (
+  instant: Date,
+  timezone: string = DEFAULT_DELIVERY_SCHEDULE_CONFIG.timezone,
+) => {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    timeZone: timezone,
+  }).formatToParts(instant);
+
+  const read = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? "0");
+
+  return {
+    hour: read("hour"),
+    minute: read("minute"),
+  };
+};
+
+const isCutoffDeadlinePassedOnCalendarDay = (
+  instant: Date,
+  timezone: string = DEFAULT_DELIVERY_SCHEDULE_CONFIG.timezone,
+) => {
+  const { hour, minute } = getParisTimeParts(instant, timezone);
+
+  return (
+    hour > DELIVERY_CUTOFF_HOUR ||
+    (hour === DELIVERY_CUTOFF_HOUR && minute > DELIVERY_CUTOFF_MINUTE)
+  );
+};
+
+export const getDeliveryCutoffCalendarDate = (
+  scheduledDeliveryDate: DeliveryDateString,
+): DeliveryDateString =>
+  addCalendarDays(scheduledDeliveryDate, -DELIVERY_CUTOFF_OFFSET_DAYS);
+
+export const formatDeliveryCutoffDeadlineLabel = (
+  scheduledDeliveryDate: string | null | undefined,
+  options?: { locale?: string },
+): string | null => {
+  const parsed = parseDeliveryDate(scheduledDeliveryDate);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const cutoffDate = getDeliveryCutoffCalendarDate(parsed);
+  const { day, month, year } = splitDeliveryDate(cutoffDate);
+  const utcNoon = new Date(Date.UTC(year, month - 1, day, 12));
+  const locale = options?.locale ?? "fr-FR";
+  const weekday = new Intl.DateTimeFormat(locale, {
+    timeZone: "UTC",
+    weekday: "long",
+  }).format(utcNoon);
+  const rest = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  }).format(utcNoon);
+
+  return `${weekday} ${rest} à ${DELIVERY_CUTOFF_HOUR}h${String(DELIVERY_CUTOFF_MINUTE).padStart(2, "0")}`;
+};
+
+export const isDeliveryCutoffPassed = (
+  scheduledDeliveryDate: string | null | undefined,
+  now: Date = new Date(),
+  config: DeliveryScheduleConfig = DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+): boolean => getDeliveryCutoffStatus(scheduledDeliveryDate, now, config).isPassed;
+
+export const getDeliveryCutoffStatus = (
+  scheduledDeliveryDate: string | null | undefined,
+  now: Date = new Date(),
+  config: DeliveryScheduleConfig = DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+): DeliveryCutoffStatus => {
+  const parsed = parseDeliveryDate(scheduledDeliveryDate);
+
+  if (!parsed) {
+    return {
+      cutoffDate: null,
+      deadlineLabel: null,
+      isKnown: false,
+      isPassed: false,
+    };
+  }
+
+  const cutoffDate = getDeliveryCutoffCalendarDate(parsed);
+  const todayParis = referenceDateFromInstant(now, config.timezone);
+  const deadlineLabel = formatDeliveryCutoffDeadlineLabel(parsed);
+  let isPassed = false;
+
+  if (compareDeliveryDates(todayParis, cutoffDate) > 0) {
+    isPassed = true;
+  } else if (compareDeliveryDates(todayParis, cutoffDate) === 0) {
+    isPassed = isCutoffDeadlinePassedOnCalendarDay(now, config.timezone);
+  }
+
+  return {
+    cutoffDate,
+    deadlineLabel,
+    isKnown: true,
+    isPassed,
+  };
 };
 
 export const formatDeliveryDateLabel = (
