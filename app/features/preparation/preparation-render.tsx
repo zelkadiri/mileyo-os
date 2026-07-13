@@ -16,6 +16,8 @@ import {
 import {
   chipLinkStyle,
   chipRowStyle,
+  cutoffBadgeStyle,
+  cutoffChipDotStyle,
   dateInputStyle,
   datePickerRowStyle,
   emptyStateStyle,
@@ -39,7 +41,7 @@ import {
 type PreparationPageData = Awaited<ReturnType<typeof loadPreparationPageData>>;
 
 export default function PreparationPage() {
-  const { dateQueryInvalid, dayData, selectedDate, upcomingDates } =
+  const { dateQueryInvalid, dayData, selectedCutoff, selectedDate, upcomingDates } =
     useLoaderData<PreparationPageData>();
   const summary = dayData?.summary ?? null;
   const hasOrders = (summary?.totalOrders ?? 0) > 0;
@@ -89,6 +91,18 @@ export default function PreparationPage() {
                       short: true,
                     })}{" "}
                     ({entry.orderCount})
+                    {entry.cutoff?.isKnown ? (
+                      <span
+                        aria-label={
+                          entry.cutoff.isPassed
+                            ? "Cutoff passé"
+                            : "Modifications ouvertes"
+                        }
+                        style={cutoffChipDotStyle(
+                          entry.cutoff.isPassed ? "closed" : "open",
+                        )}
+                      />
+                    ) : null}
                   </a>
                 ))}
               </div>
@@ -107,6 +121,20 @@ export default function PreparationPage() {
                       {formatDeliveryDateLabel(selectedDate)}
                     </strong>
                   </s-text>
+                  {selectedCutoff?.isKnown ? (
+                    <div>
+                      {selectedCutoff.isPassed ? (
+                        <span style={cutoffBadgeStyle("closed")}>
+                          Cutoff passé — cette livraison est en préparation
+                        </span>
+                      ) : selectedCutoff.deadlineLabel ? (
+                        <span style={cutoffBadgeStyle("open")}>
+                          Modifications ouvertes jusqu’au{" "}
+                          {selectedCutoff.deadlineLabel}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   <div style={summaryGridStyle}>
                     <div style={summaryCardStyle}>
                       <p style={summaryLabelStyle}>Commandes</p>

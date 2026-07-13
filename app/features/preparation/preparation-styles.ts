@@ -146,3 +146,27 @@ export const chipLinkStyle = (active: boolean) =>
     padding: "0.4rem 0.75rem",
     textDecoration: "none",
   }) as const;
+
+export const cutoffBadgeStyle = (variant: "open" | "closed") =>
+  ({
+    background: variant === "open" ? "rgba(124, 201, 167, 0.18)" : "rgba(243, 203, 184, 0.35)",
+    border: `1px solid ${
+      variant === "open" ? "rgba(124, 201, 167, 0.42)" : "rgba(243, 203, 184, 0.72)"
+    }`,
+    borderRadius: "999px",
+    color: variant === "open" ? "#2f6f57" : "#8b4f2f",
+    display: "inline-flex",
+    fontSize: "0.8rem",
+    fontWeight: 700,
+    padding: "0.35rem 0.7rem",
+  }) as const;
+
+export const cutoffChipDotStyle = (variant: "open" | "closed") =>
+  ({
+    background: variant === "open" ? "#7cc9a7" : "#f3cbb8",
+    borderRadius: "999px",
+    display: "inline-block",
+    height: "0.55rem",
+    marginLeft: "0.45rem",
+    width: "0.55rem",
+  }) as const;

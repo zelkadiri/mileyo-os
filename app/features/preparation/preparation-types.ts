@@ -36,11 +36,21 @@ export type PreparationDayData = {
 };
 
 export type UpcomingPreparationDate = {
+  cutoff: {
+    deadlineLabel: string | null;
+    isKnown: boolean;
+    isPassed: boolean;
+  };
   orderCount: number;
   scheduledDeliveryDate: DeliveryDateString;
 };
 
 export type PreparationPageData = {
+  selectedCutoff: {
+    deadlineLabel: string | null;
+    isKnown: boolean;
+    isPassed: boolean;
+  } | null;
   dateQueryInvalid: boolean;
   dayData: PreparationDayData | null;
   selectedDate: DeliveryDateString | null;

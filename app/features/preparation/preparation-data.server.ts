@@ -2,6 +2,7 @@ import db from "../../db.server";
 import { authenticate } from "../../shopify.server";
 import {
   getTodayDeliveryDate,
+  getDeliveryCutoffStatus,
   parseDeliveryDate,
   type DeliveryDateString,
 } from "../../utils/deliveryDate";
@@ -179,6 +180,15 @@ export const getUpcomingPreparationDates = async (
     }
 
     dates.push({
+      cutoff: (() => {
+        const cutoff = getDeliveryCutoffStatus(scheduledDeliveryDate);
+
+        return {
+          deadlineLabel: cutoff.deadlineLabel,
+          isKnown: cutoff.isKnown,
+          isPassed: cutoff.isPassed,
+        };
+      })(),
       orderCount: row._count._all,
       scheduledDeliveryDate,
     });
@@ -223,6 +233,18 @@ export const loadPreparationPageData = async (
     dateQueryInvalid,
     dayData,
     selectedDate: dateQueryInvalid ? null : selectedDate,
+    selectedCutoff:
+      selectedDate && !dateQueryInvalid
+        ? (() => {
+            const cutoff = getDeliveryCutoffStatus(selectedDate);
+
+            return {
+              deadlineLabel: cutoff.deadlineLabel,
+              isKnown: cutoff.isKnown,
+              isPassed: cutoff.isPassed,
+            };
+          })()
+        : null,
     upcomingDates,
   };
 };
