@@ -14,8 +14,8 @@ import {
   resolvePaymentUpdateEligibility,
 } from "../../services/subscriptionPaymentRecovery.server";
 import {
-  getSubscriptionModificationBlockMessage,
-  getSubscriptionModificationBlockReason,
+  getPortalModificationBlockMessage,
+  getPortalModificationBlockReason,
 } from "../../services/subscriptionModificationBlock.server";
 import {
   fetchBoxCatalogProducts,
@@ -266,7 +266,7 @@ export const loadPortalData = async ({
           }
         }
 
-        const modificationBlockReason = getSubscriptionModificationBlockReason(
+        const modificationBlockReason = getPortalModificationBlockReason(
           reconciled,
           recoveryRecord,
         );
@@ -320,11 +320,11 @@ export const loadPortalData = async ({
         return {
           boxChangeBlocked: modificationBlockReason !== null,
           boxChangeBlockedReason: modificationBlockReason
-            ? getSubscriptionModificationBlockMessage(modificationBlockReason)
+            ? getPortalModificationBlockMessage(modificationBlockReason)
             : null,
           modificationBlocked: modificationBlockReason !== null,
           modificationBlockedReason: modificationBlockReason
-            ? getSubscriptionModificationBlockMessage(modificationBlockReason)
+            ? getPortalModificationBlockMessage(modificationBlockReason)
             : null,
           boxProductShopifyId:
             reconciled.boxProductShopifyId ?? currentBox?.id ?? null,

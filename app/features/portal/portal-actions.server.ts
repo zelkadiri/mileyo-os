@@ -22,8 +22,9 @@ import {
 } from "../../services/subscriptionPaymentRecovery.server";
 import { updateSubscriptionContractBoxViaDraft } from "../../services/subscriptionContractBoxChange.server";
 import {
-  getSubscriptionModificationBlockMessage,
-  getSubscriptionModificationBlockReason,
+  getPortalModificationBlockMessage,
+  getPortalModificationBlockReason,
+  type PortalModificationActionKind,
 } from "../../services/subscriptionModificationBlock.server";
 import {
   fetchTrustedBoxCatalog,
@@ -176,6 +177,81 @@ const loadSyncedSelectionForAction = async ({
   return { error: null, selection: guard.selection };
 };
 
+const renderPortalModificationBlocked = async ({
+  actionKind,
+  blockReason,
+  customerShopifyId,
+  intent,
+  selectionId,
+  shop,
+}: {
+  actionKind: PortalModificationActionKind;
+  blockReason: NonNullable<ReturnType<typeof getPortalModificationBlockReason>>;
+  customerShopifyId: string;
+  intent: string;
+  selectionId: string;
+  shop: string;
+}) => {
+  console.log("[portal] modification blocked by getPortalModificationBlockReason", {
+    blockReason,
+    intent,
+    selectionId,
+    shop,
+  });
+
+  const portalData = await loadPortalData({ customerShopifyId, shop });
+
+  if (!portalData) {
+    return renderMessage("Configuration incomplète.");
+  }
+
+  return renderPortal({
+    ...portalData,
+    errorMessage: getPortalModificationBlockMessage(blockReason, actionKind),
+  });
+};
+
+const getPortalModificationBlockResponse = async ({
+  actionKind,
+  customerShopifyId,
+  intent,
+  recoveryRecord,
+  selection,
+  shop,
+}: {
+  actionKind: PortalModificationActionKind;
+  customerShopifyId: string;
+  intent: string;
+  recoveryRecord?: { status: string } | null;
+  selection: {
+    active: boolean;
+    id: string;
+    lastBillingAttemptAt: Date | null;
+    lastBillingAttemptStatus: string | null;
+    nextScheduledDeliveryDate: string | null;
+    resumeAttemptOrderId: string | null;
+    resumeAttemptStatus: string | null;
+    status: string;
+    subscriptionContractId: string | null;
+  };
+  shop: string;
+}) => {
+  const blockReason = getPortalModificationBlockReason(selection, recoveryRecord);
+
+  if (!blockReason) {
+    return null;
+  }
+
+  return renderPortalModificationBlocked({
+    actionKind,
+    blockReason,
+    customerShopifyId,
+    intent,
+    selectionId: selection.id,
+    shop,
+  });
+};
+
 const handlePauseSubscriptionAction = async ({
   customerShopifyId,
   selectionId,
@@ -195,6 +271,18 @@ const handlePauseSubscriptionAction = async ({
     }
 
     const selection = loaded.selection;
+
+    const blockedResponse = await getPortalModificationBlockResponse({
+      actionKind: "subscription_control",
+      customerShopifyId,
+      intent: "pauseSubscription",
+      selection,
+      shop,
+    });
+
+    if (blockedResponse) {
+      return blockedResponse;
+    }
 
     if (!selection.subscriptionContractId) {
       return renderMessage("Contrat d’abonnement Shopify manquant.");
@@ -336,6 +424,20 @@ const handleResumeSubscriptionAction = async ({
     return renderMessage("Contrat d’abonnement Shopify manquant.");
   }
 
+  const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
+  const blockedResponse = await getPortalModificationBlockResponse({
+    actionKind: "subscription_control",
+    customerShopifyId,
+    intent: "resumeSubscription",
+    recoveryRecord,
+    selection,
+    shop,
+  });
+
+  if (blockedResponse) {
+    return blockedResponse;
+  }
+
   const settings = await prisma.appSettings.findUnique({ where: { shop } });
 
   if (!settings?.mealCollectionId) {
@@ -365,7 +467,6 @@ const handleResumeSubscriptionAction = async ({
     where: { id: selection.id },
   });
 
-  const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
   const resumeMode = await resolvePortalResumeMode({
     admin,
     localNextBillingDate: selection.nextBillingDate,
@@ -452,6 +553,20 @@ const handleResumeSubscriptionAndPayAction = async ({
       return renderMessage("Contrat d’abonnement Shopify manquant.");
     }
 
+    const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
+    const blockedResponse = await getPortalModificationBlockResponse({
+      actionKind: "subscription_control",
+      customerShopifyId,
+      intent: "resumeSubscriptionAndPay",
+      recoveryRecord,
+      selection,
+      shop,
+    });
+
+    if (blockedResponse) {
+      return blockedResponse;
+    }
+
     const settings = await prisma.appSettings.findUnique({ where: { shop } });
 
     if (!settings?.mealCollectionId) {
@@ -481,7 +596,6 @@ const handleResumeSubscriptionAndPayAction = async ({
       where: { id: selection.id },
     });
 
-    const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
     const resumeMode = await resolvePortalResumeMode({
       admin,
       localNextBillingDate: selection.nextBillingDate,
@@ -919,32 +1033,17 @@ const handleChangeSubscriptionBoxAction = async ({
     }
 
     const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
-    const blockReason = getSubscriptionModificationBlockReason(
-      selection,
+    const blockedResponse = await getPortalModificationBlockResponse({
+      actionKind: "modification",
+      customerShopifyId,
+      intent: "changeSubscriptionBox",
       recoveryRecord,
-    );
+      selection,
+      shop,
+    });
 
-    if (blockReason) {
-      console.log(
-        "[portal] modification blocked by getSubscriptionModificationBlockReason",
-        {
-          blockReason,
-          intent: "changeSubscriptionBox",
-          selectionId: selection.id,
-          shop,
-        },
-      );
-
-      const portalData = await loadPortalData({ customerShopifyId, shop });
-
-      if (!portalData) {
-        return renderMessage("Configuration incomplète.");
-      }
-
-      return renderPortal({
-        ...portalData,
-        errorMessage: getSubscriptionModificationBlockMessage(blockReason),
-      });
+    if (blockedResponse) {
+      return blockedResponse;
     }
 
     const [trustedBoxes, mealProducts] = await Promise.all([
@@ -1054,32 +1153,17 @@ const handleUpdateFutureMealSelectionAction = async ({
   }
 
   const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
-  const blockReason = getSubscriptionModificationBlockReason(
-    selection,
+  const blockedResponse = await getPortalModificationBlockResponse({
+    actionKind: "modification",
+    customerShopifyId,
+    intent: "updateFutureMealSelection",
     recoveryRecord,
-  );
+    selection,
+    shop,
+  });
 
-  if (blockReason) {
-    console.log(
-      "[portal] modification blocked by getSubscriptionModificationBlockReason",
-      {
-        blockReason,
-        intent: "updateFutureMealSelection",
-        selectionId: selection.id,
-        shop,
-      },
-    );
-
-    const portalData = await loadPortalData({ customerShopifyId, shop });
-
-    if (!portalData) {
-      return renderMessage("Configuration incomplète.");
-    }
-
-    return renderPortal({
-      ...portalData,
-      errorMessage: getSubscriptionModificationBlockMessage(blockReason),
-    });
+  if (blockedResponse) {
+    return blockedResponse;
   }
 
   const settings = await prisma.appSettings.findUnique({ where: { shop } });

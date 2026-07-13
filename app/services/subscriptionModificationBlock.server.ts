@@ -5,12 +5,25 @@ import {
   isResumeAttemptInFlight,
   RESUME_LOCK_STATUS,
 } from "./subscriptionBillingWorker.server";
+import {
+  getDeliveryCutoffBlockMessage,
+  getDeliveryCutoffBlockReason,
+  type DeliveryCutoffBlockReason,
+} from "./deliveryCutoff.server";
 
 export type SubscriptionModificationBlockReason =
   | "billing_processing"
   | "missing_contract"
   | "recovery_processing"
   | "resume_processing";
+
+export type PortalModificationBlockReason =
+  | SubscriptionModificationBlockReason
+  | DeliveryCutoffBlockReason;
+
+export type PortalModificationActionKind =
+  | "modification"
+  | "subscription_control";
 
 /** Billing attempt statuses that mean an order may still be created. */
 export const IN_FLIGHT_BILLING_ATTEMPT_STATUSES = new Set([
@@ -62,6 +75,34 @@ export const getSubscriptionModificationBlockReason = (
   return null;
 };
 
+export const getPortalModificationBlockReason = (
+  selection: {
+    active: boolean;
+    lastBillingAttemptAt: Date | null;
+    lastBillingAttemptStatus: string | null;
+    nextScheduledDeliveryDate: string | null;
+    resumeAttemptOrderId: string | null;
+    resumeAttemptStatus: string | null;
+    status: string;
+    subscriptionContractId: string | null;
+  },
+  recovery?: {
+    status: string;
+  } | null,
+  now: Date = new Date(),
+): PortalModificationBlockReason | null => {
+  const billingBlockReason = getSubscriptionModificationBlockReason(
+    selection,
+    recovery,
+  );
+
+  if (billingBlockReason) {
+    return billingBlockReason;
+  }
+
+  return getDeliveryCutoffBlockReason(selection, now);
+};
+
 export const getSubscriptionModificationBlockMessage = (
   reason: SubscriptionModificationBlockReason,
 ) => {
@@ -77,4 +118,15 @@ export const getSubscriptionModificationBlockMessage = (
     default:
       return "Modification indisponible pour le moment.";
   }
+};
+
+export const getPortalModificationBlockMessage = (
+  reason: PortalModificationBlockReason,
+  actionKind: PortalModificationActionKind = "modification",
+) => {
+  if (reason === "cutoff_passed") {
+    return getDeliveryCutoffBlockMessage(reason, actionKind);
+  }
+
+  return getSubscriptionModificationBlockMessage(reason);
 };
