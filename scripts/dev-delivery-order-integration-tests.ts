@@ -5,11 +5,14 @@
 import { DELIVERY_RESCHEDULE_REASON } from "../app/constants/deliverySchedule";
 import db from "../app/db.server";
 import {
+  alignFirstOrderBillingWithDeliverySchedule,
+  resolveFirstOrderBillingAlignment,
   resolveFirstOrderDeliverySchedule,
   resolveRenewalDeliverySchedule,
   type FirstOrderDeliveryScheduleResolution,
   type RenewalDeliveryScheduleResolution,
 } from "../app/services/deliverySchedule.server";
+import type { ShopifyAdminGraphql } from "../app/services/subscriptionBillingWorker.server";
 import {
   DELIVERY_DATE_PROPERTY_TECHNICAL,
   getSelectedMealsFromLineItemProperties,
@@ -151,6 +154,56 @@ const persistFirstOrderDelivery = async ({
   return { boxOrder, schedule, selection };
 };
 
+const ALIGNED_NEXT_BILLING_ISO = "2026-07-20T22:05:00.000Z";
+
+const createBillingAlignmentMockAdmin = ({
+  confirmedNextBillingDate = ALIGNED_NEXT_BILLING_ISO,
+  previousNextBillingDate = "2026-07-13T00:00:00.000Z",
+}: {
+  confirmedNextBillingDate?: string;
+  previousNextBillingDate?: string | null;
+} = {}) => {
+  let setBillingDateCalledWith: string | null = null;
+
+  const admin: ShopifyAdminGraphql = {
+    graphql: async (query: string, options?: { variables?: Record<string, unknown> }) => {
+      if (query.includes("subscriptionContractSetNextBillingDate")) {
+        setBillingDateCalledWith = String(options?.variables?.date ?? "");
+
+        return {
+          json: async () => ({
+            data: {
+              subscriptionContractSetNextBillingDate: {
+                contract: { nextBillingDate: confirmedNextBillingDate },
+                userErrors: [],
+              },
+            },
+          }),
+        } as Response;
+      }
+
+      if (query.includes("subscriptionContract(")) {
+        return {
+          json: async () => ({
+            data: {
+              subscriptionContract: {
+                nextBillingDate: previousNextBillingDate,
+              },
+            },
+          }),
+        } as Response;
+      }
+
+      throw new Error(`Unexpected GraphQL query in billing alignment mock`);
+    },
+  };
+
+  return {
+    admin,
+    getSetBillingDateCalledWith: () => setBillingDateCalledWith,
+  };
+};
+
 const persistRenewalDelivery = async ({
   orderCreatedAt,
   preferredDeliveryWeekday,
@@ -210,6 +263,7 @@ async function main() {
   const noDateOrderId = `delivery_test_no_date_${Date.now()}`;
   const renewalOrderId = `delivery_test_renewal_${Date.now()}`;
   const renewalSkipOrderId = `delivery_test_renewal_skip_${Date.now()}`;
+  const billingAlignmentOrderId = `delivery_test_billing_align_${Date.now()}`;
 
   try {
     const validFirst = resolveFirstOrderDeliverySchedule({
@@ -409,12 +463,159 @@ async function main() {
       replayed.selection?.preferredDeliveryWeekday,
       4,
     );
+
+    const jPlus3Schedule = resolveFirstOrderDeliverySchedule({
+      lineItemProperties: [
+        ...sampleMealProperties,
+        { name: DELIVERY_DATE_PROPERTY_TECHNICAL, value: "2026-07-16" },
+      ],
+      orderCreatedAt: new Date("2026-07-13T12:00:00.000Z"),
+    });
+    const jPlus3Alignment = resolveFirstOrderBillingAlignment(jPlus3Schedule);
+
+    assertEqual(
+      "11. J+3 first delivery date",
+      jPlus3Alignment?.firstDeliveryDate,
+      "2026-07-16",
+    );
+    assertEqual(
+      "11. J+3 aligned next billing instant",
+      jPlus3Alignment?.alignedNextBillingDate.toISOString(),
+      ALIGNED_NEXT_BILLING_ISO,
+    );
+    assertEqual(
+      "11. J+3 next delivery date",
+      jPlus3Alignment?.nextDeliveryDate,
+      "2026-07-23",
+    );
+
+    const jPlus10Schedule = resolveFirstOrderDeliverySchedule({
+      lineItemProperties: [
+        ...sampleMealProperties,
+        { name: DELIVERY_DATE_PROPERTY_TECHNICAL, value: "2026-07-16" },
+      ],
+      orderCreatedAt: new Date("2026-07-06T12:00:00.000Z"),
+    });
+    const jPlus10Alignment = resolveFirstOrderBillingAlignment(jPlus10Schedule);
+
+    assertEqual(
+      "12. J+10 first delivery date",
+      jPlus10Alignment?.firstDeliveryDate,
+      "2026-07-16",
+    );
+    assertEqual(
+      "12. J+10 aligned billing uses second delivery cutoff",
+      jPlus10Alignment?.alignedNextBillingDate.toISOString(),
+      ALIGNED_NEXT_BILLING_ISO,
+    );
+    assertEqual(
+      "12. J+10 aligned billing is not checkout + 7",
+      jPlus10Alignment?.alignedNextBillingDate.toISOString().startsWith("2026-07-13"),
+      false,
+    );
+
+    const persistedBillingAlignment = await persistFirstOrderDelivery({
+      lineItemProperties: [
+        ...sampleMealProperties,
+        { name: DELIVERY_DATE_PROPERTY_TECHNICAL, value: "2026-07-16" },
+      ],
+      orderCreatedAt: new Date("2026-07-10T12:00:00.000Z"),
+      shopifyOrderId: billingAlignmentOrderId,
+    });
+
+    await db.subscriptionMealSelection.update({
+      data: { subscriptionContractId: "gid://shopify/SubscriptionContract/12345" },
+      where: { id: persistedBillingAlignment.selection!.id },
+    });
+
+    const billingMock = createBillingAlignmentMockAdmin();
+    const alignedResult = await alignFirstOrderBillingWithDeliverySchedule({
+      admin: billingMock.admin,
+      firstDeliverySchedule: persistedBillingAlignment.schedule,
+      selectionId: persistedBillingAlignment.selection!.id,
+      shopifyOrderId: billingAlignmentOrderId,
+      subscriptionContractId: "12345",
+    });
+
+    assertEqual("13. billing alignment status", alignedResult.status, "aligned");
+    assertEqual(
+      "13. setSubscriptionContractNextBillingDate called with aligned date",
+      billingMock.getSetBillingDateCalledWith(),
+      ALIGNED_NEXT_BILLING_ISO,
+    );
+
+    const alignedSelection = await db.subscriptionMealSelection.findUnique({
+      where: { id: persistedBillingAlignment.selection!.id },
+    });
+    assertEqual(
+      "14. selection nextBillingDate persisted after alignment",
+      alignedSelection?.nextBillingDate?.toISOString(),
+      ALIGNED_NEXT_BILLING_ISO,
+    );
+    assertEqual(
+      "14. nextScheduledDeliveryDate stays first delivery",
+      alignedSelection?.nextScheduledDeliveryDate,
+      "2026-07-16",
+    );
+    assertEqual(
+      "14. preferredDeliveryWeekday stays on scheduled date",
+      alignedSelection?.preferredDeliveryWeekday,
+      4,
+    );
+
+    const skippedNoContract = await alignFirstOrderBillingWithDeliverySchedule({
+      admin: billingMock.admin,
+      firstDeliverySchedule: persistedBillingAlignment.schedule,
+      selectionId: persistedBillingAlignment.selection!.id,
+      shopifyOrderId: billingAlignmentOrderId,
+      subscriptionContractId: null,
+    });
+    assertEqual(
+      "15. missing subscriptionContractId skips alignment",
+      skippedNoContract.status,
+      "skipped",
+    );
+
+    const skippedNoSchedule = await alignFirstOrderBillingWithDeliverySchedule({
+      admin: billingMock.admin,
+      firstDeliverySchedule: null,
+      selectionId: persistedBillingAlignment.selection!.id,
+      shopifyOrderId: billingAlignmentOrderId,
+      subscriptionContractId: "12345",
+    });
+    assertEqual(
+      "16. missing delivery schedule skips alignment",
+      skippedNoSchedule.status,
+      "skipped",
+    );
+
+    assertEqual(
+      "17. selectedMealsSource unchanged after billing alignment",
+      persistedBillingAlignment.boxOrder.selectedMealsSource,
+      "order_properties",
+    );
+
+    const replayBillingMock = createBillingAlignmentMockAdmin();
+    const replayAligned = await alignFirstOrderBillingWithDeliverySchedule({
+      admin: replayBillingMock.admin,
+      firstDeliverySchedule: persistedBillingAlignment.schedule,
+      selectionId: persistedBillingAlignment.selection!.id,
+      shopifyOrderId: billingAlignmentOrderId,
+      subscriptionContractId: "12345",
+    });
+    assertEqual("18. replay alignment stays aligned", replayAligned.status, "aligned");
+    assertEqual(
+      "18. replay alignment keeps same billing instant",
+      replayBillingMock.getSetBillingDateCalledWith(),
+      ALIGNED_NEXT_BILLING_ISO,
+    );
   } finally {
     await cleanupTestRecords(firstOrderId);
     await cleanupTestRecords(noDateOrderId);
     await cleanupTestRecords(renewalOrderId);
     await cleanupTestRecords(`${renewalOrderId}_first`);
     await cleanupTestRecords(renewalSkipOrderId);
+    await cleanupTestRecords(billingAlignmentOrderId);
   }
 
   const failed = checks.filter((check) => !check.ok);

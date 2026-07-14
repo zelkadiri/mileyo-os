@@ -26,6 +26,7 @@ import {
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
 import { unauthenticated } from "../../shopify.server";
 import {
+  alignFirstOrderBillingWithDeliverySchedule,
   logDeliveryScheduleEvent,
   resolveFirstOrderDeliverySchedule,
   resolveRenewalDeliverySchedule,
@@ -428,6 +429,22 @@ export const handleOrdersCreateWebhook = async ({
               firstOrderDeliverySchedule.preferredDeliveryWeekday,
           },
           where: { id: linkedSelection.id },
+        });
+      }
+
+      const contractIdForAlignment = normalizeShopifyId(
+        linkedSelection.subscriptionContractId,
+      );
+
+      if (firstOrderDeliverySchedule || contractIdForAlignment) {
+        const { admin } = await unauthenticated.admin(shop);
+
+        await alignFirstOrderBillingWithDeliverySchedule({
+          admin,
+          firstDeliverySchedule: firstOrderDeliverySchedule,
+          selectionId: linkedSelection.id,
+          shopifyOrderId,
+          subscriptionContractId: contractIdForAlignment,
         });
       }
     }

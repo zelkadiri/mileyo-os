@@ -1,5 +1,8 @@
 import type { DeliveryRescheduleReason } from "../constants/deliverySchedule";
+import db from "../db.server";
 import {
+  computeNextBillingDateFromCurrentDelivery,
+  computeNextWeeklyDeliveryDate,
   computeRenewalDeliveryDate,
   getWeekday,
   referenceDateFromInstant,
@@ -10,6 +13,11 @@ import {
   getDeliveryDateFromLineItemProperties,
   type LineItemProperty,
 } from "../utils/orderLineItemProperties";
+import {
+  fetchSubscriptionContractNextBillingDate,
+  setSubscriptionContractNextBillingDate,
+  type ShopifyAdminGraphql,
+} from "./subscriptionBillingWorker.server";
 
 export type FirstOrderDeliveryScheduleResolution = {
   deliveryRescheduleReason: DeliveryRescheduleReason | null;
@@ -27,6 +35,164 @@ export type RenewalDeliveryScheduleResolution = {
 };
 
 export type DeliveryScheduleLogEvent = "scheduled" | "rescheduled" | "skipped";
+
+export type FirstOrderBillingAlignment = {
+  alignedNextBillingDate: Date;
+  firstDeliveryDate: DeliveryDateString;
+  nextDeliveryDate: DeliveryDateString;
+};
+
+export type AlignFirstOrderBillingResult =
+  | {
+      alignedNextBillingDate: Date;
+      firstDeliveryDate: DeliveryDateString;
+      nextDeliveryDate: DeliveryDateString;
+      previousNextBillingDate: Date | null;
+      status: "aligned";
+    }
+  | { reason: string; status: "skipped" }
+  | { error: string; status: "failed" };
+
+export const resolveFirstOrderBillingAlignment = (
+  firstDeliverySchedule: FirstOrderDeliveryScheduleResolution | null,
+): FirstOrderBillingAlignment | null => {
+  if (!firstDeliverySchedule) {
+    return null;
+  }
+
+  const alignedNextBillingDate = computeNextBillingDateFromCurrentDelivery(
+    firstDeliverySchedule.scheduledDeliveryDate,
+  );
+
+  if (!alignedNextBillingDate) {
+    return null;
+  }
+
+  return {
+    alignedNextBillingDate,
+    firstDeliveryDate: firstDeliverySchedule.scheduledDeliveryDate,
+    nextDeliveryDate: computeNextWeeklyDeliveryDate(
+      firstDeliverySchedule.scheduledDeliveryDate,
+    ),
+  };
+};
+
+export const alignFirstOrderBillingWithDeliverySchedule = async ({
+  admin,
+  firstDeliverySchedule,
+  selectionId,
+  shopifyOrderId,
+  subscriptionContractId,
+}: {
+  admin: ShopifyAdminGraphql;
+  firstDeliverySchedule: FirstOrderDeliveryScheduleResolution | null;
+  selectionId: string;
+  shopifyOrderId: string;
+  subscriptionContractId: string | null;
+}): Promise<AlignFirstOrderBillingResult> => {
+  if (!subscriptionContractId) {
+    console.log("[BILLING_ALIGNMENT] skipped", {
+      reason: "missing_subscription_contract_id",
+      selectionId,
+      shopifyOrderId,
+    });
+
+    return { reason: "missing_subscription_contract_id", status: "skipped" };
+  }
+
+  const alignment = resolveFirstOrderBillingAlignment(firstDeliverySchedule);
+
+  if (!alignment) {
+    console.log("[BILLING_ALIGNMENT] skipped", {
+      reason: "missing_delivery_schedule",
+      selectionId,
+      shopifyOrderId,
+      subscriptionContractId,
+    });
+
+    return { reason: "missing_delivery_schedule", status: "skipped" };
+  }
+
+  let previousNextBillingDate: Date | null = null;
+
+  try {
+    previousNextBillingDate = await fetchSubscriptionContractNextBillingDate(
+      admin,
+      subscriptionContractId,
+    );
+  } catch (error) {
+    console.log("[BILLING_ALIGNMENT] previous nextBillingDate fetch failed", {
+      error: error instanceof Error ? error.message : error,
+      selectionId,
+      shopifyOrderId,
+      subscriptionContractId,
+    });
+  }
+
+  try {
+    const shopifyUpdate = await setSubscriptionContractNextBillingDate(
+      admin,
+      subscriptionContractId,
+      alignment.alignedNextBillingDate,
+    );
+
+    if (!shopifyUpdate.ok) {
+      console.log("[BILLING_ALIGNMENT] failed", {
+        error: shopifyUpdate.error,
+        firstDeliveryDate: alignment.firstDeliveryDate,
+        nextDeliveryDate: alignment.nextDeliveryDate,
+        previousNextBillingDate: previousNextBillingDate?.toISOString() ?? null,
+        reason: "aligned_with_delivery_cutoff",
+        selectionId,
+        shopifyOrderId,
+        subscriptionContractId,
+        targetNextBillingDate: alignment.alignedNextBillingDate.toISOString(),
+      });
+
+      return { error: shopifyUpdate.error, status: "failed" };
+    }
+
+    await db.subscriptionMealSelection.update({
+      data: { nextBillingDate: shopifyUpdate.nextBillingDate },
+      where: { id: selectionId },
+    });
+
+    console.log("[BILLING_ALIGNMENT] aligned_with_delivery_cutoff", {
+      alignedNextBillingDate: shopifyUpdate.nextBillingDate.toISOString(),
+      firstDeliveryDate: alignment.firstDeliveryDate,
+      nextDeliveryDate: alignment.nextDeliveryDate,
+      previousNextBillingDate: previousNextBillingDate?.toISOString() ?? null,
+      reason: "aligned_with_delivery_cutoff",
+      selectionId,
+      shopifyOrderId,
+      subscriptionContractId,
+    });
+
+    return {
+      alignedNextBillingDate: shopifyUpdate.nextBillingDate,
+      firstDeliveryDate: alignment.firstDeliveryDate,
+      nextDeliveryDate: alignment.nextDeliveryDate,
+      previousNextBillingDate,
+      status: "aligned",
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    console.log("[BILLING_ALIGNMENT] failed", {
+      error: message,
+      firstDeliveryDate: alignment.firstDeliveryDate,
+      nextDeliveryDate: alignment.nextDeliveryDate,
+      previousNextBillingDate: previousNextBillingDate?.toISOString() ?? null,
+      reason: "aligned_with_delivery_cutoff",
+      selectionId,
+      shopifyOrderId,
+      subscriptionContractId,
+      targetNextBillingDate: alignment.alignedNextBillingDate.toISOString(),
+    });
+
+    return { error: message, status: "failed" };
+  }
+};
 
 const toReferenceDate = (
   orderCreatedAt: Date | null | undefined,
