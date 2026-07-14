@@ -8,6 +8,14 @@ export const DELIVERY_CUTOFF_OFFSET_DAYS = 3;
 export const DELIVERY_CUTOFF_HOUR = 23;
 export const DELIVERY_CUTOFF_MINUTE = 59;
 
+/** Billing may run at 00:05 Paris on J-2 (5 minutes after cutoff at J-3 23:59). */
+export const DELIVERY_BILLING_READY_HOUR = 0;
+export const DELIVERY_BILLING_READY_MINUTE = 5;
+export const DELIVERY_BILLING_READY_AFTER_CUTOFF_MINUTES = 5;
+
+/** Weekly renewal cadence between deliveries. */
+export const DELIVERY_WEEKLY_INTERVAL_DAYS = 7;
+
 /** 0 = Sunday, 6 = Saturday */
 export const DELIVERY_BLOCKED_WEEKDAYS = [0] as const;
 

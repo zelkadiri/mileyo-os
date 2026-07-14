@@ -1,9 +1,12 @@
 import {
   DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+  DELIVERY_BILLING_READY_HOUR,
+  DELIVERY_BILLING_READY_MINUTE,
   DELIVERY_CUTOFF_HOUR,
   DELIVERY_CUTOFF_MINUTE,
   DELIVERY_CUTOFF_OFFSET_DAYS,
   DELIVERY_RESCHEDULE_REASON,
+  DELIVERY_WEEKLY_INTERVAL_DAYS,
   type DeliveryRescheduleReason,
   type DeliveryScheduleConfig,
 } from "../constants/deliverySchedule";
@@ -434,6 +437,123 @@ export const getDeliveryCutoffStatus = (
     isKnown: true,
     isPassed,
   };
+};
+
+export const parisWallClockToInstant = ({
+  date,
+  hour,
+  minute,
+  second = 0,
+  timezone = DEFAULT_DELIVERY_SCHEDULE_CONFIG.timezone,
+}: {
+  date: DeliveryDateString;
+  hour: number;
+  minute: number;
+  second?: number;
+  timezone?: string;
+}): Date => {
+  const { day, month, year } = splitDeliveryDate(date);
+  const target = { day, hour, minute, month, second, year };
+
+  const readWallClock = (instant: Date) => {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      hour: "2-digit",
+      hour12: false,
+      minute: "2-digit",
+      month: "2-digit",
+      second: "2-digit",
+      timeZone: timezone,
+      year: "numeric",
+    }).formatToParts(instant);
+
+    const read = (type: Intl.DateTimeFormatPartTypes) =>
+      Number(parts.find((part) => part.type === type)?.value ?? "0");
+
+    return {
+      day: read("day"),
+      hour: read("hour"),
+      minute: read("minute"),
+      month: read("month"),
+      second: read("second"),
+      year: read("year"),
+    };
+  };
+
+  const compareWallClock = (
+    left: typeof target,
+    right: typeof target,
+  ) => {
+    for (const key of ["year", "month", "day", "hour", "minute", "second"] as const) {
+      if (left[key] !== right[key]) {
+        return left[key] - right[key];
+      }
+    }
+
+    return 0;
+  };
+
+  const base = Date.UTC(year, month - 1, day);
+  let lo = base - 24 * 60 * 60 * 1000;
+  let hi = base + 48 * 60 * 60 * 1000;
+
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const wallClock = readWallClock(new Date(mid));
+
+    if (compareWallClock(wallClock, target) < 0) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+
+  return new Date(lo);
+};
+
+export const getBillingReadyCalendarDate = (
+  deliveryDate: DeliveryDateString,
+): DeliveryDateString =>
+  addCalendarDays(getDeliveryCutoffCalendarDate(deliveryDate), 1);
+
+export const computeNextWeeklyDeliveryDate = (
+  currentDeliveryDate: DeliveryDateString,
+): DeliveryDateString =>
+  addCalendarDays(currentDeliveryDate, DELIVERY_WEEKLY_INTERVAL_DAYS);
+
+export const computeBillingReadyAtForDelivery = (
+  deliveryDate: string | null | undefined,
+  config: DeliveryScheduleConfig = DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+): Date | null => {
+  const parsed = parseDeliveryDate(deliveryDate);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const billingReadyDate = getBillingReadyCalendarDate(parsed);
+
+  return parisWallClockToInstant({
+    date: billingReadyDate,
+    hour: DELIVERY_BILLING_READY_HOUR,
+    minute: DELIVERY_BILLING_READY_MINUTE,
+    timezone: config.timezone,
+  });
+};
+
+export const computeNextBillingDateFromCurrentDelivery = (
+  currentDeliveryDate: string | null | undefined,
+  config: DeliveryScheduleConfig = DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+): Date | null => {
+  const parsed = parseDeliveryDate(currentDeliveryDate);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const nextDeliveryDate = computeNextWeeklyDeliveryDate(parsed);
+
+  return computeBillingReadyAtForDelivery(nextDeliveryDate, config);
 };
 
 export const formatDeliveryDateLabel = (
