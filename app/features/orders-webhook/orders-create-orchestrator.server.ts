@@ -14,7 +14,6 @@ import {
 } from "../../services/subscriptionMealSelection.server";
 import {
   completeResumeRenewalFromWebhook,
-  fetchSubscriptionContractNextBillingDate,
   isResumeOrderAlreadyScheduled,
   isResumeRenewalOrder,
 } from "../../services/subscriptionBillingWorker.server";
@@ -27,9 +26,10 @@ import { normalizeShopifyId } from "../../utils/shopifyIds.server";
 import { unauthenticated } from "../../shopify.server";
 import {
   alignFirstOrderBillingWithDeliverySchedule,
+  alignRenewalBillingWithDeliverySchedule,
   logDeliveryScheduleEvent,
   resolveFirstOrderDeliverySchedule,
-  resolveRenewalDeliverySchedule,
+  resolveRenewalDeliveryScheduleFromSelection,
   type FirstOrderDeliveryScheduleResolution,
   type RenewalDeliveryScheduleResolution,
 } from "../../services/deliverySchedule.server";
@@ -273,9 +273,15 @@ export const handleOrdersCreateWebhook = async ({
 
   const renewalDeliverySchedule =
     isRenewal && matchedSelection
-      ? resolveRenewalDeliverySchedule({
+      ? resolveRenewalDeliveryScheduleFromSelection({
           orderCreatedAt,
-          preferredDeliveryWeekday: matchedSelection.preferredDeliveryWeekday,
+          selection: {
+            nextScheduledDeliveryDate:
+              matchedSelection.nextScheduledDeliveryDate,
+            preferredDeliveryWeekday: matchedSelection.preferredDeliveryWeekday,
+          },
+          selectionId: matchedSelection.id,
+          shopifyOrderId,
         })
       : null;
 
@@ -537,46 +543,14 @@ export const handleOrdersCreateWebhook = async ({
           shopifyOrderId,
         });
       } else {
-        console.log("[ORDERS_CREATE] nextBillingDate sync start", {
+        await alignRenewalBillingWithDeliverySchedule({
+          admin,
+          renewalScheduledDeliveryDate:
+            renewalDeliverySchedule?.scheduledDeliveryDate ?? null,
           selectionId: matchedSelection.id,
           shopifyOrderId,
           subscriptionContractId: contractIdForSync,
         });
-
-        try {
-          const nextBillingDate = await fetchSubscriptionContractNextBillingDate(
-            admin,
-            contractIdForSync,
-          );
-
-          if (!nextBillingDate) {
-            console.log("[ORDERS_CREATE] nextBillingDate sync skipped", {
-              reason: "no_date_returned",
-              selectionId: matchedSelection.id,
-              shopifyOrderId,
-              subscriptionContractId: contractIdForSync,
-            });
-          } else {
-            await db.subscriptionMealSelection.update({
-              data: { nextBillingDate },
-              where: { id: matchedSelection.id },
-            });
-
-            console.log("[ORDERS_CREATE] nextBillingDate synced", {
-              nextBillingDate: nextBillingDate.toISOString(),
-              selectionId: matchedSelection.id,
-              shopifyOrderId,
-              subscriptionContractId: contractIdForSync,
-            });
-          }
-        } catch (error) {
-          console.log("[ORDERS_CREATE] nextBillingDate sync failed", {
-            error: error instanceof Error ? error.message : error,
-            selectionId: matchedSelection.id,
-            shopifyOrderId,
-            subscriptionContractId: contractIdForSync,
-          });
-        }
       }
     }
   }

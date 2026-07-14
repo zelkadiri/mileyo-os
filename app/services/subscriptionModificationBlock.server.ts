@@ -81,6 +81,7 @@ export const getPortalModificationBlockReason = (
     lastBillingAttemptAt: Date | null;
     lastBillingAttemptStatus: string | null;
     nextScheduledDeliveryDate: string | null;
+    preferredDeliveryWeekday?: number | null;
     resumeAttemptOrderId: string | null;
     resumeAttemptStatus: string | null;
     status: string;

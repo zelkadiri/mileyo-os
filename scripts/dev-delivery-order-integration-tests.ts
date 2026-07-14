@@ -6,17 +6,26 @@ import { DELIVERY_RESCHEDULE_REASON } from "../app/constants/deliverySchedule";
 import db from "../app/db.server";
 import {
   alignFirstOrderBillingWithDeliverySchedule,
+  alignRenewalBillingWithDeliverySchedule,
   resolveFirstOrderBillingAlignment,
   resolveFirstOrderDeliverySchedule,
   resolveRenewalDeliverySchedule,
+  resolveRenewalDeliveryScheduleFromSelection,
   type FirstOrderDeliveryScheduleResolution,
   type RenewalDeliveryScheduleResolution,
 } from "../app/services/deliverySchedule.server";
 import type { ShopifyAdminGraphql } from "../app/services/subscriptionBillingWorker.server";
 import {
+  getPortalModificationBlockReason,
+} from "../app/services/subscriptionModificationBlock.server";
+import {
   DELIVERY_DATE_PROPERTY_TECHNICAL,
   getSelectedMealsFromLineItemProperties,
 } from "../app/utils/orderLineItemProperties";
+import {
+  computeNextBillingDateFromCurrentDelivery,
+  projectActiveScheduledDeliveryDate,
+} from "../app/utils/deliveryDate";
 
 type Check = { detail: string; name: string; ok: boolean };
 
@@ -155,6 +164,7 @@ const persistFirstOrderDelivery = async ({
 };
 
 const ALIGNED_NEXT_BILLING_ISO = "2026-07-20T22:05:00.000Z";
+const RENEWAL_ALIGNED_NEXT_BILLING_ISO = "2026-07-27T22:05:00.000Z";
 
 const createBillingAlignmentMockAdmin = ({
   confirmedNextBillingDate = ALIGNED_NEXT_BILLING_ISO,
@@ -205,18 +215,34 @@ const createBillingAlignmentMockAdmin = ({
 };
 
 const persistRenewalDelivery = async ({
+  nextScheduledDeliveryDate = null,
   orderCreatedAt,
   preferredDeliveryWeekday,
   shopifyOrderId,
+  subscriptionContractId = null,
 }: {
+  nextScheduledDeliveryDate?: string | null;
   orderCreatedAt: Date;
   preferredDeliveryWeekday: number | null;
   shopifyOrderId: string;
+  subscriptionContractId?: string | null;
 }) => {
-  const schedule = resolveRenewalDeliverySchedule({
-    orderCreatedAt,
-    preferredDeliveryWeekday,
+  const selection = await db.subscriptionMealSelection.findFirst({
+    where: { shop: TEST_SHOP, shopifyOrderId: `${shopifyOrderId}_first` },
   });
+
+  const schedule = selection
+    ? resolveRenewalDeliveryScheduleFromSelection({
+        orderCreatedAt,
+        selection: {
+          nextScheduledDeliveryDate:
+            nextScheduledDeliveryDate ?? selection.nextScheduledDeliveryDate,
+          preferredDeliveryWeekday,
+        },
+        selectionId: selection.id,
+        shopifyOrderId,
+      })
+    : null;
   const deliveryData = buildBoxOrderDeliveryData(schedule);
 
   const boxOrder = await db.boxOrder.upsert({
@@ -242,17 +268,30 @@ const persistRenewalDelivery = async ({
     },
   });
 
-  const selection = await db.subscriptionMealSelection.findFirst({
-    where: { shop: TEST_SHOP, shopifyOrderId: `${shopifyOrderId}_first` },
-  });
-
   if (schedule && selection) {
     await db.subscriptionMealSelection.update({
       data: {
         nextScheduledDeliveryDate: schedule.scheduledDeliveryDate,
+        ...(subscriptionContractId
+          ? { subscriptionContractId }
+          : {}),
       },
       where: { id: selection.id },
     });
+
+    if (subscriptionContractId) {
+      const billingMock = createBillingAlignmentMockAdmin({
+        confirmedNextBillingDate: RENEWAL_ALIGNED_NEXT_BILLING_ISO,
+      });
+
+      await alignRenewalBillingWithDeliverySchedule({
+        admin: billingMock.admin,
+        renewalScheduledDeliveryDate: schedule.scheduledDeliveryDate,
+        selectionId: selection.id,
+        shopifyOrderId,
+        subscriptionContractId,
+      });
+    }
   }
 
   return { boxOrder, schedule, selection };
@@ -377,6 +416,7 @@ async function main() {
         boxTitle: "Box 8 repas",
         mealsCount: 8,
         nextBillingDate: new Date("2026-08-01T10:00:00.000Z"),
+        nextScheduledDeliveryDate: "2026-07-16",
         preferredDeliveryWeekday: 4,
         selectedMeals: ["Poulet tikka", "Bœuf bourguignon"],
         shop: TEST_SHOP,
@@ -386,9 +426,10 @@ async function main() {
     });
 
     const persistedRenewal = await persistRenewalDelivery({
-      orderCreatedAt: new Date("2026-07-15T12:00:00.000Z"),
+      orderCreatedAt: new Date("2026-07-21T00:05:00.000Z"),
       preferredDeliveryWeekday: 4,
       shopifyOrderId: renewalOrderId,
+      subscriptionContractId: "gid://shopify/SubscriptionContract/99999",
     });
 
     assertEqual(
@@ -439,9 +480,118 @@ async function main() {
     });
 
     assertEqual(
-      "10. nextBillingDate unchanged after renewal delivery update",
+      "10. nextBillingDate aligned after renewal delivery update",
       selectionBeforeRenewal?.nextBillingDate?.toISOString(),
-      "2026-08-01T10:00:00.000Z",
+      RENEWAL_ALIGNED_NEXT_BILLING_ISO,
+    );
+
+    const legacyRenewalSchedule = resolveRenewalDeliverySchedule({
+      orderCreatedAt: new Date("2026-07-21T00:05:00.000Z"),
+      preferredDeliveryWeekday: 4,
+    });
+
+    assertEqual(
+      "19. legacy J+3 renewal would overshoot to next week",
+      legacyRenewalSchedule?.scheduledDeliveryDate,
+      "2026-07-30",
+    );
+
+    assertEqual(
+      "19. projected renewal keeps active delivery date",
+      persistedRenewal.schedule?.scheduledDeliveryDate,
+      "2026-07-23",
+    );
+
+    const projectionAfterFirstDelivery = projectActiveScheduledDeliveryDate({
+      nextScheduledDeliveryDate: "2026-07-16",
+      now: new Date("2026-07-17T12:00:00.000Z"),
+      preferredDeliveryWeekday: 4,
+    });
+
+    assertEqual(
+      "20. stale stored date projects to next weekly delivery",
+      projectionAfterFirstDelivery.effectiveDeliveryDate,
+      "2026-07-23",
+    );
+    assertEqual(
+      "20. projection marks weekly advance",
+      projectionAfterFirstDelivery.wasProjected,
+      true,
+    );
+
+    assertEqual(
+      "21. portal guard uses projected date before cutoff",
+      getPortalModificationBlockReason(
+        {
+          active: true,
+          lastBillingAttemptAt: null,
+          lastBillingAttemptStatus: null,
+          nextScheduledDeliveryDate: "2026-07-16",
+          preferredDeliveryWeekday: 4,
+          resumeAttemptOrderId: null,
+          resumeAttemptStatus: null,
+          status: "active",
+          subscriptionContractId: "gid://shopify/SubscriptionContract/123",
+        },
+        null,
+        new Date("2026-07-17T12:00:00.000Z"),
+      ),
+      null,
+    );
+
+    const weekdayOnlyProjection = projectActiveScheduledDeliveryDate({
+      nextScheduledDeliveryDate: null,
+      now: new Date("2026-07-15T12:00:00.000Z"),
+      preferredDeliveryWeekday: 4,
+    });
+
+    assertEqual(
+      "22. weekday-only projection finds next Thursday",
+      weekdayOnlyProjection.effectiveDeliveryDate,
+      "2026-07-16",
+    );
+
+    assertNull(
+      "23. invalid projection inputs fail open",
+      projectActiveScheduledDeliveryDate({
+        nextScheduledDeliveryDate: "2026-99-99",
+        preferredDeliveryWeekday: null,
+      }).effectiveDeliveryDate,
+    );
+
+    const jPlus10RenewalProjection = projectActiveScheduledDeliveryDate({
+      nextScheduledDeliveryDate: "2026-07-16",
+      now: new Date("2026-07-20T22:10:00.000Z"),
+      preferredDeliveryWeekday: 4,
+    });
+
+    assertEqual(
+      "24. J+10 renewal billing targets projected delivery",
+      resolveRenewalDeliveryScheduleFromSelection({
+        orderCreatedAt: new Date("2026-07-20T22:05:00.000Z"),
+        selection: {
+          nextScheduledDeliveryDate: "2026-07-16",
+          preferredDeliveryWeekday: 4,
+        },
+      })?.scheduledDeliveryDate,
+      "2026-07-23",
+    );
+    assertEqual(
+      "24. J+10 second box delivery date",
+      jPlus10RenewalProjection.effectiveDeliveryDate,
+      "2026-07-23",
+    );
+    assertEqual(
+      "24. J+10 second box billing instant",
+      computeNextBillingDateFromCurrentDelivery("2026-07-23")?.toISOString(),
+      RENEWAL_ALIGNED_NEXT_BILLING_ISO,
+    );
+    assertEqual(
+      "24. J+10 second box delivery after renewal",
+      computeNextBillingDateFromCurrentDelivery("2026-07-23")?.toISOString().startsWith(
+        "2026-07-13",
+      ),
+      false,
     );
 
     const replayed = await persistFirstOrderDelivery({

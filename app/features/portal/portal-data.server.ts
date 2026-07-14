@@ -26,7 +26,7 @@ import {
 } from "../../services/subscriptionBoxCatalog.server";
 import { getMerchantSupportContact } from "../../utils/merchantSupport.server";
 import type { PaymentUpdateUnavailableReason } from "../../constants/subscriptionPaymentRecovery";
-import { getDeliveryCutoffStatus } from "../../utils/deliveryDate";
+import { getDeliveryCutoffStatus, projectActiveScheduledDeliveryDate } from "../../utils/deliveryDate";
 import {
   formatMealSelectionStatusLabel,
   TERMINAL_PORTAL_DISPLAY_STATUSES,
@@ -267,6 +267,12 @@ export const loadPortalData = async ({
           }
         }
 
+        const effectiveNextScheduledDeliveryDate =
+          projectActiveScheduledDeliveryDate({
+            nextScheduledDeliveryDate: reconciled.nextScheduledDeliveryDate,
+            preferredDeliveryWeekday: reconciled.preferredDeliveryWeekday,
+          }).effectiveDeliveryDate;
+
         const modificationBlockReason = getPortalModificationBlockReason(
           reconciled,
           recoveryRecord,
@@ -329,7 +335,7 @@ export const loadPortalData = async ({
             : null,
           deliveryCutoff: (() => {
             const cutoff = getDeliveryCutoffStatus(
-              reconciled.nextScheduledDeliveryDate,
+              effectiveNextScheduledDeliveryDate,
             );
 
             return {
@@ -346,7 +352,8 @@ export const loadPortalData = async ({
           id: reconciled.id,
           mealsCount: reconciled.mealsCount as number,
           nextBillingDate: reconciled.nextBillingDate?.toISOString() ?? null,
-          nextScheduledDeliveryDate: reconciled.nextScheduledDeliveryDate ?? null,
+          nextScheduledDeliveryDate:
+            effectiveNextScheduledDeliveryDate ?? null,
           portalState,
           recovery: recoveryRecord
             ? {

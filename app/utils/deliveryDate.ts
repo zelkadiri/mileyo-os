@@ -27,6 +27,12 @@ export type DeliveryCutoffStatus = {
   isPassed: boolean;
 };
 
+export type ActiveScheduledDeliveryProjection = {
+  effectiveDeliveryDate: DeliveryDateString | null;
+  projectedFromStoredDate: DeliveryDateString | null;
+  wasProjected: boolean;
+};
+
 export type ScheduleDeliveryDateInput = {
   config?: DeliveryScheduleConfig;
   desiredDeliveryDate: DeliveryDateString;
@@ -437,6 +443,76 @@ export const getDeliveryCutoffStatus = (
     isKnown: true,
     isPassed,
   };
+};
+
+export const projectActiveScheduledDeliveryDate = ({
+  config = DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+  nextScheduledDeliveryDate,
+  now = new Date(),
+  preferredDeliveryWeekday,
+}: {
+  config?: DeliveryScheduleConfig;
+  nextScheduledDeliveryDate: string | null | undefined;
+  now?: Date;
+  preferredDeliveryWeekday: number | null | undefined;
+}): ActiveScheduledDeliveryProjection => {
+  try {
+    const todayParis = referenceDateFromInstant(now, config.timezone);
+    const parsedStored = parseDeliveryDate(nextScheduledDeliveryDate);
+
+    if (parsedStored) {
+      if (compareDeliveryDates(parsedStored, todayParis) >= 0) {
+        return {
+          effectiveDeliveryDate: parsedStored,
+          projectedFromStoredDate: parsedStored,
+          wasProjected: false,
+        };
+      }
+
+      let cursor = parsedStored;
+
+      while (compareDeliveryDates(cursor, todayParis) < 0) {
+        cursor = addCalendarDays(cursor, DELIVERY_WEEKLY_INTERVAL_DAYS);
+      }
+
+      return {
+        effectiveDeliveryDate: cursor,
+        projectedFromStoredDate: parsedStored,
+        wasProjected: true,
+      };
+    }
+
+    if (
+      preferredDeliveryWeekday != null &&
+      Number.isInteger(preferredDeliveryWeekday) &&
+      preferredDeliveryWeekday >= 0 &&
+      preferredDeliveryWeekday <= 6
+    ) {
+      let cursor = todayParis;
+
+      while (getWeekday(cursor) !== preferredDeliveryWeekday) {
+        cursor = addCalendarDays(cursor, 1);
+      }
+
+      return {
+        effectiveDeliveryDate: cursor,
+        projectedFromStoredDate: null,
+        wasProjected: true,
+      };
+    }
+
+    return {
+      effectiveDeliveryDate: null,
+      projectedFromStoredDate: null,
+      wasProjected: false,
+    };
+  } catch {
+    return {
+      effectiveDeliveryDate: null,
+      projectedFromStoredDate: null,
+      wasProjected: false,
+    };
+  }
 };
 
 export const parisWallClockToInstant = ({

@@ -1,4 +1,4 @@
-import { isDeliveryCutoffPassed } from "../utils/deliveryDate";
+import { isDeliveryCutoffPassed, projectActiveScheduledDeliveryDate } from "../utils/deliveryDate";
 
 export type DeliveryCutoffBlockReason = "cutoff_passed";
 
@@ -11,11 +11,18 @@ export const DELIVERY_CUTOFF_LIFECYCLE_BLOCK_MESSAGE =
 export const getDeliveryCutoffBlockReason = (
   selection: {
     nextScheduledDeliveryDate: string | null;
+    preferredDeliveryWeekday?: number | null;
   },
   now: Date = new Date(),
 ): DeliveryCutoffBlockReason | null => {
   try {
-    if (isDeliveryCutoffPassed(selection.nextScheduledDeliveryDate, now)) {
+    const effectiveDeliveryDate = projectActiveScheduledDeliveryDate({
+      nextScheduledDeliveryDate: selection.nextScheduledDeliveryDate,
+      now,
+      preferredDeliveryWeekday: selection.preferredDeliveryWeekday,
+    }).effectiveDeliveryDate;
+
+    if (isDeliveryCutoffPassed(effectiveDeliveryDate, now)) {
       return "cutoff_passed";
     }
   } catch {

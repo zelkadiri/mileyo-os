@@ -204,6 +204,38 @@ function main() {
   );
 
   expectPortalBlock(
+    "stale stored delivery projects before cutoff guard",
+    getPortalModificationBlockReason(
+      {
+        ...baseSelection(),
+        nextScheduledDeliveryDate: "2026-07-16",
+        preferredDeliveryWeekday: 4,
+      },
+      null,
+      new Date("2026-07-17T12:00:00.000Z"),
+    ),
+    null,
+  );
+
+  expectPortalBlock(
+    "projected delivery blocks after cutoff",
+    getPortalModificationBlockReason(
+      {
+        ...baseSelection(),
+        nextScheduledDeliveryDate: "2026-07-16",
+        preferredDeliveryWeekday: 4,
+      },
+      null,
+      parisWallClockToInstant({
+        date: requireDate("2026-07-21"),
+        hour: 0,
+        minute: 5,
+      }),
+    ),
+    "cutoff_passed",
+  );
+
+  expectPortalBlock(
     "nextScheduledDeliveryDate null is not blocked",
     getPortalModificationBlockReason(
       { ...baseSelection(), nextScheduledDeliveryDate: null },
