@@ -495,7 +495,7 @@ const handleResumeSubscriptionAction = async ({
 
   const resumeResult = await completePortalScheduledResume({
     admin,
-    nextBillingDate: resumeMode.nextBillingDate,
+    resumeSchedule: resumeMode.resumeSchedule,
     selectionId: selection.id,
     subscriptionContractId: selection.subscriptionContractId,
   });
@@ -701,8 +701,11 @@ const handleResumeSubscriptionAndPayAction = async ({
 
         const scheduleResult = await scheduleNextBillingDateAfterResumePayment({
           admin,
-          oldNextBillingDate,
           paymentAt,
+          selection: {
+            nextScheduledDeliveryDate: selection.nextScheduledDeliveryDate,
+            preferredDeliveryWeekday: selection.preferredDeliveryWeekday,
+          },
           selectionId: selection.id,
           subscriptionContractId: selection.subscriptionContractId!,
         });

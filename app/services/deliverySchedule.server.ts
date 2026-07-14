@@ -7,9 +7,15 @@ import {
   getWeekday,
   projectActiveScheduledDeliveryDate,
   referenceDateFromInstant,
+  resolveResumeDeliverySchedule,
   scheduleDeliveryDate,
   type DeliveryDateString,
+  type ResumeDeliveryScheduleMode,
+  type ResumeDeliveryScheduleResolution,
 } from "../utils/deliveryDate";
+
+export type { ResumeDeliveryScheduleMode, ResumeDeliveryScheduleResolution } from "../utils/deliveryDate";
+export { resolveResumeDeliverySchedule } from "../utils/deliveryDate";
 import {
   getDeliveryDateFromLineItemProperties,
   type LineItemProperty,
@@ -282,6 +288,196 @@ export const alignRenewalBillingWithDeliverySchedule = async ({
     nextDeliveryDate: computeNextWeeklyDeliveryDate(renewalScheduledDeliveryDate),
     selectionId,
     shopifyOrderId,
+    subscriptionContractId,
+  });
+};
+
+export type AlignResumeDeliveryScheduleResult =
+  | {
+      alignedNextBillingDate: Date;
+      nextDeliveryAfterResume: DeliveryDateString;
+      previousNextBillingDate: Date | null;
+      resumeTargetDeliveryDate: DeliveryDateString;
+      status: "aligned";
+    }
+  | { reason: string; status: "skipped" }
+  | { error: string; status: "failed" };
+
+const alignResumeDeliveryScheduleOnShopify = async ({
+  admin,
+  alignedNextBillingDate,
+  mode,
+  resumeSchedule,
+  selectionId,
+  subscriptionContractId,
+}: {
+  admin: ShopifyAdminGraphql;
+  alignedNextBillingDate: Date;
+  mode: ResumeDeliveryScheduleMode;
+  resumeSchedule: ResumeDeliveryScheduleResolution;
+  selectionId: string;
+  subscriptionContractId: string;
+}): Promise<AlignResumeDeliveryScheduleResult> => {
+  let previousNextBillingDate: Date | null = null;
+
+  try {
+    previousNextBillingDate = await fetchSubscriptionContractNextBillingDate(
+      admin,
+      subscriptionContractId,
+    );
+  } catch (error) {
+    console.log("[RESUME_ALIGNMENT] previous nextBillingDate fetch failed", {
+      error: error instanceof Error ? error.message : error,
+      mode,
+      selectionId,
+      subscriptionContractId,
+    });
+  }
+
+  try {
+    const shopifyUpdate = await setSubscriptionContractNextBillingDate(
+      admin,
+      subscriptionContractId,
+      alignedNextBillingDate,
+    );
+
+    if (!shopifyUpdate.ok) {
+      console.log("[RESUME_ALIGNMENT] failed", {
+        error: shopifyUpdate.error,
+        mode,
+        nextDeliveryAfterResume: resumeSchedule.nextDeliveryAfterResume,
+        previousNextBillingDate: previousNextBillingDate?.toISOString() ?? null,
+        resumeTargetDeliveryDate: resumeSchedule.resumeTargetDeliveryDate,
+        selectionId,
+        subscriptionContractId,
+        targetNextBillingDate: alignedNextBillingDate.toISOString(),
+      });
+
+      return { error: shopifyUpdate.error, status: "failed" };
+    }
+
+    await db.subscriptionMealSelection.update({
+      data: {
+        nextBillingDate: shopifyUpdate.nextBillingDate,
+        nextScheduledDeliveryDate: resumeSchedule.resumeTargetDeliveryDate,
+      },
+      where: { id: selectionId },
+    });
+
+    console.log("[RESUME_ALIGNMENT] aligned", {
+      alignedNextBillingDate: shopifyUpdate.nextBillingDate.toISOString(),
+      mode,
+      nextDeliveryAfterResume: resumeSchedule.nextDeliveryAfterResume,
+      previousNextBillingDate: previousNextBillingDate?.toISOString() ?? null,
+      resumeTargetDeliveryDate: resumeSchedule.resumeTargetDeliveryDate,
+      selectionId,
+      subscriptionContractId,
+    });
+
+    return {
+      alignedNextBillingDate: shopifyUpdate.nextBillingDate,
+      nextDeliveryAfterResume: resumeSchedule.nextDeliveryAfterResume,
+      previousNextBillingDate,
+      resumeTargetDeliveryDate: resumeSchedule.resumeTargetDeliveryDate,
+      status: "aligned",
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    console.log("[RESUME_ALIGNMENT] failed", {
+      error: message,
+      mode,
+      nextDeliveryAfterResume: resumeSchedule.nextDeliveryAfterResume,
+      previousNextBillingDate: previousNextBillingDate?.toISOString() ?? null,
+      resumeTargetDeliveryDate: resumeSchedule.resumeTargetDeliveryDate,
+      selectionId,
+      subscriptionContractId,
+      targetNextBillingDate: alignedNextBillingDate.toISOString(),
+    });
+
+    return { error: message, status: "failed" };
+  }
+};
+
+export const alignScheduledResumeWithDeliverySchedule = async ({
+  admin,
+  resumeSchedule,
+  selectionId,
+  subscriptionContractId,
+}: {
+  admin: ShopifyAdminGraphql;
+  resumeSchedule: ResumeDeliveryScheduleResolution | null;
+  selectionId: string;
+  subscriptionContractId: string | null;
+}): Promise<AlignResumeDeliveryScheduleResult> => {
+  if (!subscriptionContractId) {
+    console.log("[RESUME_ALIGNMENT] skipped", {
+      reason: "missing_subscription_contract_id",
+      selectionId,
+    });
+
+    return { reason: "missing_subscription_contract_id", status: "skipped" };
+  }
+
+  if (!resumeSchedule) {
+    console.log("[RESUME_ALIGNMENT] skipped", {
+      reason: "missing_resume_delivery_schedule",
+      selectionId,
+      subscriptionContractId,
+    });
+
+    return { reason: "missing_resume_delivery_schedule", status: "skipped" };
+  }
+
+  return alignResumeDeliveryScheduleOnShopify({
+    admin,
+    alignedNextBillingDate: resumeSchedule.alignedNextBillingDate,
+    mode: "schedule_only",
+    resumeSchedule,
+    selectionId,
+    subscriptionContractId,
+  });
+};
+
+export const alignImmediatePaymentResumeWithDeliverySchedule = async ({
+  admin,
+  paymentAt,
+  selection,
+  selectionId,
+  subscriptionContractId,
+}: {
+  admin: ShopifyAdminGraphql;
+  paymentAt: Date;
+  selection: {
+    nextScheduledDeliveryDate: string | null;
+    preferredDeliveryWeekday: number | null;
+  };
+  selectionId: string;
+  subscriptionContractId: string;
+}): Promise<AlignResumeDeliveryScheduleResult> => {
+  const resumeSchedule = resolveResumeDeliverySchedule({
+    mode: "immediate_payment",
+    now: paymentAt,
+    selection,
+    selectionId,
+  });
+
+  if (!resumeSchedule) {
+    console.log("[RESUME_ALIGNMENT] skipped", {
+      reason: "missing_resume_delivery_schedule",
+      selectionId,
+      subscriptionContractId,
+    });
+
+    return { reason: "missing_resume_delivery_schedule", status: "skipped" };
+  }
+
+  return alignResumeDeliveryScheduleOnShopify({
+    admin,
+    alignedNextBillingDate: resumeSchedule.alignedNextBillingDate,
+    mode: "immediate_payment",
+    resumeSchedule,
+    selectionId,
     subscriptionContractId,
   });
 };

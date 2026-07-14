@@ -3,11 +3,20 @@ import {
   activateSubscriptionContractWithVerification,
   fetchSubscriptionContractNextBillingDate,
 } from "../../services/subscriptionBillingWorker.server";
+import {
+  alignScheduledResumeWithDeliverySchedule,
+  resolveResumeDeliverySchedule,
+} from "../../services/deliverySchedule.server";
+import type { ResumeDeliveryScheduleResolution } from "../../utils/deliveryDate";
 
 export type PortalResumeMode =
   | { mode: "blocked"; error: string }
   | { mode: "pay_now" }
-  | { mode: "schedule_only"; nextBillingDate: Date };
+  | {
+      mode: "schedule_only";
+      nextBillingDate: Date;
+      resumeSchedule: ResumeDeliveryScheduleResolution;
+    };
 
 type RecoverySnapshot = {
   failureCount: number;
@@ -104,6 +113,8 @@ export const resolvePortalResumeMode = async ({
   recovery: RecoverySnapshot;
   selection: {
     id: string;
+    nextScheduledDeliveryDate: string | null;
+    preferredDeliveryWeekday: number | null;
     subscriptionContractId: string | null;
   };
 }): Promise<PortalResumeMode> => {
@@ -138,12 +149,31 @@ export const resolvePortalResumeMode = async ({
     });
   }
 
-  const scheduledDate = freshNextBillingDate ?? localNextBillingDate!;
-
   if (
     !isSubscriptionBillingDue(freshNextBillingDate, localNextBillingDate)
   ) {
-    return { mode: "schedule_only", nextBillingDate: scheduledDate };
+    const resumeSchedule = resolveResumeDeliverySchedule({
+      mode: "schedule_only",
+      selection: {
+        nextScheduledDeliveryDate: selection.nextScheduledDeliveryDate,
+        preferredDeliveryWeekday: selection.preferredDeliveryWeekday,
+      },
+      selectionId: selection.id,
+    });
+
+    if (!resumeSchedule) {
+      return {
+        error:
+          "Impossible de calculer la prochaine livraison. Réessayez plus tard ou contactez le support.",
+        mode: "blocked",
+      };
+    }
+
+    return {
+      mode: "schedule_only",
+      nextBillingDate: resumeSchedule.alignedNextBillingDate,
+      resumeSchedule,
+    };
   }
 
   return { mode: "pay_now" };
@@ -151,12 +181,12 @@ export const resolvePortalResumeMode = async ({
 
 export const completePortalScheduledResume = async ({
   admin,
-  nextBillingDate,
+  resumeSchedule,
   selectionId,
   subscriptionContractId,
 }: {
   admin: Parameters<typeof activateSubscriptionContractWithVerification>[0];
-  nextBillingDate: Date;
+  resumeSchedule: ResumeDeliveryScheduleResolution;
   selectionId: string;
   subscriptionContractId: string;
 }): Promise<{ error?: string; ok: true } | { error: string; ok: false }> => {
@@ -173,10 +203,47 @@ export const completePortalScheduledResume = async ({
     };
   }
 
+  const alignmentResult = await alignScheduledResumeWithDeliverySchedule({
+    admin,
+    resumeSchedule,
+    selectionId,
+    subscriptionContractId,
+  });
+
+  if (alignmentResult.status === "failed") {
+    await prisma.subscriptionMealSelection.update({
+      data: {
+        active: true,
+        nextScheduledDeliveryDate: resumeSchedule.resumeTargetDeliveryDate,
+        status: "active",
+      },
+      where: { id: selectionId },
+    });
+
+    return {
+      error:
+        "Votre abonnement est repris, mais la date de prochaine facturation n’a pas pu être mise à jour automatiquement.",
+      ok: false,
+    };
+  }
+
+  if (alignmentResult.status === "skipped") {
+    await prisma.subscriptionMealSelection.update({
+      data: {
+        active: true,
+        nextBillingDate: resumeSchedule.alignedNextBillingDate,
+        nextScheduledDeliveryDate: resumeSchedule.resumeTargetDeliveryDate,
+        status: "active",
+      },
+      where: { id: selectionId },
+    });
+
+    return { ok: true };
+  }
+
   await prisma.subscriptionMealSelection.update({
     data: {
       active: true,
-      nextBillingDate,
       status: "active",
     },
     where: { id: selectionId },

@@ -632,6 +632,134 @@ export const computeNextBillingDateFromCurrentDelivery = (
   return computeBillingReadyAtForDelivery(nextDeliveryDate, config);
 };
 
+export type ResumeDeliveryScheduleMode = "schedule_only" | "immediate_payment";
+
+export type ResumeDeliveryScheduleResolution = {
+  alignedNextBillingDate: Date;
+  nextDeliveryAfterResume: DeliveryDateString;
+  resumeTargetDeliveryDate: DeliveryDateString;
+};
+
+export const logResumeAlignment = ({
+  alignedNextBillingDate,
+  mode,
+  nextDeliveryAfterResume,
+  resumeTargetDeliveryDate,
+  selectionId,
+  wasCutoffSkipped,
+}: {
+  alignedNextBillingDate: Date | null;
+  mode: ResumeDeliveryScheduleMode;
+  nextDeliveryAfterResume: DeliveryDateString | null;
+  resumeTargetDeliveryDate: DeliveryDateString | null;
+  selectionId?: string;
+  wasCutoffSkipped: boolean;
+}) => {
+  try {
+    console.log("[RESUME_ALIGNMENT]", {
+      alignedNextBillingDate: alignedNextBillingDate?.toISOString() ?? null,
+      mode,
+      nextDeliveryAfterResume,
+      resumeTargetDeliveryDate,
+      selectionId,
+      wasCutoffSkipped,
+    });
+  } catch {
+    // Logger must never throw.
+  }
+};
+
+export const resolveResumeDeliverySchedule = ({
+  config = DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+  mode,
+  now = new Date(),
+  selection,
+  selectionId,
+}: {
+  config?: DeliveryScheduleConfig;
+  mode: ResumeDeliveryScheduleMode;
+  now?: Date;
+  selection: {
+    nextScheduledDeliveryDate: string | null;
+    preferredDeliveryWeekday: number | null;
+  };
+  selectionId?: string;
+}): ResumeDeliveryScheduleResolution | null => {
+  try {
+    const projection = projectActiveScheduledDeliveryDate({
+      config,
+      nextScheduledDeliveryDate: selection.nextScheduledDeliveryDate,
+      now,
+      preferredDeliveryWeekday: selection.preferredDeliveryWeekday,
+    });
+
+    let resumeTargetDeliveryDate = projection.effectiveDeliveryDate;
+    let wasCutoffSkipped = false;
+
+    if (!resumeTargetDeliveryDate) {
+      logResumeAlignment({
+        alignedNextBillingDate: null,
+        mode,
+        nextDeliveryAfterResume: null,
+        resumeTargetDeliveryDate: null,
+        selectionId,
+        wasCutoffSkipped: false,
+      });
+
+      return null;
+    }
+
+    if (isDeliveryCutoffPassed(resumeTargetDeliveryDate, now, config)) {
+      resumeTargetDeliveryDate = computeNextWeeklyDeliveryDate(
+        resumeTargetDeliveryDate,
+      );
+      wasCutoffSkipped = true;
+    }
+
+    const alignedNextBillingDate =
+      mode === "schedule_only"
+        ? computeBillingReadyAtForDelivery(resumeTargetDeliveryDate, config)
+        : computeNextBillingDateFromCurrentDelivery(
+            resumeTargetDeliveryDate,
+            config,
+          );
+
+    if (!alignedNextBillingDate) {
+      logResumeAlignment({
+        alignedNextBillingDate: null,
+        mode,
+        nextDeliveryAfterResume: null,
+        resumeTargetDeliveryDate,
+        selectionId,
+        wasCutoffSkipped,
+      });
+
+      return null;
+    }
+
+    const nextDeliveryAfterResume = computeNextWeeklyDeliveryDate(
+      resumeTargetDeliveryDate,
+    );
+
+    logResumeAlignment({
+      alignedNextBillingDate,
+      mode,
+      nextDeliveryAfterResume,
+      resumeTargetDeliveryDate,
+      selectionId,
+      wasCutoffSkipped,
+    });
+
+    return {
+      alignedNextBillingDate,
+      nextDeliveryAfterResume,
+      resumeTargetDeliveryDate,
+    };
+  } catch {
+    return null;
+  }
+};
+
 export const formatDeliveryDateLabel = (
   date: DeliveryDateString,
   options?: { locale?: string; short?: boolean },

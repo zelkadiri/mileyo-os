@@ -14,6 +14,7 @@ import {
   reconcileSelectionBillingAttemptState,
   type RecoveryWorkerSummary,
 } from "./subscriptionPaymentRecovery.server";
+import { alignImmediatePaymentResumeWithDeliverySchedule } from "./deliverySchedule.server";
 
 const billingAttemptCreateMutation = `#graphql
   mutation SubscriptionBillingAttemptCreate(
@@ -648,87 +649,67 @@ export type ScheduleResumeNextBillingDateResult =
   | { ok: true; nextBillingDate: Date }
   | { ok: false; error: string };
 
-/** Schedule next billing from the resume payment date, not Shopify's restored date. */
+/** Schedule next billing from the active delivery calendar after resume payment. */
 export const scheduleNextBillingDateAfterResumePayment = async ({
   admin,
-  oldNextBillingDate,
   paymentAt,
+  selection,
   selectionId,
   subscriptionContractId,
 }: {
   admin: ShopifyAdminGraphql;
-  oldNextBillingDate: Date | null;
+  oldNextBillingDate?: Date | null;
   paymentAt: Date;
+  selection: {
+    nextScheduledDeliveryDate: string | null;
+    preferredDeliveryWeekday: number | null;
+  };
   selectionId: string;
   subscriptionContractId: string;
 }): Promise<ScheduleResumeNextBillingDateResult> => {
-  console.log("[resumeBilling] scheduling nextBillingDate", {
-    oldNextBillingDate: oldNextBillingDate?.toISOString() ?? null,
+  console.log("[resumeBilling] scheduling nextBillingDate from delivery schedule", {
     paymentAt: paymentAt.toISOString(),
     selectionId,
     subscriptionContractId,
   });
 
-  const billingPolicy = await fetchSubscriptionContractBillingPolicy(
+  const alignmentResult = await alignImmediatePaymentResumeWithDeliverySchedule({
     admin,
-    subscriptionContractId,
-  );
-
-  if (!billingPolicy) {
-    const error = "Impossible de lire la politique de facturation de l’abonnement.";
-    console.log("[resumeBilling] nextBillingDate scheduling failed", {
-      error,
-      selectionId,
-      subscriptionContractId,
-    });
-    return { error, ok: false };
-  }
-
-  const calculatedNextBillingDate = calculateNextBillingDateFromPolicy(
     paymentAt,
-    billingPolicy,
-  );
-
-  console.log("[resumeBilling] nextBillingDate calculated", {
-    billingPolicy,
-    calculatedNextBillingDate: calculatedNextBillingDate.toISOString(),
-    oldNextBillingDate: oldNextBillingDate?.toISOString() ?? null,
-    paymentAt: paymentAt.toISOString(),
+    selection,
     selectionId,
     subscriptionContractId,
   });
 
-  const shopifyUpdate = await setSubscriptionContractNextBillingDate(
-    admin,
-    subscriptionContractId,
-    calculatedNextBillingDate,
-  );
-
-  if (!shopifyUpdate.ok) {
-    console.log("[resumeBilling] Shopify nextBillingDate update failed", {
-      calculatedNextBillingDate: calculatedNextBillingDate.toISOString(),
-      error: shopifyUpdate.error,
+  if (alignmentResult.status === "aligned") {
+    console.log("[resumeBilling] nextBillingDate updated", {
+      finalNextBillingDate: alignmentResult.alignedNextBillingDate.toISOString(),
+      paymentAt: paymentAt.toISOString(),
+      resumeTargetDeliveryDate: alignmentResult.resumeTargetDeliveryDate,
       selectionId,
       subscriptionContractId,
     });
-    return { error: shopifyUpdate.error, ok: false };
+
+    return {
+      nextBillingDate: alignmentResult.alignedNextBillingDate,
+      ok: true,
+    };
   }
 
-  await db.subscriptionMealSelection.update({
-    data: { nextBillingDate: shopifyUpdate.nextBillingDate },
-    where: { id: selectionId },
-  });
+  const error =
+    alignmentResult.status === "failed"
+      ? alignmentResult.error
+      : "Impossible de calculer la prochaine livraison après reprise.";
 
-  console.log("[resumeBilling] nextBillingDate updated", {
-    calculatedNextBillingDate: calculatedNextBillingDate.toISOString(),
-    finalNextBillingDate: shopifyUpdate.nextBillingDate.toISOString(),
-    oldNextBillingDate: oldNextBillingDate?.toISOString() ?? null,
+  console.log("[resumeBilling] nextBillingDate scheduling failed", {
+    error,
     paymentAt: paymentAt.toISOString(),
+    reason: alignmentResult.status === "skipped" ? alignmentResult.reason : "failed",
     selectionId,
     subscriptionContractId,
   });
 
-  return { nextBillingDate: shopifyUpdate.nextBillingDate, ok: true };
+  return { error, ok: false };
 };
 
 const getTodayIsoDate = () => new Date().toISOString().slice(0, 10);
@@ -1020,8 +1001,11 @@ export const completeResumeRenewalFromWebhook = async ({
 
   const scheduleResult = await scheduleNextBillingDateAfterResumePayment({
     admin,
-    oldNextBillingDate: selection.nextBillingDate,
     paymentAt: orderCreatedAt,
+    selection: {
+      nextScheduledDeliveryDate: selection.nextScheduledDeliveryDate,
+      preferredDeliveryWeekday: selection.preferredDeliveryWeekday,
+    },
     selectionId,
     subscriptionContractId,
   });
