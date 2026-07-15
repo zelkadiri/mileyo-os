@@ -15,6 +15,10 @@ import {
   type RecoveryWorkerSummary,
 } from "./subscriptionPaymentRecovery.server";
 import { alignImmediatePaymentResumeWithDeliverySchedule } from "./deliverySchedule.server";
+import {
+  evaluateDeliveryBillingReadiness,
+  shouldRealignLegacyNextBillingDate,
+} from "../utils/deliveryDate";
 
 const billingAttemptCreateMutation = `#graphql
   mutation SubscriptionBillingAttemptCreate(
@@ -252,7 +256,8 @@ export type BillingSkipReason =
   | "payment_recovery"
   | "recent_attempt"
   | "terminal_contract"
-  | "contract_sync_error";
+  | "contract_sync_error"
+  | "delivery_billing_not_ready";
 
 export type BillingAttemptStatus =
   | "success"
@@ -300,6 +305,7 @@ export type ResumeLockStatus =
 
 const EMPTY_SKIP_REASONS = (): Record<BillingSkipReason, number> => ({
   contract_sync_error: 0,
+  delivery_billing_not_ready: 0,
   missing_contract_id: 0,
   missing_next_billing_date: 0,
   next_billing_date_in_future: 0,
@@ -1933,6 +1939,114 @@ export const triggerSubscriptionBillingAttempt = async ({
   }
 };
 
+export const getBillingRunnerDeliveryGate = ({
+  now = new Date(),
+  selection,
+}: {
+  now?: Date;
+  selection: {
+    nextBillingDate: Date | null;
+    nextScheduledDeliveryDate: string | null;
+    preferredDeliveryWeekday: number | null;
+  };
+}): {
+  readiness: ReturnType<typeof evaluateDeliveryBillingReadiness>;
+  shouldRealignLegacyBillingDate: boolean;
+  skipReason: BillingSkipReason | null;
+} => {
+  const readiness = evaluateDeliveryBillingReadiness({
+    nextScheduledDeliveryDate: selection.nextScheduledDeliveryDate,
+    now,
+    preferredDeliveryWeekday: selection.preferredDeliveryWeekday,
+  });
+
+  if (readiness.reason === "unknown_delivery") {
+    console.log("[BILLING_RUNNER] delivery_not_ready", {
+      reason: "unknown_delivery_schedule",
+      selectionNextBillingDate: selection.nextBillingDate?.toISOString() ?? null,
+    });
+
+    return {
+      readiness,
+      shouldRealignLegacyBillingDate: false,
+      skipReason: "delivery_billing_not_ready",
+    };
+  }
+
+  if (!readiness.isReady) {
+    console.log("[BILLING_RUNNER] delivery_not_ready", {
+      billingReadyAt: readiness.billingReadyAt?.toISOString() ?? null,
+      billingTargetDeliveryDate: readiness.billingTargetDeliveryDate,
+      projectedActiveDeliveryDate: readiness.projectedActiveDeliveryDate,
+      reason: "delivery_billing_not_ready",
+      selectionNextBillingDate: selection.nextBillingDate?.toISOString() ?? null,
+    });
+
+    return {
+      readiness,
+      shouldRealignLegacyBillingDate: shouldRealignLegacyNextBillingDate({
+        billingReadyAt: readiness.billingReadyAt,
+        nextBillingDate: selection.nextBillingDate,
+      }),
+      skipReason: "delivery_billing_not_ready",
+    };
+  }
+
+  return {
+    readiness,
+    shouldRealignLegacyBillingDate: false,
+    skipReason: null,
+  };
+};
+
+const realignLegacyNextBillingDateFromDeliverySchedule = async ({
+  admin,
+  billingReadyAt,
+  selectionId,
+  subscriptionContractId,
+}: {
+  admin: ShopifyAdminGraphql;
+  billingReadyAt: Date;
+  selectionId: string;
+  subscriptionContractId: string;
+}) => {
+  try {
+    const shopifyUpdate = await setSubscriptionContractNextBillingDate(
+      admin,
+      subscriptionContractId,
+      billingReadyAt,
+    );
+
+    if (!shopifyUpdate.ok) {
+      console.log("[BILLING_RUNNER] legacy realignment failed", {
+        error: shopifyUpdate.error,
+        selectionId,
+        subscriptionContractId,
+        targetNextBillingDate: billingReadyAt.toISOString(),
+      });
+      return;
+    }
+
+    await db.subscriptionMealSelection.update({
+      data: { nextBillingDate: shopifyUpdate.nextBillingDate },
+      where: { id: selectionId },
+    });
+
+    console.log("[BILLING_RUNNER] legacy nextBillingDate realigned", {
+      alignedNextBillingDate: shopifyUpdate.nextBillingDate.toISOString(),
+      selectionId,
+      subscriptionContractId,
+    });
+  } catch (error) {
+    console.log("[BILLING_RUNNER] legacy realignment failed", {
+      error: error instanceof Error ? error.message : error,
+      selectionId,
+      subscriptionContractId,
+      targetNextBillingDate: billingReadyAt.toISOString(),
+    });
+  }
+};
+
 export const processDueSubscriptionBillings = async (
   shop: string,
 ): Promise<BillingWorkerSummary> => {
@@ -2140,6 +2254,33 @@ export const processDueSubscriptionBillings = async (
 
       summary.skipped += 1;
       summary.skipReasons[skipReason] += 1;
+      continue;
+    }
+
+    const deliveryGate = getBillingRunnerDeliveryGate({
+      selection: {
+        nextBillingDate: currentSelection.nextBillingDate,
+        nextScheduledDeliveryDate: currentSelection.nextScheduledDeliveryDate,
+        preferredDeliveryWeekday: currentSelection.preferredDeliveryWeekday,
+      },
+    });
+
+    if (deliveryGate.skipReason) {
+      if (
+        deliveryGate.shouldRealignLegacyBillingDate &&
+        deliveryGate.readiness.billingReadyAt &&
+        currentSelection.subscriptionContractId
+      ) {
+        await realignLegacyNextBillingDateFromDeliverySchedule({
+          admin,
+          billingReadyAt: deliveryGate.readiness.billingReadyAt,
+          selectionId: currentSelection.id,
+          subscriptionContractId: currentSelection.subscriptionContractId,
+        });
+      }
+
+      summary.skipped += 1;
+      summary.skipReasons[deliveryGate.skipReason] += 1;
       continue;
     }
 

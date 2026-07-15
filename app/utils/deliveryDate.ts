@@ -632,6 +632,119 @@ export const computeNextBillingDateFromCurrentDelivery = (
   return computeBillingReadyAtForDelivery(nextDeliveryDate, config);
 };
 
+export type DeliveryBillingReadinessReason =
+  | "ready"
+  | "delivery_billing_not_ready"
+  | "unknown_delivery";
+
+export type DeliveryBillingReadiness = {
+  billingReadyAt: Date | null;
+  billingTargetDeliveryDate: DeliveryDateString | null;
+  isReady: boolean;
+  projectedActiveDeliveryDate: DeliveryDateString | null;
+  reason: DeliveryBillingReadinessReason;
+};
+
+export const resolveBillingTargetDeliveryDate = ({
+  config = DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+  now = new Date(),
+  projectedActiveDeliveryDate,
+}: {
+  config?: DeliveryScheduleConfig;
+  now?: Date;
+  projectedActiveDeliveryDate: DeliveryDateString;
+}): DeliveryDateString => {
+  if (isDeliveryCutoffPassed(projectedActiveDeliveryDate, now, config)) {
+    return projectedActiveDeliveryDate;
+  }
+
+  return computeNextWeeklyDeliveryDate(projectedActiveDeliveryDate);
+};
+
+export const evaluateDeliveryBillingReadiness = ({
+  config = DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+  nextScheduledDeliveryDate,
+  now = new Date(),
+  preferredDeliveryWeekday,
+}: {
+  config?: DeliveryScheduleConfig;
+  nextScheduledDeliveryDate: string | null;
+  now?: Date;
+  preferredDeliveryWeekday: number | null | undefined;
+}): DeliveryBillingReadiness => {
+  try {
+    const projection = projectActiveScheduledDeliveryDate({
+      config,
+      nextScheduledDeliveryDate,
+      now,
+      preferredDeliveryWeekday,
+    });
+
+    if (!projection.effectiveDeliveryDate) {
+      return {
+        billingReadyAt: null,
+        billingTargetDeliveryDate: null,
+        isReady: false,
+        projectedActiveDeliveryDate: null,
+        reason: "unknown_delivery",
+      };
+    }
+
+    const billingTargetDeliveryDate = resolveBillingTargetDeliveryDate({
+      config,
+      now,
+      projectedActiveDeliveryDate: projection.effectiveDeliveryDate,
+    });
+
+    const billingReadyAt = computeBillingReadyAtForDelivery(
+      billingTargetDeliveryDate,
+      config,
+    );
+
+    if (!billingReadyAt) {
+      return {
+        billingReadyAt: null,
+        billingTargetDeliveryDate,
+        isReady: false,
+        projectedActiveDeliveryDate: projection.effectiveDeliveryDate,
+        reason: "unknown_delivery",
+      };
+    }
+
+    const isReady = now.getTime() >= billingReadyAt.getTime();
+
+    return {
+      billingReadyAt,
+      billingTargetDeliveryDate,
+      isReady,
+      projectedActiveDeliveryDate: projection.effectiveDeliveryDate,
+      reason: isReady ? "ready" : "delivery_billing_not_ready",
+    };
+  } catch {
+    return {
+      billingReadyAt: null,
+      billingTargetDeliveryDate: null,
+      isReady: false,
+      projectedActiveDeliveryDate: null,
+      reason: "unknown_delivery",
+    };
+  }
+};
+
+export const shouldRealignLegacyNextBillingDate = ({
+  billingReadyAt,
+  nextBillingDate,
+}: {
+  billingReadyAt: Date | null;
+  nextBillingDate: Date | null;
+}): boolean => {
+  if (!billingReadyAt || !nextBillingDate) {
+    return false;
+  }
+
+  return nextBillingDate.getTime() < billingReadyAt.getTime();
+};
+
 export type ResumeDeliveryScheduleMode = "schedule_only" | "immediate_payment";
 
 export type ResumeDeliveryScheduleResolution = {
