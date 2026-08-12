@@ -2,7 +2,7 @@
 
 client_id = "f2f34d1691ccbc32d9abf403695d0f9c"
 name = "Mileyo Subcription Os Dev"
-application_url = "https://38130c1217bb.ngrok.app"
+application_url = "https://116cbd82be5f.ngrok.app"
 embedded = true
 
 [build]
@@ -59,6 +59,6 @@ use_legacy_install_flow = false
 redirect_urls = [ ]
 
 [app_proxy]
-url = "https://38130c1217bb.ngrok.app/apps/box-builder"
+url = "https://116cbd82be5f.ngrok.app/apps/box-builder"
 subpath = "box-builder"
 prefix = "apps"

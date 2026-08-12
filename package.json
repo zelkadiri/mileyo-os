@@ -4,8 +4,7 @@
   "scripts": {
     "build": "react-router build",
     "dev": "shopify app dev",
-    "test:business": "npx tsx scripts/business-tests/00-run-business-regression-suite.ts",
-    "config:link": "shopify app config link",
+    "test:business": "npx tsx --env-file=.env scripts/business-tests/00-run-business-regression-suite.ts",    "config:link": "shopify app config link",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",
     "config:use": "shopify app config use",
