@@ -32,6 +32,7 @@ const BUSINESS_SUITES = [
   "09-edge-cases.test.ts",
   "10-subscription-cycle-constants.test.ts",
   "11-subscription-objective-meal-catalog.test.ts",
+  "12-subscription-box-catalog.test.ts",
 ];
 
 const LEGACY_SUITES = [

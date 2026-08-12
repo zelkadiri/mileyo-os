@@ -1,7 +1,9 @@
+import type { SubscriptionObjective } from "../constants/subscriptionObjective";
 import {
   parseMealCountMetafield,
   warnMissingMealCountMetafield,
 } from "../utils/mealCountMetafield";
+import { parseSubscriptionObjective } from "../utils/subscriptionObjective";
 
 export const MILEYO_SELLING_PLAN_GROUP_NAME = "Mileyo abonnement hebdomadaire";
 export const MILEYO_SELLING_PLAN_NAME = "Abonnement hebdomadaire";
@@ -277,4 +279,210 @@ export const resolveCurrentBoxProduct = (
   }
 
   return null;
+};
+
+export type BoxCatalogVariantV2 = {
+  variantId: string;
+  variantTitle: string;
+  objective: SubscriptionObjective | null;
+  mealCount: number | null;
+  price: string | null;
+};
+
+export type BoxCatalogProductV2 = {
+  id: string;
+  title: string;
+  imageAlt: string;
+  imageUrl: string | null;
+  variants: BoxCatalogVariantV2[];
+};
+
+export type ShopifyBoxCatalogVariantNodeV2 = {
+  id: string;
+  title: string;
+  price?: string | null;
+  objectiveMetafield?: { value: string } | null;
+  mealCountMetafield?: { value: string } | null;
+};
+
+export type ShopifyBoxCatalogProductNodeV2 = {
+  id: string;
+  title: string;
+  featuredImage?: { altText?: string | null; url: string } | null;
+  mealCountMetafield?: { value: string } | null;
+  variants: {
+    nodes: ShopifyBoxCatalogVariantNodeV2[];
+  };
+};
+
+const boxCollectionProductsV2Query = `#graphql
+  query SubscriptionBoxCatalogProductsV2($id: ID!) {
+    collection(id: $id) {
+      products(first: 50, sortKey: TITLE) {
+        nodes {
+          id
+          title
+          featuredImage {
+            altText
+            url
+          }
+          mealCountMetafield: metafield(namespace: "mileyo", key: "meal_count") {
+            value
+          }
+          variants(first: 10) {
+            nodes {
+              id
+              title
+              price
+              objectiveMetafield: metafield(namespace: "mileyo", key: "objective") {
+                value
+              }
+              mealCountMetafield: metafield(namespace: "mileyo", key: "meal_count") {
+                value
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+type BoxCollectionProductsV2Response = {
+  data?: {
+    collection?: {
+      products: { nodes: ShopifyBoxCatalogProductNodeV2[] };
+    } | null;
+  };
+  errors?: { message?: string | null }[];
+};
+
+const parseBoxVariantPrice = (
+  value: string | null | undefined,
+): string | null => {
+  if (value == null) return null;
+
+  const trimmed = value.trim();
+  return trimmed || null;
+};
+
+export const parseBoxCatalogMealCount = (
+  variantMealCountValue: string | null | undefined,
+  productMealCountValue: string | null | undefined,
+): number | null => {
+  const variantMealCount = parseMealCountMetafield(variantMealCountValue);
+  if (variantMealCount !== null) {
+    return variantMealCount;
+  }
+
+  return parseMealCountMetafield(productMealCountValue);
+};
+
+export const toBoxCatalogVariantV2 = (
+  variant: ShopifyBoxCatalogVariantNodeV2,
+  productMealCountValue: string | null | undefined,
+): BoxCatalogVariantV2 => ({
+  variantId: variant.id.trim(),
+  variantTitle: variant.title,
+  objective: parseSubscriptionObjective(variant.objectiveMetafield?.value),
+  mealCount: parseBoxCatalogMealCount(
+    variant.mealCountMetafield?.value,
+    productMealCountValue,
+  ),
+  price: parseBoxVariantPrice(variant.price),
+});
+
+export const toBoxCatalogProductV2 = (
+  product: ShopifyBoxCatalogProductNodeV2,
+): BoxCatalogProductV2 => ({
+  id: product.id,
+  title: product.title,
+  imageAlt: product.featuredImage?.altText ?? product.title,
+  imageUrl: product.featuredImage?.url ?? null,
+  variants: (product.variants?.nodes ?? []).map((variant) =>
+    toBoxCatalogVariantV2(variant, product.mealCountMetafield?.value),
+  ),
+});
+
+export const toBoxCatalogProductsV2 = (
+  products: ShopifyBoxCatalogProductNodeV2[],
+): BoxCatalogProductV2[] => products.map(toBoxCatalogProductV2);
+
+export const fetchBoxCatalogProductsV2 = async (
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: { id: string } },
+    ) => Promise<Response>;
+  },
+  boxCollectionId: string,
+) => {
+  const response = await admin.graphql(boxCollectionProductsV2Query, {
+    variables: { id: boxCollectionId },
+  });
+  const json = (await response.json()) as BoxCollectionProductsV2Response;
+
+  if (json.errors?.length) {
+    throw new Error(
+      json.errors
+        .map((error) => error.message)
+        .filter(Boolean)
+        .join(" ") || "Impossible de charger le catalogue box multi-variantes.",
+    );
+  }
+
+  return toBoxCatalogProductsV2(json.data?.collection?.products.nodes ?? []);
+};
+
+export type TrustedBoxCatalogVariantV2 = {
+  variantId: string;
+  variantTitle: string;
+  objective: SubscriptionObjective;
+  mealCount: number;
+  price: string;
+};
+
+export type TrustedBoxCatalogOptionV2 = TrustedBoxCatalogVariantV2 & {
+  productId: string;
+  productTitle: string;
+  imageAlt: string;
+  imageUrl: string | null;
+};
+
+const isTrustedBoxCatalogVariantV2 = (
+  variant: BoxCatalogVariantV2,
+): variant is TrustedBoxCatalogVariantV2 =>
+  variant.variantId.trim() !== "" &&
+  variant.objective !== null &&
+  variant.mealCount !== null &&
+  variant.price !== null;
+
+export const toTrustedBoxCatalogVariantV2 = (
+  variant: BoxCatalogVariantV2,
+): TrustedBoxCatalogVariantV2 | null =>
+  isTrustedBoxCatalogVariantV2(variant) ? variant : null;
+
+export const toTrustedBoxCatalogOptionsV2 = (
+  products: BoxCatalogProductV2[],
+): TrustedBoxCatalogOptionV2[] => {
+  const options: TrustedBoxCatalogOptionV2[] = [];
+
+  for (const product of products) {
+    for (const variant of product.variants) {
+      const trustedVariant = toTrustedBoxCatalogVariantV2(variant);
+      if (!trustedVariant) {
+        continue;
+      }
+
+      options.push({
+        ...trustedVariant,
+        imageAlt: product.imageAlt,
+        imageUrl: product.imageUrl,
+        productId: product.id,
+        productTitle: product.title,
+      });
+    }
+  }
+
+  return options;
 };
