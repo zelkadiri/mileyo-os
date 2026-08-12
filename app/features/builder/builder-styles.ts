@@ -19,6 +19,7 @@ export const builderStyles = `
   --meals-gauge-footer-height: 164px;
   --meals-toolbar-sticky-top: 72px;
   --formula-step-max-width: 1120px;
+  --objective-step-max-width: 880px;
   --delivery-step-max-width: 720px;
   --meals-step-max-width: 1440px;
   --meals-step-gutter: 16px;
@@ -112,7 +113,11 @@ body {
   display: none;
 }
 
-.tunnel-back:not(.is-delivery-step):not(.is-meals-step) .tunnel-back-text--formula {
+.tunnel-back:not(.is-formula-step):not(.is-delivery-step):not(.is-meals-step) .tunnel-back-text--objective {
+  display: inline;
+}
+
+.tunnel-back.is-formula-step .tunnel-back-text--formula {
   display: inline;
 }
 
@@ -174,20 +179,34 @@ body {
   border-radius: inherit;
   height: 100%;
   transition: width 0.28s ease;
-  width: 33.333%;
+  width: 25%;
+}
+
+.tunnel-progress-fill.is-step-1 {
+  width: 25%;
 }
 
 .tunnel-progress-fill.is-step-2 {
-  width: 66.666%;
+  width: 50%;
 }
 
 .tunnel-progress-fill.is-step-3 {
+  width: 75%;
+}
+
+.tunnel-progress-fill.is-step-4 {
   width: 100%;
 }
 
 .builder-shell {
   margin: 0 auto;
   padding: 16px var(--meals-step-gutter) calc(var(--tunnel-footer-height) + 20px);
+  width: 100%;
+}
+
+.builder-step--objective {
+  margin: 0 auto;
+  max-width: var(--objective-step-max-width);
   width: 100%;
 }
 
@@ -214,15 +233,27 @@ body {
   padding-bottom: calc(var(--tunnel-footer-height) + 16px);
 }
 
+.tunnel-body.is-step-objective .builder-shell {
+  max-width: calc(var(--objective-step-max-width) + 80px);
+}
+
 .tunnel-body.is-step-livraison .builder-shell {
   max-width: calc(var(--delivery-step-max-width) + 80px);
   padding-bottom: calc(var(--tunnel-footer-height) + 16px);
 }
 
+.tunnel-body.is-step-meals #objective-footer,
 .tunnel-body.is-step-meals #formula-footer,
 .tunnel-body.is-step-meals #delivery-footer,
+.tunnel-body.is-step-livraison #objective-footer,
 .tunnel-body.is-step-livraison #formula-footer,
 .tunnel-body.is-step-livraison #meals-gauge-footer,
+.tunnel-body.is-step-formule #objective-footer,
+.tunnel-body.is-step-formule #delivery-footer,
+.tunnel-body.is-step-formule #meals-gauge-footer,
+.tunnel-body.is-step-objective #formula-footer,
+.tunnel-body.is-step-objective #delivery-footer,
+.tunnel-body.is-step-objective #meals-gauge-footer,
 .tunnel-footer.hidden {
   display: none;
 }
@@ -244,6 +275,7 @@ body {
 }
 
 .formula-intro,
+.objective-intro,
 .meals-intro {
   margin-bottom: 0;
   text-align: center;
@@ -477,7 +509,90 @@ body {
   width: 100%;
 }
 
+.objective-decision {
+  margin: 0 auto;
+  max-width: var(--objective-step-max-width);
+}
+
+.objective-intro {
+  margin-bottom: 22px;
+  text-align: center;
+}
+
+.objective-intro h1 {
+  margin-bottom: 10px;
+}
+
+.objective-lead {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 34rem;
+}
+
+.objective-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+  margin: 0 auto;
+  max-width: 520px;
+}
+
+.objective-card {
+  appearance: none;
+  background: var(--mileyo-white);
+  border: 2px solid rgba(185, 138, 215, 0.22);
+  border-radius: 16px;
+  color: var(--mileyo-text);
+  cursor: pointer;
+  display: grid;
+  gap: 6px;
+  font: inherit;
+  padding: 16px 18px;
+  position: relative;
+  text-align: left;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.objective-card:hover,
+.objective-card:focus-visible {
+  border-color: rgba(185, 138, 215, 0.55);
+  box-shadow: 0 4px 16px rgba(90, 27, 105, 0.08);
+  outline: none;
+}
+
+.objective-card.selected {
+  background: rgba(220, 194, 240, 0.28);
+  border-color: var(--mileyo-purple);
+  box-shadow: 0 4px 18px rgba(185, 138, 215, 0.18);
+}
+
+.objective-card-label {
+  color: var(--mileyo-purple-black);
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.objective-card-description {
+  color: var(--mileyo-muted);
+  font-size: 0.88rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.objective-card .selected-badge {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+}
+
+#objective-footer .tunnel-cta {
+  width: 100%;
+}
+
 .formula-intro h1,
+.objective-intro h1,
 .delivery-intro h1,
 .meals-intro h1,
 .setup-card h1 {
@@ -502,6 +617,7 @@ body {
 }
 
 .formula-lead,
+.objective-lead,
 .delivery-lead,
 .meals-lead,
 .setup-card p {
@@ -1627,6 +1743,22 @@ button:disabled {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .objective-grid {
+    gap: 14px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-width: none;
+  }
+
+  .objective-card {
+    min-height: 132px;
+    padding: 18px 16px 16px;
+  }
+
+  .objective-card .selected-badge {
+    position: static;
+    width: fit-content;
+  }
+
   .meal-filter-row {
     align-items: center;
     grid-template-columns: minmax(68px, 76px) minmax(0, 1fr);
@@ -1677,6 +1809,10 @@ button:disabled {
     padding-left: 48px;
     padding-right: 48px;
     padding-top: 20px;
+  }
+
+  .tunnel-body.is-step-objective .builder-shell {
+    max-width: calc(var(--objective-step-max-width) + 96px);
   }
 
   .tunnel-body.is-step-livraison .builder-shell {

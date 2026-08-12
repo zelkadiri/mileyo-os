@@ -1,17 +1,40 @@
 import { mealFilterRuntimeScript } from "./builder-filter-runtime";
+import {
+  BUILDER_STEP_COUNT,
+  getBuilderStepLabel,
+  getBuilderStepProgressPercent,
+} from "./builder-objective-options";
+
+const builderStepLabelsJson = JSON.stringify({
+  formule: getBuilderStepLabel("formule"),
+  livraison: getBuilderStepLabel("livraison"),
+  objectif: getBuilderStepLabel("objectif"),
+  repas: getBuilderStepLabel("repas"),
+});
+
+const builderStepProgressJson = JSON.stringify({
+  formule: getBuilderStepProgressPercent("formule"),
+  livraison: getBuilderStepProgressPercent("livraison"),
+  objectif: getBuilderStepProgressPercent("objectif"),
+  repas: getBuilderStepProgressPercent("repas"),
+});
 
 export const builderClientScript = `
 (function () {
   var data = window.__MILEYO_BOX_BUILDER__;
   var orderType = "subscription";
+  var selectedObjective = null;
   var selectedBox = null;
   var requiredMeals = 0;
   var selectedMeals = {};
   var selectedDeliveryDate = null;
-  var currentStep = "formule";
+  var currentStep = "objectif";
   var mealsRendered = false;
   var FIRST_WEEK_DISCOUNT_EUR = 20;
   var RECOMMENDED_MEAL_COUNT = 12;
+  var STEP_COUNT = ${BUILDER_STEP_COUNT};
+  var STEP_LABELS = ${builderStepLabelsJson};
+  var STEP_PROGRESS = ${builderStepProgressJson};
 
   var boxGrid = document.getElementById("box-grid");
   var boxRailViewport = document.getElementById("box-rail-viewport");
@@ -19,9 +42,11 @@ export const builderClientScript = `
   var boxRailNext = document.getElementById("box-rail-next");
   var mealGrid = document.getElementById("meal-grid");
   var mealsSection = document.getElementById("meals-section");
+  var stepObjective = document.getElementById("step-objective");
   var stepFormula = document.getElementById("step-formula");
   var stepDelivery = document.getElementById("step-delivery");
   var stepMeals = document.getElementById("step-meals");
+  var objectiveGrid = document.getElementById("objective-grid");
   var selectedCount = document.getElementById("selected-count");
   var addToCart = document.getElementById("add-to-cart");
   var boxHelper = document.getElementById("box-helper");
@@ -31,6 +56,8 @@ export const builderClientScript = `
   var tunnelBack = document.getElementById("tunnel-back");
   var tunnelStepLabel = document.getElementById("tunnel-step-label");
   var tunnelProgressFill = document.getElementById("tunnel-progress-fill");
+  var objectiveContinue = document.getElementById("objective-continue");
+  var objectiveFooter = document.getElementById("objective-footer");
   var formulaContinue = document.getElementById("formula-continue");
   var formulaFooter = document.getElementById("formula-footer");
   var deliveryContinue = document.getElementById("delivery-continue");
@@ -205,6 +232,62 @@ export const builderClientScript = `
     tunnelPromo.classList.toggle("hidden", hideOnTunnelSteps || orderType === "one-time");
   }
 
+  function isValidObjective(value) {
+    if (!value || !data.objectives || !data.objectives.length) return false;
+    return data.objectives.some(function (option) {
+      return option.value === value;
+    });
+  }
+
+  function updateObjectiveCta() {
+    if (!objectiveContinue) return;
+    if (!isValidObjective(selectedObjective)) {
+      objectiveContinue.disabled = true;
+      objectiveContinue.textContent = "Choisissez votre objectif";
+      return;
+    }
+    objectiveContinue.disabled = false;
+    objectiveContinue.textContent = "Continuer →";
+  }
+
+  function renderObjectives() {
+    if (!objectiveGrid || !data.objectives) return;
+    objectiveGrid.innerHTML = "";
+    data.objectives.forEach(function (option) {
+      var button = document.createElement("button");
+      var isSelected = selectedObjective === option.value;
+      button.className = "objective-card" + (isSelected ? " selected" : "");
+      button.type = "button";
+      button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+
+      var label = document.createElement("span");
+      label.className = "objective-card-label";
+      label.textContent = option.label;
+      button.appendChild(label);
+
+      var description = document.createElement("span");
+      description.className = "objective-card-description";
+      description.textContent = option.description;
+      button.appendChild(description);
+
+      if (isSelected) {
+        var badge = document.createElement("span");
+        badge.className = "selected-badge";
+        badge.textContent = "Sélectionné";
+        button.appendChild(badge);
+      }
+
+      button.addEventListener("click", function () {
+        selectedObjective = option.value;
+        renderObjectives();
+        updateObjectiveCta();
+        setError("");
+      });
+
+      objectiveGrid.appendChild(button);
+    });
+  }
+
   function getVisibleMeals() {
     return data.meals.filter(mealMatchesFilter);
   }
@@ -334,29 +417,37 @@ export const builderClientScript = `
   }
 
   function updateTunnelChrome(step) {
+    var isObjective = step === "objectif";
     var isFormula = step === "formule";
     var isDelivery = step === "livraison";
     var isMeals = step === "repas";
     currentStep = step;
+    document.body.classList.toggle("is-step-objective", isObjective);
+    document.body.classList.toggle("is-step-formule", isFormula);
     document.body.classList.toggle("is-step-meals", isMeals);
     document.body.classList.toggle("is-step-livraison", isDelivery);
 
     if (tunnelStepLabel) {
-      if (isFormula) {
-        tunnelStepLabel.textContent = "Étape 1 sur 3";
-      } else if (isDelivery) {
-        tunnelStepLabel.textContent = "Étape 2 sur 3";
-      } else {
-        tunnelStepLabel.textContent = "Étape 3 sur 3";
-      }
+      tunnelStepLabel.textContent = STEP_LABELS[step] || ("Étape 1 sur " + STEP_COUNT);
     }
     if (tunnelProgressFill) {
-      tunnelProgressFill.classList.toggle("is-step-2", isDelivery);
-      tunnelProgressFill.classList.toggle("is-step-3", isMeals);
+      tunnelProgressFill.classList.remove("is-step-1", "is-step-2", "is-step-3", "is-step-4");
+      if (isObjective) tunnelProgressFill.classList.add("is-step-1");
+      else if (isFormula) tunnelProgressFill.classList.add("is-step-2");
+      else if (isDelivery) tunnelProgressFill.classList.add("is-step-3");
+      else if (isMeals) tunnelProgressFill.classList.add("is-step-4");
+      var percent = STEP_PROGRESS[step];
+      if (typeof percent === "number") {
+        tunnelProgressFill.style.width = percent + "%";
+      }
     }
     if (tunnelBack) {
+      tunnelBack.classList.toggle("is-formula-step", isFormula);
       tunnelBack.classList.toggle("is-delivery-step", isDelivery);
       tunnelBack.classList.toggle("is-meals-step", isMeals);
+    }
+    if (objectiveFooter) {
+      objectiveFooter.classList.toggle("hidden", !isObjective);
     }
     if (formulaFooter) {
       formulaFooter.classList.toggle("hidden", !isFormula);
@@ -380,6 +471,9 @@ export const builderClientScript = `
     var pushHistory = !options || options.pushHistory !== false;
     var replaceHistory = options && options.replaceHistory;
 
+    if (!isValidObjective(selectedObjective) && step !== "objectif") {
+      step = "objectif";
+    }
     if (step === "repas" && !selectedBox) {
       step = "formule";
     }
@@ -389,14 +483,23 @@ export const builderClientScript = `
     if (step === "livraison" && !selectedBox) {
       step = "formule";
     }
+    if ((step === "formule" || step === "livraison" || step === "repas") && !isValidObjective(selectedObjective)) {
+      step = "objectif";
+    }
 
     updateTunnelChrome(step);
 
+    if (stepObjective) {
+      stepObjective.classList.toggle("hidden", step !== "objectif");
+    }
     stepFormula.classList.toggle("hidden", step !== "formule");
     stepDelivery.classList.toggle("hidden", step !== "livraison");
     stepMeals.classList.toggle("hidden", step !== "repas");
 
-    if (step === "formule") {
+    if (step === "objectif") {
+      renderObjectives();
+      updateObjectiveCta();
+    } else if (step === "formule") {
       window.requestAnimationFrame(function () {
         if (selectedBox) {
           var selectedCard = boxGrid.querySelector(".product-card.selected");
@@ -434,11 +537,15 @@ export const builderClientScript = `
     }
     if (currentStep === "livraison") {
       showStep("formule", { pushHistory: false });
+      return;
+    }
+    if (currentStep === "formule") {
+      showStep("objectif", { pushHistory: false });
     }
   }
 
   function handleTunnelBack() {
-    if (currentStep === "repas" || currentStep === "livraison") {
+    if (currentStep === "repas" || currentStep === "livraison" || currentStep === "formule") {
       goToPreviousStep();
       return;
     }
@@ -446,7 +553,11 @@ export const builderClientScript = `
   }
 
   function handleHistoryNavigation() {
-    var hash = (location.hash || "#formule").replace("#", "");
+    var hash = (location.hash || "#objectif").replace("#", "");
+    if (!isValidObjective(selectedObjective)) {
+      showStep("objectif", { pushHistory: false });
+      return;
+    }
     if (hash === "repas" && selectedBox && selectedDeliveryDate) {
       showStep("repas", { pushHistory: false });
       return;
@@ -455,7 +566,11 @@ export const builderClientScript = `
       showStep("livraison", { pushHistory: false });
       return;
     }
-    showStep("formule", { pushHistory: false });
+    if (hash === "formule") {
+      showStep("formule", { pushHistory: false });
+      return;
+    }
+    showStep("objectif", { pushHistory: false });
   }
 
   function selectBox(box, button) {
@@ -883,6 +998,17 @@ export const builderClientScript = `
 
   tunnelBack.addEventListener("click", handleTunnelBack);
 
+  if (objectiveContinue) {
+    objectiveContinue.addEventListener("click", function () {
+      if (!isValidObjective(selectedObjective)) {
+        setError("Choisissez votre objectif pour continuer.");
+        updateObjectiveCta();
+        return;
+      }
+      showStep("formule");
+    });
+  }
+
   formulaContinue.addEventListener("click", function () {
     if (!selectedBox || !requiredMeals) return;
     showStep("livraison");
@@ -933,17 +1059,23 @@ export const builderClientScript = `
     selectedDeliveryDate = data.deliveryConfig.defaultDate;
   }
   updatePromoBanner();
+  renderObjectives();
   renderBoxes();
+  updateObjectiveCta();
   updateFormulaCta();
   updateDeliveryCta();
   updateSummary();
 
-  if (location.hash === "#repas" && selectedBox && selectedDeliveryDate) {
+  if (!isValidObjective(selectedObjective)) {
+    showStep("objectif", { replaceHistory: true });
+  } else if (location.hash === "#repas" && selectedBox && selectedDeliveryDate) {
     showStep("repas", { replaceHistory: true });
   } else if (location.hash === "#livraison" && selectedBox) {
     showStep("livraison", { replaceHistory: true });
-  } else {
+  } else if (location.hash === "#formule") {
     showStep("formule", { replaceHistory: true });
+  } else {
+    showStep("objectif", { replaceHistory: true });
   }
 })();
 `;

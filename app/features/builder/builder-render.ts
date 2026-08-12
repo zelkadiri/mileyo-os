@@ -1,5 +1,6 @@
 import { builderClientScript } from "./builder-client";
 import { escapeHtml, scriptJson } from "./builder-formatters";
+import { BUILDER_OBJECTIVE_OPTIONS } from "./builder-objective-options";
 import { builderStyles } from "./builder-styles";
 import type { BuilderDeliveryConfig, BuilderMeal, BuilderProduct } from "./builder-types";
 
@@ -61,7 +62,8 @@ export const renderBuilder = ({
   </div>
   <header class="tunnel-header">
     <button class="tunnel-back" id="tunnel-back" type="button">
-      <span class="tunnel-back-text tunnel-back-text--formula">← Retour</span>
+      <span class="tunnel-back-text tunnel-back-text--objective">← Retour</span>
+      <span class="tunnel-back-text tunnel-back-text--formula">← Objectif</span>
       <span class="tunnel-back-text tunnel-back-text--delivery">← Formule</span>
       <span class="tunnel-back-text tunnel-back-text--meals-long">← Livraison</span>
       <span class="tunnel-back-text tunnel-back-text--meals-short">← Livraison</span>
@@ -69,7 +71,7 @@ export const renderBuilder = ({
     <!-- Wordmark temporaire : aucun asset logo Mileyo trouvé dans le projet -->
     <p class="tunnel-wordmark" aria-label="Mileyo">Mileyo</p>
     <div class="tunnel-progress-block">
-      <p class="tunnel-step-label" id="tunnel-step-label">Étape 1 sur 3</p>
+      <p class="tunnel-step-label" id="tunnel-step-label">Étape 1 sur 4</p>
       <div aria-hidden="true" class="tunnel-progress">
         <div class="tunnel-progress-fill" id="tunnel-progress-fill"></div>
       </div>
@@ -79,7 +81,17 @@ export const renderBuilder = ({
   <main class="builder-shell">
     <p class="error hidden" id="error-message"></p>
 
-    <section class="builder-step builder-step--formula" id="step-formula">
+    <section class="builder-step builder-step--objective" id="step-objective">
+      <div class="objective-decision">
+        <div class="objective-intro">
+          <h1>Quel est votre objectif ?</h1>
+          <p class="objective-lead">Choisissez l’objectif qui vous correspond.</p>
+        </div>
+        <div class="objective-grid" id="objective-grid" role="group" aria-label="Objectifs disponibles"></div>
+      </div>
+    </section>
+
+    <section class="builder-step builder-step--formula hidden" id="step-formula">
       <div class="formula-decision">
         <div class="formula-intro">
           <h1>Choisissez votre formule</h1>
@@ -207,7 +219,11 @@ export const renderBuilder = ({
     </section>
   </main>
 
-  <footer class="tunnel-footer" id="formula-footer">
+  <footer class="tunnel-footer" id="objective-footer">
+    <button class="tunnel-cta" disabled id="objective-continue" type="button">Choisissez votre objectif</button>
+  </footer>
+
+  <footer class="tunnel-footer hidden" id="formula-footer">
     <button class="tunnel-cta" id="formula-continue" type="button">Continuer avec 12 repas →</button>
   </footer>
 
@@ -225,7 +241,12 @@ export const renderBuilder = ({
     </div>
   </footer>
 
-  <script>window.__MILEYO_BOX_BUILDER__ = ${scriptJson({ boxes, deliveryConfig, meals })};</script>
+  <script>window.__MILEYO_BOX_BUILDER__ = ${scriptJson({
+    boxes,
+    deliveryConfig,
+    meals,
+    objectives: BUILDER_OBJECTIVE_OPTIONS,
+  })};</script>
   <script>${builderClientScript}</script>
 </body>
 </html>`);

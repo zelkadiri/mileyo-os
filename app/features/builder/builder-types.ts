@@ -1,3 +1,5 @@
+export type { BuilderObjectiveOption } from "./builder-objective-options";
+
 export type ShopifyProduct = {
   id: string;
   title: string;
