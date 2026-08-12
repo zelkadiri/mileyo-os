@@ -30,6 +30,7 @@ const BUSINESS_SUITES = [
   "07-preparation-backoffice.test.ts",
   "08-legacy-alignment-backfill.test.ts",
   "09-edge-cases.test.ts",
+  "10-subscription-cycle-constants.test.ts",
 ];
 
 const LEGACY_SUITES = [
