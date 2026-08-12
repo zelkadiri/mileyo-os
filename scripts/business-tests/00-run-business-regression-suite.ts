@@ -31,6 +31,7 @@ const BUSINESS_SUITES = [
   "08-legacy-alignment-backfill.test.ts",
   "09-edge-cases.test.ts",
   "10-subscription-cycle-constants.test.ts",
+  "11-subscription-objective-meal-catalog.test.ts",
 ];
 
 const LEGACY_SUITES = [
