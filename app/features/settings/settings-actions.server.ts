@@ -11,16 +11,23 @@ import {
 import {
   CREATE_VARIANT_MEAL_COUNT_METAFIELD_DEFINITION_INTENT,
   CREATE_VARIANT_OBJECTIVE_METAFIELD_DEFINITION_INTENT,
+  SETUP_MEAL_V2_METAFIELD_DEFINITIONS_INTENT,
   createMealCountMetafieldDefinition,
   createSubscriptionPriceMetafieldDefinition,
   createVariantMealCountMetafieldDefinition,
   createVariantObjectiveMetafieldDefinition,
+  setupMealV2MetafieldDefinitions,
 } from "./settings-metafields.server";
 import {
   SETUP_V2_BOX_CATALOG_INTENT,
   formatV2BoxCatalogSetupMessage,
   setupV2BoxCatalog,
 } from "./settings-box-catalog-v2.server";
+import {
+  SETUP_V2_MEAL_CATALOG_INTENT,
+  formatV2MealCatalogSetupMessage,
+  setupV2MealCatalog,
+} from "./settings-meal-catalog-v2.server";
 import { createOrUpdateWeeklySellingPlans } from "./settings-selling-plans.server";
 import {
   SETUP_V2_WEEKLY_SELLING_PLANS_INTENT,
@@ -176,6 +183,49 @@ export const handleSettingsAction = async ({
       message: formatV2BoxCatalogSetupMessage(result),
       ok: result.ok,
     };
+  }
+
+  if (intent === SETUP_MEAL_V2_METAFIELD_DEFINITIONS_INTENT) {
+    try {
+      const result = await setupMealV2MetafieldDefinitions(admin);
+
+      return {
+        errors: result.errors,
+        message: result.message,
+        ok: result.ok,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erreur inattendue Shopify.";
+
+      return {
+        errors: [message],
+        message: "Impossible de créer / vérifier les définitions Repas V2.",
+        ok: false,
+      };
+    }
+  }
+
+  if (intent === SETUP_V2_MEAL_CATALOG_INTENT) {
+    try {
+      const settings = await prisma.appSettings.findUnique({ where: { shop } });
+      const result = await setupV2MealCatalog(admin, settings?.mealCollectionId);
+
+      return {
+        errors: result.errors,
+        message: formatV2MealCatalogSetupMessage(result),
+        ok: result.ok,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erreur inattendue Shopify.";
+
+      return {
+        errors: [message],
+        message: "Impossible de préparer le catalogue Repas V2.",
+        ok: false,
+      };
+    }
   }
 
   if (intent === SETUP_V2_WEEKLY_SELLING_PLANS_INTENT) {

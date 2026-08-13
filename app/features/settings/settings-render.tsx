@@ -273,6 +273,89 @@ export default function Settings() {
         </s-stack>
       </s-section>
 
+      <s-section heading="Définitions Repas V2">
+        <s-stack gap="base">
+          <s-text>
+            Crée / vérifie les définitions PRODUCTVARIANT pour les repas :
+            <strong> mileyo.objective</strong>,{" "}
+            <strong>custom.calories</strong>,{" "}
+            <strong>custom.proteins</strong>,{" "}
+            <strong>custom.carbs</strong>,{" "}
+            <strong>custom.fat</strong>,{" "}
+            <strong>custom.portion_grams</strong>.
+          </s-text>
+          <s-text>
+            Aucune valeur n’est écrite sur les variantes. La définition
+            PRODUCT legacy <strong>custom.calories</strong> n’est pas
+            touchée.
+          </s-text>
+          <Form method="post">
+            <input
+              type="hidden"
+              name="intent"
+              value="setupMealV2MetafieldDefinitions"
+            />
+            <s-button type="submit">
+              Créer / vérifier définitions Repas V2
+            </s-button>
+          </Form>
+          {actionData?.message ? <s-text>{actionData.message}</s-text> : null}
+          {actionData?.errors?.length ? (
+            <s-unordered-list>
+              {actionData.errors.map((error) => (
+                <s-list-item key={error}>{error}</s-list-item>
+              ))}
+            </s-unordered-list>
+          ) : null}
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Catalogue Repas V2">
+        <s-stack gap="base">
+          <s-text>
+            Convertit in-place les recettes legacy de la collection de plats
+            configurée : option <strong>Objectif</strong> + 3 variantes
+            (Perte de poids · Équilibré · Prise de masse) avec{" "}
+            <strong>mileyo.objective</strong>.
+          </s-text>
+          <s-text>
+            Prix catalogue : <strong>0.00</strong>. Aucune macro inventée.
+            Les produits déjà configurés sont ignorés (idempotent). Les
+            structures ambiguës sont bloquées sans mutation.
+          </s-text>
+          <s-text>
+            {settings.mealCollectionTitle ? (
+              <>
+                Collection cible :{" "}
+                <strong>{settings.mealCollectionTitle}</strong> (
+                {settings.mealCollectionHandle})
+              </>
+            ) : (
+              <>Aucune collection de plats n’est configurée.</>
+            )}
+          </s-text>
+          {settings.mealCollectionId ? (
+            <Form method="post">
+              <input type="hidden" name="intent" value="setupV2MealCatalog" />
+              <s-button type="submit">Préparer catalogue Repas V2</s-button>
+            </Form>
+          ) : (
+            <s-text>
+              Sélectionnez une collection de plats avant de préparer le
+              catalogue Repas V2.
+            </s-text>
+          )}
+          {actionData?.message ? <s-text>{actionData.message}</s-text> : null}
+          {actionData?.errors?.length ? (
+            <s-unordered-list>
+              {actionData.errors.map((error) => (
+                <s-list-item key={error}>{error}</s-list-item>
+              ))}
+            </s-unordered-list>
+          ) : null}
+        </s-stack>
+      </s-section>
+
       <s-section heading="Catalogue Box V2">
         <s-stack gap="base">
           <s-text>

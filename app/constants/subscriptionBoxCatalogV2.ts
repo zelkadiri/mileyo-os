@@ -6,6 +6,8 @@
 
 import {
   SUBSCRIPTION_OBJECTIVE,
+  SUBSCRIPTION_OBJECTIVE_OPTION_LABEL,
+  SUBSCRIPTION_OBJECTIVE_OPTION_NAME,
   SUBSCRIPTION_OBJECTIVES,
   type SubscriptionObjective,
 } from "./subscriptionObjective";
@@ -19,7 +21,8 @@ export const BOX_V2_MEAL_COUNTS = [8, 10, 12, 16, 20, 24] as const;
 export type BoxV2MealCount = (typeof BOX_V2_MEAL_COUNTS)[number];
 
 export const BOX_V2_MEAL_COUNT_OPTION_NAME = "Nombre de repas";
-export const BOX_V2_OBJECTIVE_OPTION_NAME = "Objectif";
+/** @deprecated Prefer SUBSCRIPTION_OBJECTIVE_OPTION_NAME — kept for Box V2 callers. */
+export const BOX_V2_OBJECTIVE_OPTION_NAME = SUBSCRIPTION_OBJECTIVE_OPTION_NAME;
 
 export const BOX_V2_MEAL_COUNT_OPTION_LABEL: Record<BoxV2MealCount, string> = {
   8: "8 repas",
@@ -30,14 +33,8 @@ export const BOX_V2_MEAL_COUNT_OPTION_LABEL: Record<BoxV2MealCount, string> = {
   24: "24 repas",
 };
 
-export const BOX_V2_OBJECTIVE_OPTION_LABEL: Record<
-  SubscriptionObjective,
-  string
-> = {
-  [SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS]: "Perte de poids",
-  [SUBSCRIPTION_OBJECTIVE.BALANCED]: "Équilibré",
-  [SUBSCRIPTION_OBJECTIVE.BULK]: "Prise de masse",
-};
+/** @deprecated Prefer SUBSCRIPTION_OBJECTIVE_OPTION_LABEL — kept for Box V2 callers. */
+export const BOX_V2_OBJECTIVE_OPTION_LABEL = SUBSCRIPTION_OBJECTIVE_OPTION_LABEL;
 
 /**
  * TEMPORARY PLACEHOLDER PRICING — replace once client pricing is approved.
