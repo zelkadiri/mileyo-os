@@ -36,6 +36,7 @@ const BUSINESS_SUITES = [
   "13-builder-objective-step.test.ts",
   "14-settings-variant-metafield-definitions.test.ts",
   "15-settings-v2-selling-plans.test.ts",
+  "16-settings-v2-box-catalog-provisioning.test.ts",
 ];
 
 const LEGACY_SUITES = [

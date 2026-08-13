@@ -273,6 +273,43 @@ export default function Settings() {
         </s-stack>
       </s-section>
 
+      <s-section heading="Catalogue Box V2">
+        <s-stack gap="base">
+          <s-text>
+            Produit : <strong>Box Mileyo V2</strong>
+          </s-text>
+          <s-text>
+            Tailles : 8 · 10 · 12 · 16 · 20 · 24 repas
+          </s-text>
+          <s-text>
+            Objectifs : Perte de poids · Équilibré · Prise de masse
+          </s-text>
+          <s-text>Variantes : 18</s-text>
+          <s-text>
+            Prix : TEMPORAIRES — en attente de validation client
+          </s-text>
+          <s-text>Statut : Brouillon / DRAFT</s-text>
+          <s-text>
+            Le produit n’est ajouté à aucune collection et n’est pas branché
+            au builder legacy.
+          </s-text>
+          <Form method="post">
+            <input type="hidden" name="intent" value="setupV2BoxCatalog" />
+            <s-button type="submit">
+              Créer / vérifier catalogue Box V2
+            </s-button>
+          </Form>
+          {actionData?.message ? <s-text>{actionData.message}</s-text> : null}
+          {actionData?.errors?.length ? (
+            <s-unordered-list>
+              {actionData.errors.map((error) => (
+                <s-list-item key={error}>{error}</s-list-item>
+              ))}
+            </s-unordered-list>
+          ) : null}
+        </s-stack>
+      </s-section>
+
       <s-section heading="Abonnements Box V2">
         <s-stack gap="base">
           <s-text>

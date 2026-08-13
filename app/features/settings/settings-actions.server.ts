@@ -16,6 +16,11 @@ import {
   createVariantMealCountMetafieldDefinition,
   createVariantObjectiveMetafieldDefinition,
 } from "./settings-metafields.server";
+import {
+  SETUP_V2_BOX_CATALOG_INTENT,
+  formatV2BoxCatalogSetupMessage,
+  setupV2BoxCatalog,
+} from "./settings-box-catalog-v2.server";
 import { createOrUpdateWeeklySellingPlans } from "./settings-selling-plans.server";
 import {
   SETUP_V2_WEEKLY_SELLING_PLANS_INTENT,
@@ -160,6 +165,16 @@ export const handleSettingsAction = async ({
       errors: result.errors,
       message: `${result.processedCount} produit(s) box traité(s).`,
       ok: result.errors.length === 0,
+    };
+  }
+
+  if (intent === SETUP_V2_BOX_CATALOG_INTENT) {
+    const result = await setupV2BoxCatalog(admin);
+
+    return {
+      errors: result.errors,
+      message: formatV2BoxCatalogSetupMessage(result),
+      ok: result.ok,
     };
   }
 
