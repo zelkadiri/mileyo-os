@@ -17,6 +17,11 @@ import {
   createVariantObjectiveMetafieldDefinition,
 } from "./settings-metafields.server";
 import { createOrUpdateWeeklySellingPlans } from "./settings-selling-plans.server";
+import {
+  SETUP_V2_WEEKLY_SELLING_PLANS_INTENT,
+  formatV2SellingPlanSetupMessage,
+  setupV2WeeklySellingPlans,
+} from "./settings-selling-plans-v2.server";
 import type { SettingsActionData } from "./settings-types";
 
 export const handleSettingsAction = async ({
@@ -154,6 +159,30 @@ export const handleSettingsAction = async ({
     return {
       errors: result.errors,
       message: `${result.processedCount} produit(s) box traité(s).`,
+      ok: result.errors.length === 0,
+    };
+  }
+
+  if (intent === SETUP_V2_WEEKLY_SELLING_PLANS_INTENT) {
+    const settings = await prisma.appSettings.findUnique({ where: { shop } });
+
+    if (!settings?.boxCollectionId) {
+      return {
+        errors: [
+          "Sélectionnez une collection de box avant de configurer les abonnements Box V2.",
+        ],
+        ok: false,
+      };
+    }
+
+    const result = await setupV2WeeklySellingPlans(
+      admin,
+      settings.boxCollectionId,
+    );
+
+    return {
+      errors: result.errors,
+      message: formatV2SellingPlanSetupMessage(result),
       ok: result.errors.length === 0,
     };
   }

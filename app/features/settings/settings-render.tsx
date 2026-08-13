@@ -273,6 +273,40 @@ export default function Settings() {
         </s-stack>
       </s-section>
 
+      <s-section heading="Abonnements Box V2">
+        <s-stack gap="base">
+          <s-text>
+            Configure le selling plan hebdomadaire V2 uniquement pour les
+            produits dont toutes les variantes ont{" "}
+            <strong>mileyo.objective</strong> et{" "}
+            <strong>mileyo.meal_count</strong> au niveau variante.
+          </s-text>
+          <s-text>
+            Les produits legacy ou incomplets sont ignorés. Le prix
+            d’abonnement est le prix de la variante. Aucun discount
+            supplémentaire n’est appliqué.
+          </s-text>
+          <Form method="post">
+            <input
+              type="hidden"
+              name="intent"
+              value="setupV2WeeklySellingPlans"
+            />
+            <s-button type="submit">
+              Configurer abonnements Box V2
+            </s-button>
+          </Form>
+          {actionData?.message ? <s-text>{actionData.message}</s-text> : null}
+          {actionData?.errors?.length ? (
+            <s-unordered-list>
+              {actionData.errors.map((error) => (
+                <s-list-item key={error}>{error}</s-list-item>
+              ))}
+            </s-unordered-list>
+          ) : null}
+        </s-stack>
+      </s-section>
+
       <s-section heading="Configuration des tailles de box">
         <s-stack gap="base">
           <s-text>

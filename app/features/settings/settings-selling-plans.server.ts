@@ -1,3 +1,7 @@
+import {
+  MILEYO_SELLING_PLAN_GROUP_NAME,
+  MILEYO_SELLING_PLAN_NAME,
+} from "../../constants/subscriptionSellingPlan";
 import type {
   BoxSellingPlanProductsResponse,
   SellingPlanMutationResponse,
@@ -65,9 +69,6 @@ const sellingPlanGroupUpdateMutation = `#graphql
   }
 `;
 
-const weeklySellingPlanGroupName = "Mileyo abonnement hebdomadaire";
-const weeklySellingPlanName = "Abonnement hebdomadaire";
-
 const getBoxProductsForSellingPlans = async (
   admin: {
     graphql: (
@@ -113,7 +114,7 @@ const getSellingPlanInput = (
         intervalCount: 1,
       },
     },
-    name: weeklySellingPlanName,
+    name: MILEYO_SELLING_PLAN_NAME,
     options: ["Hebdomadaire"],
     pricingPolicies: [
       {
@@ -128,8 +129,8 @@ const getSellingPlanInput = (
   };
 
   return {
-    merchantCode: weeklySellingPlanGroupName,
-    name: weeklySellingPlanGroupName,
+    merchantCode: MILEYO_SELLING_PLAN_GROUP_NAME,
+    name: MILEYO_SELLING_PLAN_GROUP_NAME,
     options: ["Fréquence"],
     ...(existingSellingPlanId
       ? {
@@ -192,10 +193,10 @@ export const createOrUpdateWeeklySellingPlans = async (
     }
 
     const existingGroup = product.sellingPlanGroups.nodes.find(
-      (group) => group.name === weeklySellingPlanGroupName,
+      (group) => group.name === MILEYO_SELLING_PLAN_GROUP_NAME,
     );
     const existingSellingPlan = existingGroup?.sellingPlans.nodes.find(
-      (sellingPlan) => sellingPlan.name === weeklySellingPlanName,
+      (sellingPlan) => sellingPlan.name === MILEYO_SELLING_PLAN_NAME,
     );
     const input = getSellingPlanInput(fixedDiscountAmount, existingSellingPlan?.id);
     const response = await admin.graphql(

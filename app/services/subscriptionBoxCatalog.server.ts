@@ -1,12 +1,18 @@
 import type { SubscriptionObjective } from "../constants/subscriptionObjective";
 import {
+  MILEYO_SELLING_PLAN_GROUP_NAME,
+  MILEYO_SELLING_PLAN_NAME,
+} from "../constants/subscriptionSellingPlan";
+import {
   parseMealCountMetafield,
   warnMissingMealCountMetafield,
 } from "../utils/mealCountMetafield";
 import { parseSubscriptionObjective } from "../utils/subscriptionObjective";
 
-export const MILEYO_SELLING_PLAN_GROUP_NAME = "Mileyo abonnement hebdomadaire";
-export const MILEYO_SELLING_PLAN_NAME = "Abonnement hebdomadaire";
+export {
+  MILEYO_SELLING_PLAN_GROUP_NAME,
+  MILEYO_SELLING_PLAN_NAME,
+};
 
 export type ShopifyBoxProductNode = {
   id: string;
