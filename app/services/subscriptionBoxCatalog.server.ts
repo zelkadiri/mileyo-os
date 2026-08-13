@@ -287,6 +287,7 @@ export type BoxCatalogVariantV2 = {
   objective: SubscriptionObjective | null;
   mealCount: number | null;
   price: string | null;
+  sellingPlanId: string | null;
 };
 
 export type BoxCatalogProductV2 = {
@@ -297,12 +298,28 @@ export type BoxCatalogProductV2 = {
   variants: BoxCatalogVariantV2[];
 };
 
+export type ShopifyBoxCatalogSellingPlanNodeV2 = {
+  id: string;
+  name: string;
+};
+
+export type ShopifyBoxCatalogSellingPlanGroupNodeV2 = {
+  id?: string;
+  name: string;
+  sellingPlans: {
+    nodes: ShopifyBoxCatalogSellingPlanNodeV2[];
+  };
+};
+
 export type ShopifyBoxCatalogVariantNodeV2 = {
   id: string;
   title: string;
   price?: string | null;
   objectiveMetafield?: { value: string } | null;
   mealCountMetafield?: { value: string } | null;
+  sellingPlanGroups?: {
+    nodes: ShopifyBoxCatalogSellingPlanGroupNodeV2[];
+  } | null;
 };
 
 export type ShopifyBoxCatalogProductNodeV2 = {
@@ -340,6 +357,18 @@ const boxCollectionProductsV2Query = `#graphql
               mealCountMetafield: metafield(namespace: "mileyo", key: "meal_count") {
                 value
               }
+              sellingPlanGroups(first: 10) {
+                nodes {
+                  id
+                  name
+                  sellingPlans(first: 10) {
+                    nodes {
+                      id
+                      name
+                    }
+                  }
+                }
+              }
             }
           }
         }
@@ -366,6 +395,32 @@ const parseBoxVariantPrice = (
   return trimmed || null;
 };
 
+/**
+ * Resolve the Mileyo weekly selling plan id from a variant's selling plan groups.
+ * Match by exact group/plan names only — never by node order.
+ */
+export const resolveWeeklySellingPlanIdFromVariantGroups = (
+  sellingPlanGroups:
+    | { nodes: ShopifyBoxCatalogSellingPlanGroupNodeV2[] }
+    | null
+    | undefined,
+): string | null => {
+  const groups = sellingPlanGroups?.nodes ?? [];
+  const weeklyGroup = groups.find(
+    (group) => group.name === MILEYO_SELLING_PLAN_GROUP_NAME,
+  );
+  if (!weeklyGroup) {
+    return null;
+  }
+
+  const weeklyPlan =
+    weeklyGroup.sellingPlans?.nodes?.find(
+      (sellingPlan) => sellingPlan.name === MILEYO_SELLING_PLAN_NAME,
+    ) ?? null;
+
+  return weeklyPlan?.id ?? null;
+};
+
 export const parseBoxCatalogMealCount = (
   variantMealCountValue: string | null | undefined,
   productMealCountValue: string | null | undefined,
@@ -390,6 +445,9 @@ export const toBoxCatalogVariantV2 = (
     productMealCountValue,
   ),
   price: parseBoxVariantPrice(variant.price),
+  sellingPlanId: resolveWeeklySellingPlanIdFromVariantGroups(
+    variant.sellingPlanGroups,
+  ),
 });
 
 export const toBoxCatalogProductV2 = (
@@ -440,6 +498,7 @@ export type TrustedBoxCatalogVariantV2 = {
   objective: SubscriptionObjective;
   mealCount: number;
   price: string;
+  sellingPlanId: string | null;
 };
 
 export type TrustedBoxCatalogOptionV2 = TrustedBoxCatalogVariantV2 & {

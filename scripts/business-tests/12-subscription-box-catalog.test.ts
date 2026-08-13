@@ -3,16 +3,44 @@
  */
 import { SUBSCRIPTION_OBJECTIVE } from "../../app/constants/subscriptionObjective";
 import {
+  MILEYO_SELLING_PLAN_GROUP_NAME,
+  MILEYO_SELLING_PLAN_NAME,
   parseBoxCatalogMealCount,
+  resolveWeeklySellingPlanIdFromVariantGroups,
   toBoxCatalogProductsV2,
   toTrustedBoxCatalogOptionsV2,
   toTrustedBoxCatalogVariantV2,
   type ShopifyBoxCatalogProductNodeV2,
+  type ShopifyBoxCatalogSellingPlanGroupNodeV2,
 } from "../../app/services/subscriptionBoxCatalog.server";
 import {
   createBusinessTestContext,
   finishSuite,
 } from "./_framework";
+
+const MILEYO_WEEKLY_SELLING_PLAN_ID =
+  "gid://shopify/SellingPlan/9001";
+
+const buildMileyoWeeklySellingPlanGroups = (
+  overrides?: ShopifyBoxCatalogSellingPlanGroupNodeV2[],
+): { nodes: ShopifyBoxCatalogSellingPlanGroupNodeV2[] } => ({
+  nodes:
+    overrides ??
+    [
+      {
+        id: "gid://shopify/SellingPlanGroup/8001",
+        name: MILEYO_SELLING_PLAN_GROUP_NAME,
+        sellingPlans: {
+          nodes: [
+            {
+              id: MILEYO_WEEKLY_SELLING_PLAN_ID,
+              name: MILEYO_SELLING_PLAN_NAME,
+            },
+          ],
+        },
+      },
+    ],
+});
 
 const buildThreeObjectiveBoxFixture = (): ShopifyBoxCatalogProductNodeV2 => ({
   id: "gid://shopify/Product/5001",
@@ -240,12 +268,18 @@ const runSuite = () => {
     objective: SUBSCRIPTION_OBJECTIVE.BALANCED,
     mealCount: 12,
     price: "99.00",
+    sellingPlanId: MILEYO_WEEKLY_SELLING_PLAN_ID,
   });
 
   ctx.assertEqual("complete variant is trusted", completeVariant?.variantId, "gid://shopify/ProductVariant/7001");
   ctx.assertEqual("complete variant objective", completeVariant?.objective, SUBSCRIPTION_OBJECTIVE.BALANCED);
   ctx.assertEqual("complete variant mealCount", completeVariant?.mealCount, 12);
   ctx.assertEqual("complete variant price", completeVariant?.price, "99.00");
+  ctx.assertEqual(
+    "complete variant sellingPlanId",
+    completeVariant?.sellingPlanId,
+    MILEYO_WEEKLY_SELLING_PLAN_ID,
+  );
 
   ctx.scenario("G. Trusted V2 — objective absent");
   ctx.assertNull(
@@ -256,6 +290,7 @@ const runSuite = () => {
       objective: null,
       mealCount: 12,
       price: "99.00",
+      sellingPlanId: null,
     }),
   );
 
@@ -268,6 +303,7 @@ const runSuite = () => {
       objective: SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS,
       mealCount: null,
       price: "99.00",
+      sellingPlanId: null,
     }),
   );
 
@@ -280,6 +316,7 @@ const runSuite = () => {
       objective: SUBSCRIPTION_OBJECTIVE.BULK,
       mealCount: 12,
       price: null,
+      sellingPlanId: null,
     }),
   );
 
@@ -292,6 +329,7 @@ const runSuite = () => {
       objective: SUBSCRIPTION_OBJECTIVE.BALANCED,
       mealCount: 12,
       price: "99.00",
+      sellingPlanId: null,
     }),
   );
   ctx.assertNull(
@@ -302,6 +340,7 @@ const runSuite = () => {
       objective: SUBSCRIPTION_OBJECTIVE.BALANCED,
       mealCount: 12,
       price: "99.00",
+      sellingPlanId: null,
     }),
   );
 
@@ -331,6 +370,7 @@ const runSuite = () => {
       objective: null,
       mealCount: null,
       price: null,
+      sellingPlanId: null,
     }),
   );
 
@@ -433,6 +473,187 @@ const runSuite = () => {
     "product with no valid variant returns empty trusted list",
     toTrustedBoxCatalogOptionsV2(noTrustedProduct).length,
     0,
+  );
+
+  ctx.scenario("M. Selling plan V2 — résolution par noms Mileyo");
+
+  ctx.assertEqual(
+    "A. Mileyo group + plan → sellingPlanId",
+    resolveWeeklySellingPlanIdFromVariantGroups(
+      buildMileyoWeeklySellingPlanGroups(),
+    ),
+    MILEYO_WEEKLY_SELLING_PLAN_ID,
+  );
+
+  ctx.assertNull(
+    "B. missing sellingPlanGroups → null",
+    resolveWeeklySellingPlanIdFromVariantGroups(undefined),
+  );
+  ctx.assertNull(
+    "B. empty sellingPlanGroups nodes → null",
+    resolveWeeklySellingPlanIdFromVariantGroups({ nodes: [] }),
+  );
+
+  ctx.assertNull(
+    "C. other group name → null",
+    resolveWeeklySellingPlanIdFromVariantGroups({
+      nodes: [
+        {
+          id: "gid://shopify/SellingPlanGroup/8100",
+          name: "Autre abonnement",
+          sellingPlans: {
+            nodes: [
+              {
+                id: "gid://shopify/SellingPlan/9100",
+                name: MILEYO_SELLING_PLAN_NAME,
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+
+  ctx.assertNull(
+    "D. Mileyo group without expected plan → null",
+    resolveWeeklySellingPlanIdFromVariantGroups({
+      nodes: [
+        {
+          id: "gid://shopify/SellingPlanGroup/8200",
+          name: MILEYO_SELLING_PLAN_GROUP_NAME,
+          sellingPlans: {
+            nodes: [
+              {
+                id: "gid://shopify/SellingPlan/9200",
+                name: "Mensuel",
+              },
+            ],
+          },
+        },
+      ],
+    }),
+  );
+
+  const mileyoNotFirstGroupId = "gid://shopify/SellingPlan/9301";
+  ctx.assertEqual(
+    "E. Mileyo group not first → still resolved",
+    resolveWeeklySellingPlanIdFromVariantGroups({
+      nodes: [
+        {
+          id: "gid://shopify/SellingPlanGroup/8300",
+          name: "Autre groupe",
+          sellingPlans: {
+            nodes: [
+              {
+                id: "gid://shopify/SellingPlan/9300",
+                name: "Autre plan",
+              },
+            ],
+          },
+        },
+        {
+          id: "gid://shopify/SellingPlanGroup/8301",
+          name: MILEYO_SELLING_PLAN_GROUP_NAME,
+          sellingPlans: {
+            nodes: [
+              {
+                id: mileyoNotFirstGroupId,
+                name: MILEYO_SELLING_PLAN_NAME,
+              },
+            ],
+          },
+        },
+      ],
+    }),
+    mileyoNotFirstGroupId,
+  );
+
+  const mileyoNotFirstPlanId = "gid://shopify/SellingPlan/9402";
+  ctx.assertEqual(
+    "F. Mileyo plan not first in group → still resolved",
+    resolveWeeklySellingPlanIdFromVariantGroups({
+      nodes: [
+        {
+          id: "gid://shopify/SellingPlanGroup/8400",
+          name: MILEYO_SELLING_PLAN_GROUP_NAME,
+          sellingPlans: {
+            nodes: [
+              {
+                id: "gid://shopify/SellingPlan/9401",
+                name: "Essai gratuit",
+              },
+              {
+                id: mileyoNotFirstPlanId,
+                name: MILEYO_SELLING_PLAN_NAME,
+              },
+            ],
+          },
+        },
+      ],
+    }),
+    mileyoNotFirstPlanId,
+  );
+
+  const sellingPlanProduct = toBoxCatalogProductsV2([
+    {
+      id: "gid://shopify/Product/5020",
+      title: "Box selling plan",
+      featuredImage: {
+        altText: "Box selling plan",
+        url: "https://cdn.shopify.com/box-selling-plan.jpg",
+      },
+      variants: {
+        nodes: [
+          {
+            id: "gid://shopify/ProductVariant/8001",
+            title: "12 balanced with plan",
+            price: "99.00",
+            objectiveMetafield: { value: SUBSCRIPTION_OBJECTIVE.BALANCED },
+            mealCountMetafield: { value: "12" },
+            sellingPlanGroups: buildMileyoWeeklySellingPlanGroups(),
+          },
+          {
+            id: "gid://shopify/ProductVariant/8002",
+            title: "12 weight_loss without plan",
+            price: "89.00",
+            objectiveMetafield: { value: SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS },
+            mealCountMetafield: { value: "12" },
+          },
+        ],
+      },
+    },
+  ]);
+
+  ctx.assertEqual(
+    "raw variant with Mileyo plan keeps sellingPlanId",
+    sellingPlanProduct[0]?.variants[0]?.sellingPlanId,
+    MILEYO_WEEKLY_SELLING_PLAN_ID,
+  );
+  ctx.assertNull(
+    "raw variant without groups has null sellingPlanId",
+    sellingPlanProduct[0]?.variants[1]?.sellingPlanId ?? null,
+  );
+
+  const sellingPlanTrusted = toTrustedBoxCatalogOptionsV2(sellingPlanProduct);
+  ctx.assertEqual("G+H. trusted keeps both complete variants", sellingPlanTrusted.length, 2);
+  ctx.assertEqual(
+    "G. sellingPlanId propagated to TrustedBoxCatalogOptionV2",
+    sellingPlanTrusted[0]?.sellingPlanId,
+    MILEYO_WEEKLY_SELLING_PLAN_ID,
+  );
+  ctx.assertEqual(
+    "H. trusted option without selling plan stays trusted",
+    sellingPlanTrusted[1]?.variantId,
+    "gid://shopify/ProductVariant/8002",
+  );
+  ctx.assertNull(
+    "H. trusted option without plan has null sellingPlanId",
+    sellingPlanTrusted[1]?.sellingPlanId ?? null,
+  );
+
+  ctx.assertNull(
+    "incomplete catalog still exposes null sellingPlanId",
+    incompleteBoxes[1]?.variants[0]?.sellingPlanId ?? null,
   );
 
   return finishSuite("12-subscription-box-catalog", ctx);
