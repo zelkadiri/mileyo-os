@@ -9,8 +9,12 @@ import {
   getSelectedCollection,
 } from "./settings-catalog.server";
 import {
+  CREATE_VARIANT_MEAL_COUNT_METAFIELD_DEFINITION_INTENT,
+  CREATE_VARIANT_OBJECTIVE_METAFIELD_DEFINITION_INTENT,
   createMealCountMetafieldDefinition,
   createSubscriptionPriceMetafieldDefinition,
+  createVariantMealCountMetafieldDefinition,
+  createVariantObjectiveMetafieldDefinition,
 } from "./settings-metafields.server";
 import { createOrUpdateWeeklySellingPlans } from "./settings-selling-plans.server";
 import type { SettingsActionData } from "./settings-types";
@@ -55,6 +59,36 @@ export const handleSettingsAction = async ({
           ? "Définition de metafield Nombre de repas créée."
           : "La définition existe peut-être déjà ou Shopify a retourné un avertissement.",
       ok: errors.length === 0,
+    };
+  }
+
+  if (intent === CREATE_VARIANT_OBJECTIVE_METAFIELD_DEFINITION_INTENT) {
+    const result = await createVariantObjectiveMetafieldDefinition(admin);
+
+    return {
+      errors: result.errors,
+      message:
+        result.errors.length === 0
+          ? result.alreadyExisted
+            ? "Définition mileyo.objective (variante) déjà présente."
+            : "Définition de metafield Objectif (variante) créée."
+          : "Impossible de créer la définition Objectif (variante).",
+      ok: result.errors.length === 0,
+    };
+  }
+
+  if (intent === CREATE_VARIANT_MEAL_COUNT_METAFIELD_DEFINITION_INTENT) {
+    const result = await createVariantMealCountMetafieldDefinition(admin);
+
+    return {
+      errors: result.errors,
+      message:
+        result.errors.length === 0
+          ? result.alreadyExisted
+            ? "Définition mileyo.meal_count (variante) déjà présente."
+            : "Définition de metafield Nombre de repas (variante) créée."
+          : "Impossible de créer la définition Nombre de repas (variante).",
+      ok: result.errors.length === 0,
     };
   }
 

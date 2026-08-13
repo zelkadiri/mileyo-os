@@ -230,6 +230,49 @@ export default function Settings() {
         </s-stack>
       </s-section>
 
+      <s-section heading="Metafields variante (V2)">
+        <s-stack gap="base">
+          <s-text>
+            Crée uniquement les définitions Shopify pour les variantes produit.
+            Aucune valeur n’est écrite sur les variants.
+          </s-text>
+          <s-text>
+            <strong>mileyo.objective</strong> — Variante produit
+          </s-text>
+          <Form method="post">
+            <input
+              type="hidden"
+              name="intent"
+              value="createVariantObjectiveMetafieldDefinition"
+            />
+            <s-button type="submit">
+              Créer définition objectif variante
+            </s-button>
+          </Form>
+          <s-text>
+            <strong>mileyo.meal_count</strong> — Variante produit
+          </s-text>
+          <Form method="post">
+            <input
+              type="hidden"
+              name="intent"
+              value="createVariantMealCountMetafieldDefinition"
+            />
+            <s-button type="submit">
+              Créer définition nombre de repas variante
+            </s-button>
+          </Form>
+          {actionData?.message ? <s-text>{actionData.message}</s-text> : null}
+          {actionData?.errors?.length ? (
+            <s-unordered-list>
+              {actionData.errors.map((error) => (
+                <s-list-item key={error}>{error}</s-list-item>
+              ))}
+            </s-unordered-list>
+          ) : null}
+        </s-stack>
+      </s-section>
+
       <s-section heading="Configuration des tailles de box">
         <s-stack gap="base">
           <s-text>

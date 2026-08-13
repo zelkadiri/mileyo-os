@@ -110,6 +110,7 @@ export type MetafieldDefinitionMutationResponse = {
         id: string;
       } | null;
       userErrors: {
+        code?: string | null;
         field?: string[] | null;
         message: string;
       }[];
