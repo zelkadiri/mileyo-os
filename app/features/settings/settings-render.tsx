@@ -313,15 +313,16 @@ export default function Settings() {
       <s-section heading="Abonnements Box V2">
         <s-stack gap="base">
           <s-text>
-            Configure le selling plan hebdomadaire V2 uniquement pour les
-            produits dont toutes les variantes ont{" "}
-            <strong>mileyo.objective</strong> et{" "}
+            Configure le selling plan hebdomadaire V2 pour le produit{" "}
+            <strong>Box Mileyo V2</strong> (handle{" "}
+            <strong>box-mileyo-v2</strong>), uniquement si toutes ses variantes
+            ont <strong>mileyo.objective</strong> et{" "}
             <strong>mileyo.meal_count</strong> au niveau variante.
           </s-text>
           <s-text>
-            Les produits legacy ou incomplets sont ignorés. Le prix
-            d’abonnement est le prix de la variante. Aucun discount
-            supplémentaire n’est appliqué.
+            Les produits legacy de la collection historique ne sont pas
+            concernés. Le prix d’abonnement est le prix de la variante. Aucun
+            discount supplémentaire n’est appliqué.
           </s-text>
           <Form method="post">
             <input

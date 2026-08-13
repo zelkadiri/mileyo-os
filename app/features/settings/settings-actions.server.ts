@@ -179,27 +179,24 @@ export const handleSettingsAction = async ({
   }
 
   if (intent === SETUP_V2_WEEKLY_SELLING_PLANS_INTENT) {
-    const settings = await prisma.appSettings.findUnique({ where: { shop } });
+    try {
+      const result = await setupV2WeeklySellingPlans(admin);
 
-    if (!settings?.boxCollectionId) {
       return {
-        errors: [
-          "Sélectionnez une collection de box avant de configurer les abonnements Box V2.",
-        ],
+        errors: result.errors,
+        message: formatV2SellingPlanSetupMessage(result),
+        ok: result.errors.length === 0,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erreur inattendue Shopify.";
+
+      return {
+        errors: [message],
+        message: "Impossible de configurer les abonnements Box V2.",
         ok: false,
       };
     }
-
-    const result = await setupV2WeeklySellingPlans(
-      admin,
-      settings.boxCollectionId,
-    );
-
-    return {
-      errors: result.errors,
-      message: formatV2SellingPlanSetupMessage(result),
-      ok: result.errors.length === 0,
-    };
   }
 
   const boxCollectionId = getFormString(formData, "boxCollectionId");

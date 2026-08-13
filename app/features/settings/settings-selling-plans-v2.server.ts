@@ -8,6 +8,7 @@
  * - never updates, deletes, or detaches existing groups/plans
  */
 
+import { BOX_V2_PRODUCT_HANDLE } from "../../constants/subscriptionBoxCatalogV2";
 import {
   MILEYO_SELLING_PLAN_GROUP_NAME,
   MILEYO_SELLING_PLAN_NAME,
@@ -19,6 +20,8 @@ export const SETUP_V2_WEEKLY_SELLING_PLANS_INTENT =
   "setupV2WeeklySellingPlans" as const;
 
 export const V2_BOX_VARIANTS_PAGE_SIZE = 100;
+export const V2_BOX_PRODUCT_SELLING_PLAN_GROUPS_PAGE_SIZE = 20;
+export const V2_BOX_GROUP_SELLING_PLANS_PAGE_SIZE = 10;
 
 export const V2_SELLING_PLAN_SKIP_REASON = {
   DUPLICATE_OBJECTIVE_MEAL_COUNT: "duplicate objective/mealCount combination",
@@ -29,13 +32,17 @@ export const V2_SELLING_PLAN_SKIP_REASON = {
   MISSING_VARIANT_MEAL_COUNT: "missing variant meal_count",
   MISSING_VARIANT_OBJECTIVE: "missing variant objective",
   NO_VARIANTS: "no variants",
+  PRODUCT_NOT_FOUND: "Box Mileyo V2 introuvable",
+  HANDLE_MISMATCH: `product handle is not ${BOX_V2_PRODUCT_HANDLE}`,
 } as const;
 
 export const V2_SELLING_PLAN_BLOCK_REASON = {
+  GROUP_DETAILS_UNAVAILABLE: "selling plan group details unavailable",
   GROUP_WITHOUT_PLAN: "Mileyo group exists without exact weekly plan",
   LEGACY_PRICING: "legacy pricing policy conflict",
   MULTIPLE_GROUPS: "multiple Mileyo selling plan groups",
   MULTIPLE_PLANS: "multiple Mileyo selling plans",
+  MULTIPLE_PRODUCTS: "multiple products matched Box Mileyo V2 handle",
 } as const;
 
 type SettingsAdmin = {
@@ -55,9 +62,13 @@ export type V2SellingPlanNode = {
   pricingPolicies?: V2SellingPlanPricingPolicyNode[] | null;
 };
 
-export type V2SellingPlanGroupNode = {
+export type V2SellingPlanGroupSummary = {
   id?: string | null;
   name: string;
+};
+
+/** @deprecated Prefer V2SellingPlanGroupSummary for QUERY A product groups. */
+export type V2SellingPlanGroupNode = V2SellingPlanGroupSummary & {
   sellingPlans?: {
     nodes: V2SellingPlanNode[];
   } | null;
@@ -69,20 +80,29 @@ export type V2SellingPlanVariantNode = {
   price?: string | null;
   objectiveMetafield?: { value?: string | null } | null;
   mealCountMetafield?: { value?: string | null } | null;
-  sellingPlanGroups?: {
-    nodes: V2SellingPlanGroupNode[];
-  } | null;
 };
 
 export type V2SellingPlanProductNode = {
   id: string;
   title: string;
+  handle?: string | null;
   sellingPlanGroups?: {
-    nodes: V2SellingPlanGroupNode[];
+    nodes: V2SellingPlanGroupSummary[];
   } | null;
   variants: {
     nodes: V2SellingPlanVariantNode[];
   };
+};
+
+export type V2SellingPlanGroupDetails = {
+  id: string;
+  name: string;
+  sellingPlans?: {
+    nodes: V2SellingPlanNode[];
+  } | null;
+  productVariants?: {
+    nodes: { id: string }[];
+  } | null;
 };
 
 export type V2EligibleVariant = {
@@ -176,9 +196,10 @@ export type V2WeeklySellingPlanGroupInput = {
 
 type GraphqlErrorResponse = {
   data?: {
-    collection?: {
-      products: { nodes: V2SellingPlanProductNode[] };
-    } | null;
+    products?: {
+      nodes: V2SellingPlanProductNode[];
+    };
+    sellingPlanGroup?: V2SellingPlanGroupDetails | null;
     sellingPlanGroupAddProductVariants?: {
       userErrors: { field?: string[] | null; message: string }[];
     };
@@ -189,56 +210,62 @@ type GraphqlErrorResponse = {
   errors?: { message?: string | null }[];
 };
 
+/**
+ * QUERY A — product identity, variant eligibility, product-level group summaries.
+ * Intentionally omits per-variant sellingPlanGroups (Shopify requested-cost bomb).
+ */
 export const BOX_V2_SELLING_PLAN_PRODUCTS_QUERY = `#graphql
-  query BoxV2SellingPlanProducts($id: ID!) {
-    collection(id: $id) {
-      products(first: 50, sortKey: TITLE) {
+  query BoxV2SellingPlanProductsByHandle($query: String!) {
+    products(first: 5, query: $query) {
+      nodes {
+        id
+        title
+        handle
+        sellingPlanGroups(first: 20) {
+          nodes {
+            id
+            name
+          }
+        }
+        variants(first: 100) {
+          nodes {
+            id
+            title
+            price
+            objectiveMetafield: metafield(namespace: "mileyo", key: "objective") {
+              value
+            }
+            mealCountMetafield: metafield(namespace: "mileyo", key: "meal_count") {
+              value
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * QUERY B — exact Mileyo group details + Box V2 variant attachments.
+ * Fetched only when QUERY A finds exactly one Mileyo group.
+ */
+export const BOX_V2_SELLING_PLAN_GROUP_DETAILS_QUERY = `#graphql
+  query BoxV2SellingPlanGroupDetails($groupId: ID!, $productId: ID!) {
+    sellingPlanGroup(id: $groupId) {
+      id
+      name
+      sellingPlans(first: 10) {
         nodes {
           id
-          title
-          sellingPlanGroups(first: 10) {
-            nodes {
-              id
-              name
-              sellingPlans(first: 10) {
-                nodes {
-                  id
-                  name
-                  pricingPolicies {
-                    __typename
-                  }
-                }
-              }
-            }
+          name
+          pricingPolicies {
+            __typename
           }
-          variants(first: 100) {
-            nodes {
-              id
-              title
-              price
-              objectiveMetafield: metafield(namespace: "mileyo", key: "objective") {
-                value
-              }
-              mealCountMetafield: metafield(namespace: "mileyo", key: "meal_count") {
-                value
-              }
-              sellingPlanGroups(first: 10) {
-                nodes {
-                  id
-                  name
-                  sellingPlans(first: 10) {
-                    nodes {
-                      id
-                      name
-                      pricingPolicies {
-                        __typename
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
+        }
+      }
+      productVariants(first: 100, productId: $productId) {
+        nodes {
+          id
         }
       }
     }
@@ -387,109 +414,50 @@ export const evaluateV2ProductEligibility = (
   return { eligible: true, variants: eligibleVariants };
 };
 
-const mergeSellingPlans = (
-  left: V2SellingPlanNode[],
-  right: V2SellingPlanNode[],
-): V2SellingPlanNode[] => {
-  const byId = new Map<string, V2SellingPlanNode>();
-
-  for (const plan of [...left, ...right]) {
-    if (isBlank(plan.id)) {
-      continue;
-    }
-
-    const existing = byId.get(plan.id);
-    if (!existing) {
-      byId.set(plan.id, plan);
-      continue;
-    }
-
-    const existingHasPolicies = existing.pricingPolicies != null;
-    const incomingHasPolicies = plan.pricingPolicies != null;
-    if (incomingHasPolicies && !existingHasPolicies) {
-      byId.set(plan.id, plan);
-      continue;
-    }
-
-    if (
-      (plan.pricingPolicies?.length ?? 0) >
-      (existing.pricingPolicies?.length ?? 0)
-    ) {
-      byId.set(plan.id, plan);
-    }
-  }
-
-  return [...byId.values()];
-};
-
-const collectNamedMileyoGroups = (
+const collectNamedMileyoGroupSummaries = (
   product: V2SellingPlanProductNode,
-): V2SellingPlanGroupNode[] => {
-  const groups: V2SellingPlanGroupNode[] = [
-    ...(product.sellingPlanGroups?.nodes ?? []),
-  ];
-
-  for (const variant of product.variants?.nodes ?? []) {
-    groups.push(...(variant.sellingPlanGroups?.nodes ?? []));
-  }
-
-  return groups.filter(
+): V2SellingPlanGroupSummary[] =>
+  (product.sellingPlanGroups?.nodes ?? []).filter(
     (group) => group.name === MILEYO_SELLING_PLAN_GROUP_NAME,
   );
-};
 
-export const collectExactMileyoSellingPlanGroups = (
+export const collectExactMileyoSellingPlanGroupSummaries = (
   product: V2SellingPlanProductNode,
-): V2SellingPlanGroupNode[] => {
-  const byId = new Map<string, V2SellingPlanGroupNode>();
+): V2SellingPlanGroupSummary[] => {
+  const byId = new Map<string, V2SellingPlanGroupSummary>();
 
-  for (const group of collectNamedMileyoGroups(product)) {
+  for (const group of collectNamedMileyoGroupSummaries(product)) {
     const groupId = group.id?.trim();
     if (!groupId) {
       continue;
     }
 
-    const existing = byId.get(groupId);
-    if (!existing) {
+    if (!byId.has(groupId)) {
       byId.set(groupId, {
-        ...group,
         id: groupId,
-        sellingPlans: {
-          nodes: group.sellingPlans?.nodes ?? [],
-        },
+        name: group.name,
       });
-      continue;
     }
-
-    byId.set(groupId, {
-      ...existing,
-      sellingPlans: {
-        nodes: mergeSellingPlans(
-          existing.sellingPlans?.nodes ?? [],
-          group.sellingPlans?.nodes ?? [],
-        ),
-      },
-    });
   }
 
   return [...byId.values()];
 };
 
+/** @deprecated Use collectExactMileyoSellingPlanGroupSummaries. */
+export const collectExactMileyoSellingPlanGroups =
+  collectExactMileyoSellingPlanGroupSummaries;
+
 export const hasSellingPlanPricingPolicies = (
   plan: V2SellingPlanNode,
 ): boolean => (plan.pricingPolicies?.length ?? 0) > 0;
 
-const collectAttachedVariantIds = (
-  product: V2SellingPlanProductNode,
-  groupId: string,
+const collectAttachedVariantIdsFromGroupDetails = (
+  groupDetails: V2SellingPlanGroupDetails,
 ): Set<string> => {
   const attached = new Set<string>();
 
-  for (const variant of product.variants?.nodes ?? []) {
-    const matches = (variant.sellingPlanGroups?.nodes ?? []).some(
-      (group) => group.id === groupId,
-    );
-    if (matches && !isBlank(variant.id)) {
+  for (const variant of groupDetails.productVariants?.nodes ?? []) {
+    if (!isBlank(variant.id)) {
       attached.add(variant.id.trim());
     }
   }
@@ -525,14 +493,15 @@ export const getV2WeeklySellingPlanGroupInput =
 
 export const resolveV2SellingPlanDecision = (
   product: V2SellingPlanProductNode,
+  groupDetails: V2SellingPlanGroupDetails | null = null,
 ): V2SellingPlanDecision => {
   const eligibility = evaluateV2ProductEligibility(product);
   if (!eligibility.eligible) {
     return { action: "skip", reason: eligibility.reason };
   }
 
-  const namedWithoutId = collectNamedMileyoGroups(product).filter((group) =>
-    isBlank(group.id),
+  const namedWithoutId = collectNamedMileyoGroupSummaries(product).filter(
+    (group) => isBlank(group.id),
   );
   if (namedWithoutId.length > 0) {
     return {
@@ -541,7 +510,7 @@ export const resolveV2SellingPlanDecision = (
     };
   }
 
-  const groups = collectExactMileyoSellingPlanGroups(product);
+  const groups = collectExactMileyoSellingPlanGroupSummaries(product);
 
   if (groups.length === 0) {
     return {
@@ -558,18 +527,28 @@ export const resolveV2SellingPlanDecision = (
     };
   }
 
-  const group = groups.find(
-    (candidate) => candidate.name === MILEYO_SELLING_PLAN_GROUP_NAME,
-  );
-  const groupId = group?.id?.trim();
-  if (!group || !groupId) {
+  const summary = groups[0];
+  const groupId = summary.id?.trim();
+  if (!groupId) {
     return {
       action: "blocked",
       reason: V2_SELLING_PLAN_BLOCK_REASON.MULTIPLE_GROUPS,
     };
   }
 
-  const exactPlans = (group.sellingPlans?.nodes ?? []).filter(
+  if (
+    !groupDetails ||
+    isBlank(groupDetails.id) ||
+    groupDetails.id.trim() !== groupId ||
+    groupDetails.name !== MILEYO_SELLING_PLAN_GROUP_NAME
+  ) {
+    return {
+      action: "blocked",
+      reason: V2_SELLING_PLAN_BLOCK_REASON.GROUP_DETAILS_UNAVAILABLE,
+    };
+  }
+
+  const exactPlans = (groupDetails.sellingPlans?.nodes ?? []).filter(
     (plan) => plan.name === MILEYO_SELLING_PLAN_NAME,
   );
 
@@ -604,7 +583,8 @@ export const resolveV2SellingPlanDecision = (
     };
   }
 
-  const attachedVariantIds = collectAttachedVariantIds(product, groupId);
+  const attachedVariantIds =
+    collectAttachedVariantIdsFromGroupDetails(groupDetails);
   const missingVariantIds = eligibility.variants
     .map((variant) => variant.id)
     .filter((variantId) => !attachedVariantIds.has(variantId));
@@ -658,7 +638,7 @@ export const formatV2SellingPlanSetupMessage = (
   result: SetupV2WeeklySellingPlansResult,
 ): string => {
   if (result.products.length === 0 && result.errors.length === 0) {
-    return "Abonnements Box V2 : aucun produit box dans la collection.";
+    return "Abonnements Box V2 : Box Mileyo V2 introuvable.";
   }
 
   const summary = `Abonnements Box V2 : ${result.createdCount} créé(s), ${result.variantsAddedCount} variante(s) ajoutée(s), ${result.alreadyConfiguredCount} déjà configuré(s), ${result.skippedCount} ignoré(s), ${result.blockedCount} bloqué(s).`;
@@ -681,23 +661,171 @@ const graphqlErrorMessages = (json: GraphqlErrorResponse) =>
     .map((error) => error.message)
     .filter((message): message is string => Boolean(message));
 
-const getBoxProductsForV2SellingPlans = async (
+export type V2BoxProductLookupResult =
+  | { status: "absent"; errors: string[]; products: [] }
+  | { status: "exact"; errors: string[]; products: [V2SellingPlanProductNode] }
+  | {
+      status: "ambiguous";
+      errors: string[];
+      products: V2SellingPlanProductNode[];
+    }
+  | {
+      status: "handleMismatch";
+      errors: string[];
+      products: V2SellingPlanProductNode[];
+    }
+  | { status: "error"; errors: string[]; products: [] };
+
+export const resolveV2BoxProductsByHandle = (
+  nodes: V2SellingPlanProductNode[],
+): V2BoxProductLookupResult => {
+  if (nodes.length === 0) {
+    return { status: "absent", errors: [], products: [] };
+  }
+
+  const exactHandleMatches = nodes.filter(
+    (product) => product.handle === BOX_V2_PRODUCT_HANDLE,
+  );
+
+  if (exactHandleMatches.length === 0) {
+    return { status: "handleMismatch", errors: [], products: nodes };
+  }
+
+  if (exactHandleMatches.length > 1) {
+    return {
+      status: "ambiguous",
+      errors: [],
+      products: exactHandleMatches,
+    };
+  }
+
+  return {
+    status: "exact",
+    errors: [],
+    products: [exactHandleMatches[0]],
+  };
+};
+
+const getBoxV2ProductForSellingPlans = async (
   admin: SettingsAdmin,
-  boxCollectionId: string,
-): Promise<{ errors: string[]; products: V2SellingPlanProductNode[] }> => {
+): Promise<V2BoxProductLookupResult> => {
   const response = await admin.graphql(BOX_V2_SELLING_PLAN_PRODUCTS_QUERY, {
-    variables: { id: boxCollectionId },
+    variables: { query: `handle:${BOX_V2_PRODUCT_HANDLE}` },
   });
   const json = (await response.json()) as GraphqlErrorResponse;
   const errors = graphqlErrorMessages(json);
 
   if (errors.length > 0) {
-    return { errors, products: [] };
+    return { status: "error", errors, products: [] };
+  }
+
+  return resolveV2BoxProductsByHandle(json.data?.products?.nodes ?? []);
+};
+
+type V2GroupDetailsLookupResult =
+  | { status: "exact"; errors: string[]; details: V2SellingPlanGroupDetails }
+  | { status: "missing"; errors: string[]; details: null }
+  | { status: "error"; errors: string[]; details: null };
+
+export const getBoxV2SellingPlanGroupDetails = async (
+  admin: SettingsAdmin,
+  groupId: string,
+  productId: string,
+): Promise<V2GroupDetailsLookupResult> => {
+  const response = await admin.graphql(BOX_V2_SELLING_PLAN_GROUP_DETAILS_QUERY, {
+    variables: { groupId, productId },
+  });
+  const json = (await response.json()) as GraphqlErrorResponse;
+  const errors = graphqlErrorMessages(json);
+
+  if (errors.length > 0) {
+    return { status: "error", errors, details: null };
+  }
+
+  const details = json.data?.sellingPlanGroup ?? null;
+  if (
+    !details ||
+    isBlank(details.id) ||
+    details.id.trim() !== groupId.trim() ||
+    details.name !== MILEYO_SELLING_PLAN_GROUP_NAME
+  ) {
+    return { status: "missing", errors: [], details: null };
+  }
+
+  return { status: "exact", errors: [], details };
+};
+
+const resolveDecisionForProduct = async (
+  admin: SettingsAdmin,
+  product: V2SellingPlanProductNode,
+): Promise<
+  | { decision: V2SellingPlanDecision; errors: string[] }
+  | { decision: null; errors: string[] }
+> => {
+  const eligibility = evaluateV2ProductEligibility(product);
+  if (!eligibility.eligible) {
+    return {
+      decision: { action: "skip", reason: eligibility.reason },
+      errors: [],
+    };
+  }
+
+  const namedWithoutId = collectNamedMileyoGroupSummaries(product).filter(
+    (group) => isBlank(group.id),
+  );
+  if (namedWithoutId.length > 0) {
+    return {
+      decision: {
+        action: "blocked",
+        reason: V2_SELLING_PLAN_BLOCK_REASON.MULTIPLE_GROUPS,
+      },
+      errors: [],
+    };
+  }
+
+  const groups = collectExactMileyoSellingPlanGroupSummaries(product);
+
+  if (groups.length !== 1) {
+    return {
+      decision: resolveV2SellingPlanDecision(product, null),
+      errors: [],
+    };
+  }
+
+  const groupId = groups[0]?.id?.trim();
+  if (!groupId) {
+    return {
+      decision: {
+        action: "blocked",
+        reason: V2_SELLING_PLAN_BLOCK_REASON.MULTIPLE_GROUPS,
+      },
+      errors: [],
+    };
+  }
+
+  const detailsLookup = await getBoxV2SellingPlanGroupDetails(
+    admin,
+    groupId,
+    product.id,
+  );
+
+  if (detailsLookup.status === "error") {
+    return { decision: null, errors: detailsLookup.errors };
+  }
+
+  if (detailsLookup.status === "missing") {
+    return {
+      decision: {
+        action: "blocked",
+        reason: V2_SELLING_PLAN_BLOCK_REASON.GROUP_DETAILS_UNAVAILABLE,
+      },
+      errors: [],
+    };
   }
 
   return {
+    decision: resolveV2SellingPlanDecision(product, detailsLookup.details),
     errors: [],
-    products: json.data?.collection?.products.nodes ?? [],
   };
 };
 
@@ -749,19 +877,65 @@ const addMissingV2SellingPlanVariants = async (
 
 export const setupV2WeeklySellingPlans = async (
   admin: SettingsAdmin,
-  boxCollectionId: string,
 ): Promise<SetupV2WeeklySellingPlansResult> => {
-  const { errors: queryErrors, products } =
-    await getBoxProductsForV2SellingPlans(admin, boxCollectionId);
+  const lookup = await getBoxV2ProductForSellingPlans(admin);
 
-  if (queryErrors.length > 0) {
-    return summarizeV2SellingPlanResults([], queryErrors);
+  if (lookup.status === "error") {
+    return summarizeV2SellingPlanResults([], lookup.errors);
   }
 
+  if (lookup.status === "absent") {
+    return summarizeV2SellingPlanResults([
+      {
+        productId: "",
+        reason: V2_SELLING_PLAN_SKIP_REASON.PRODUCT_NOT_FOUND,
+        status: "skipped",
+        title: "Box Mileyo V2",
+      },
+    ]);
+  }
+
+  if (lookup.status === "handleMismatch") {
+    return summarizeV2SellingPlanResults(
+      lookup.products.map((product) => ({
+        productId: product.id,
+        reason: V2_SELLING_PLAN_SKIP_REASON.HANDLE_MISMATCH,
+        status: "skipped" as const,
+        title: product.title,
+      })),
+    );
+  }
+
+  if (lookup.status === "ambiguous") {
+    return summarizeV2SellingPlanResults([
+      {
+        productId: lookup.products[0]?.id ?? "",
+        reason: V2_SELLING_PLAN_BLOCK_REASON.MULTIPLE_PRODUCTS,
+        status: "blocked",
+        title: lookup.products[0]?.title ?? "Box Mileyo V2",
+      },
+    ]);
+  }
+
+  const products = lookup.products;
   const results: V2SellingPlanProductResult[] = [];
+  const extraErrors: string[] = [];
 
   for (const product of products) {
-    const decision = resolveV2SellingPlanDecision(product);
+    const resolved = await resolveDecisionForProduct(admin, product);
+
+    if (resolved.decision === null) {
+      extraErrors.push(...resolved.errors);
+      results.push({
+        productId: product.id,
+        reason: resolved.errors.join("; ") || "GraphQL error",
+        status: "error",
+        title: product.title,
+      });
+      continue;
+    }
+
+    const decision = resolved.decision;
 
     if (decision.action === "skip") {
       results.push({
@@ -843,5 +1017,5 @@ export const setupV2WeeklySellingPlans = async (
     });
   }
 
-  return summarizeV2SellingPlanResults(results);
+  return summarizeV2SellingPlanResults(results, extraErrors);
 };
