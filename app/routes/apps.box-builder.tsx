@@ -3,9 +3,9 @@ import type { LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
 import { unauthenticated } from "../shopify.server";
 import {
+  fetchBuilderBoxOptions,
   getCollectionProducts,
   toBuilderMeals,
-  toBuilderProducts,
 } from "../features/builder/builder-catalog.server";
 import { renderBuilder, renderMessage } from "../features/builder/builder-render";
 import {
@@ -32,21 +32,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   if (!settings) {
     return renderMessage(
-      "Configuration manquante. Sélectionnez les collections de box et de plats dans l’administration Mileyo.",
+      "Configuration manquante. Sélectionnez la collection de plats dans l’administration Mileyo.",
       shop,
     );
   }
 
-  if (!settings.boxCollectionId || !settings.mealCollectionId) {
+  if (!settings.mealCollectionId) {
     return renderMessage(
-      "Configuration incomplète. Sélectionnez une collection de box et une collection de plats dans les réglages.",
+      "Configuration incomplète. Sélectionnez une collection de plats dans les réglages.",
       shop,
     );
   }
 
   const { admin } = await unauthenticated.admin(shop);
-  const [boxProducts, mealProducts] = await Promise.all([
-    getCollectionProducts(admin, settings.boxCollectionId),
+  const [boxes, mealProducts] = await Promise.all([
+    fetchBuilderBoxOptions(admin),
     getCollectionProducts(admin, settings.mealCollectionId),
   ]);
 
@@ -60,7 +60,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 
   return renderBuilder({
-    boxes: toBuilderProducts(boxProducts),
+    boxes,
     deliveryConfig,
     meals: toBuilderMeals(mealProducts),
   });

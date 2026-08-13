@@ -1,4 +1,18 @@
+import type { SubscriptionObjective } from "../../constants/subscriptionObjective";
+
 export type { BuilderObjectiveOption } from "./builder-objective-options";
+
+/** Checkout-ready Box V2 option for the subscription-only builder. */
+export type BuilderBoxOption = {
+  productId: string;
+  productTitle: string;
+  variantId: string;
+  variantTitle: string;
+  objective: SubscriptionObjective;
+  mealCount: number;
+  price: string;
+  sellingPlanId: string;
+};
 
 export type ShopifyProduct = {
   id: string;

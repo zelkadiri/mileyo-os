@@ -1,4 +1,8 @@
 import {
+  fetchTrustedBoxCatalogOptionsByHandleV2,
+  type TrustedBoxCatalogOptionV2,
+} from "../../services/subscriptionBoxCatalog.server";
+import {
   parseAllergenesMetafield,
   parseCaloriesMetafield,
   parseListMetafield,
@@ -9,6 +13,7 @@ import {
   warnMissingMealCountMetafield,
 } from "../../utils/mealCountMetafield";
 import type {
+  BuilderBoxOption,
   BuilderMeal,
   BuilderProduct,
   CollectionProductsResponse,
@@ -94,6 +99,7 @@ export const getCollectionProducts = async (
   return json.data?.collection?.products.nodes ?? [];
 };
 
+/** @deprecated Legacy one-product-per-box adapter — kept for historical callers/tests. */
 export const toBuilderProducts = (products: ShopifyProduct[]): BuilderProduct[] =>
   products.map((product) => {
     const firstVariant = product.variants.nodes[0];
@@ -126,6 +132,50 @@ export const toBuilderProducts = (products: ShopifyProduct[]): BuilderProduct[] 
       variantTitle: firstVariant?.title ?? "Variante standard",
     };
   });
+
+/**
+ * Checkout-ready builder options — requires a non-null sellingPlanId.
+ * Does not silently harden TrustedBoxCatalogOptionV2 (13C contract preserved).
+ */
+export const toBuilderBoxOptions = (
+  options: TrustedBoxCatalogOptionV2[],
+): BuilderBoxOption[] => {
+  const builderOptions: BuilderBoxOption[] = [];
+
+  for (const option of options) {
+    if (!option.sellingPlanId) {
+      continue;
+    }
+
+    builderOptions.push({
+      mealCount: option.mealCount,
+      objective: option.objective,
+      price: option.price,
+      productId: option.productId,
+      productTitle: option.productTitle,
+      sellingPlanId: option.sellingPlanId,
+      variantId: option.variantId,
+      variantTitle: option.variantTitle,
+    });
+  }
+
+  return builderOptions.sort((left, right) => {
+    if (left.objective !== right.objective) {
+      return left.objective.localeCompare(right.objective);
+    }
+    return left.mealCount - right.mealCount;
+  });
+};
+
+export const fetchBuilderBoxOptions = async (admin: {
+  graphql: (
+    query: string,
+    options?: { variables?: Record<string, string> },
+  ) => Promise<Response>;
+}): Promise<BuilderBoxOption[]> => {
+  const trusted = await fetchTrustedBoxCatalogOptionsByHandleV2(admin);
+  return toBuilderBoxOptions(trusted);
+};
 
 /** Meal collection products — no mileyo.meal_count validation or warnings. */
 export const toBuilderMeals = (products: ShopifyProduct[]): BuilderMeal[] =>

@@ -581,6 +581,14 @@ body {
   line-height: 1.4;
 }
 
+.objective-card-starting-price {
+  color: var(--mileyo-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 2px;
+}
+
 .objective-card .selected-badge {
   position: absolute;
   right: 12px;
@@ -635,15 +643,7 @@ body {
 }
 
 .toggle-row {
-  background: var(--mileyo-white);
-  border-radius: 999px;
-  box-shadow: var(--mileyo-shadow-soft);
-  display: grid;
-  gap: 4px;
-  grid-template-columns: 1fr 1fr;
-  margin: 0 auto 14px;
-  max-width: 520px;
-  padding: 4px;
+  display: none;
 }
 
 .toggle,
@@ -1884,8 +1884,7 @@ button:disabled {
   }
 
   .toggle-row {
-    margin-bottom: 22px;
-    max-width: 540px;
+    display: none;
   }
 
   .formula-hint {

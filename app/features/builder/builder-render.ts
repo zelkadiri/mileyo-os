@@ -1,8 +1,9 @@
 import { builderClientScript } from "./builder-client";
+import { getObjectiveStartingPriceLabels } from "./builder-box-selection";
 import { escapeHtml, scriptJson } from "./builder-formatters";
 import { BUILDER_OBJECTIVE_OPTIONS } from "./builder-objective-options";
 import { builderStyles } from "./builder-styles";
-import type { BuilderDeliveryConfig, BuilderMeal, BuilderProduct } from "./builder-types";
+import type { BuilderBoxOption, BuilderDeliveryConfig, BuilderMeal } from "./builder-types";
 
 const htmlResponse = (html: string) =>
   new Response(html, {
@@ -19,10 +20,6 @@ export const renderMessage = (message: string, shop?: string) =>
   <style>${builderStyles}</style>
 </head>
 <body class="tunnel-body">
-  <div class="tunnel-promo" id="tunnel-promo" role="note">
-    <p class="tunnel-promo-title">🎁 20 € offerts sur votre 1ʳᵉ box d'abonnement</p>
-    <p class="tunnel-promo-subtitle">Appliqué automatiquement au paiement</p>
-  </div>
   <header class="tunnel-header">
     <a class="tunnel-back" href="/">← Retour</a>
     <!-- Wordmark temporaire : aucun asset logo Mileyo trouvé dans le projet -->
@@ -43,7 +40,7 @@ export const renderBuilder = ({
   deliveryConfig,
   meals,
 }: {
-  boxes: BuilderProduct[];
+  boxes: BuilderBoxOption[];
   deliveryConfig: BuilderDeliveryConfig;
   meals: BuilderMeal[];
 }) =>
@@ -56,15 +53,11 @@ export const renderBuilder = ({
   <style>${builderStyles}</style>
 </head>
 <body class="tunnel-body">
-  <div class="tunnel-promo" id="tunnel-promo" role="note">
-    <p class="tunnel-promo-title">🎁 20 € offerts sur votre 1ʳᵉ box d'abonnement</p>
-    <p class="tunnel-promo-subtitle">Appliqué automatiquement au paiement</p>
-  </div>
   <header class="tunnel-header">
     <button class="tunnel-back" id="tunnel-back" type="button">
       <span class="tunnel-back-text tunnel-back-text--objective">← Retour</span>
       <span class="tunnel-back-text tunnel-back-text--formula">← Objectif</span>
-      <span class="tunnel-back-text tunnel-back-text--delivery">← Formule</span>
+      <span class="tunnel-back-text tunnel-back-text--delivery">← Box</span>
       <span class="tunnel-back-text tunnel-back-text--meals-long">← Livraison</span>
       <span class="tunnel-back-text tunnel-back-text--meals-short">← Livraison</span>
     </button>
@@ -94,7 +87,7 @@ export const renderBuilder = ({
     <section class="builder-step builder-step--formula hidden" id="step-formula">
       <div class="formula-decision">
         <div class="formula-intro">
-          <h1>Choisissez votre formule</h1>
+          <h1>Choisissez votre box</h1>
           <p class="formula-lead">Des repas halal, livrés chez vous et modifiables chaque semaine.</p>
         </div>
 
@@ -105,19 +98,14 @@ export const renderBuilder = ({
           <span>Livraison offerte</span>
         </p>
 
-        <section class="toggle-row" aria-label="Type de commande">
-          <button class="toggle active" id="subscription-toggle" type="button">Abonnement hebdomadaire</button>
-          <button class="toggle" id="one-time-toggle" type="button">Commande unique</button>
-        </section>
-
         <p class="formula-hint">Vous choisissez votre date de livraison à l'étape suivante.</p>
-        <p class="visually-hidden" id="box-helper">12 repas à sélectionner</p>
+        <p class="visually-hidden" id="box-helper">Choisissez votre box</p>
         <div class="box-rail">
-          <button aria-label="Formule précédente" class="box-rail-nav box-rail-nav-prev" id="box-rail-prev" type="button">‹</button>
+          <button aria-label="Box précédente" class="box-rail-nav box-rail-nav-prev" id="box-rail-prev" type="button">‹</button>
           <div class="box-rail-viewport" id="box-rail-viewport">
             <div class="card-grid box-rail-track" id="box-grid"></div>
           </div>
-          <button aria-label="Formule suivante" class="box-rail-nav box-rail-nav-next" id="box-rail-next" type="button">›</button>
+          <button aria-label="Box suivante" class="box-rail-nav box-rail-nav-next" id="box-rail-next" type="button">›</button>
         </div>
       </div>
 
@@ -152,10 +140,6 @@ export const renderBuilder = ({
         <details class="faq-item">
           <summary>Quand puis-je modifier mes repas ?</summary>
           <p>Vous pouvez modifier vos repas pour les prochaines box depuis votre espace Mileyo, tant qu’aucun prélèvement n’est en cours.</p>
-        </details>
-        <details class="faq-item">
-          <summary>Comment fonctionne la remise de 20 € ?</summary>
-          <p>Les 20 € sont appliqués automatiquement au paiement sur votre première box d’abonnement.</p>
         </details>
         <details class="faq-item">
           <summary>Les repas sont-ils halal ?</summary>
@@ -224,7 +208,7 @@ export const renderBuilder = ({
   </footer>
 
   <footer class="tunnel-footer hidden" id="formula-footer">
-    <button class="tunnel-cta" id="formula-continue" type="button">Continuer avec 12 repas →</button>
+    <button class="tunnel-cta" disabled id="formula-continue" type="button">Choisissez votre box</button>
   </footer>
 
   <footer class="tunnel-footer delivery-footer hidden" id="delivery-footer">
@@ -245,6 +229,7 @@ export const renderBuilder = ({
     boxes,
     deliveryConfig,
     meals,
+    objectiveStartingPriceLabels: getObjectiveStartingPriceLabels(boxes),
     objectives: BUILDER_OBJECTIVE_OPTIONS,
   })};</script>
   <script>${builderClientScript}</script>

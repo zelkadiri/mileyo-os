@@ -109,6 +109,11 @@ const runSuite = () => {
   ctx.assertEqual("formule index", getBuilderStepIndex("formule"), 1);
   ctx.assertEqual("livraison index", getBuilderStepIndex("livraison"), 2);
   ctx.assertEqual("repas index", getBuilderStepIndex("repas"), 3);
+  ctx.assertEqual(
+    "internal formule id preserved (UX copy is Box)",
+    BUILDER_STEPS[1],
+    "formule",
+  );
 
   ctx.scenario("D. Objective continue validation");
   ctx.assertFalse("null cannot continue", canContinueFromObjective(null));

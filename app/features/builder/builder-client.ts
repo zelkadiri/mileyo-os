@@ -22,7 +22,6 @@ const builderStepProgressJson = JSON.stringify({
 export const builderClientScript = `
 (function () {
   var data = window.__MILEYO_BOX_BUILDER__;
-  var orderType = "subscription";
   var selectedObjective = null;
   var selectedBox = null;
   var requiredMeals = 0;
@@ -30,7 +29,6 @@ export const builderClientScript = `
   var selectedDeliveryDate = null;
   var currentStep = "objectif";
   var mealsRendered = false;
-  var FIRST_WEEK_DISCOUNT_EUR = 20;
   var RECOMMENDED_MEAL_COUNT = 12;
   var STEP_COUNT = ${BUILDER_STEP_COUNT};
   var STEP_LABELS = ${builderStepLabelsJson};
@@ -51,8 +49,6 @@ export const builderClientScript = `
   var addToCart = document.getElementById("add-to-cart");
   var boxHelper = document.getElementById("box-helper");
   var errorMessage = document.getElementById("error-message");
-  var oneTimeToggle = document.getElementById("one-time-toggle");
-  var subscriptionToggle = document.getElementById("subscription-toggle");
   var tunnelBack = document.getElementById("tunnel-back");
   var tunnelStepLabel = document.getElementById("tunnel-step-label");
   var tunnelProgressFill = document.getElementById("tunnel-progress-fill");
@@ -64,7 +60,6 @@ export const builderClientScript = `
   var deliveryFooter = document.getElementById("delivery-footer");
   var deliveryDateGrid = document.getElementById("delivery-date-grid");
   var mealsLead = document.getElementById("meals-lead");
-  var tunnelPromo = document.getElementById("tunnel-promo");
   var allergenFilters = document.getElementById("allergen-filters");
   var badgeFilters = document.getElementById("badge-filters");
   var mealFiltersReset = document.getElementById("meal-filters-reset");
@@ -185,22 +180,22 @@ export const builderClientScript = `
   }
 
   function isBoxAvailable(box) {
-    return typeof box.mealCount === "number" && box.mealCount > 0;
+    return typeof box.mealCount === "number" && box.mealCount > 0 && Boolean(box.sellingPlanId);
   }
 
-  function isBoxSubscriptionReady(box) {
-    return Boolean(box.subscriptionPrice && box.sellingPlanId);
+  function getBoxesForSelectedObjective() {
+    if (!selectedObjective || !data.boxes) return [];
+    return data.boxes.filter(function (box) {
+      return box.objective === selectedObjective;
+    });
   }
 
   function sortBoxes(boxes) {
     return boxes.slice().sort(function (a, b) {
-      var aAvailable = isBoxAvailable(a);
-      var bAvailable = isBoxAvailable(b);
-      if (aAvailable !== bAvailable) return aAvailable ? -1 : 1;
       var aCount = a.mealCount || 0;
       var bCount = b.mealCount || 0;
       if (aCount !== bCount) return aCount - bCount;
-      return a.title.localeCompare(b.title, "fr");
+      return String(a.variantTitle || "").localeCompare(String(b.variantTitle || ""), "fr");
     });
   }
 
@@ -208,28 +203,26 @@ export const builderClientScript = `
     return isBoxAvailable(box) && box.mealCount === RECOMMENDED_MEAL_COUNT;
   }
 
-  function getDefaultBox() {
-    var sorted = sortBoxes(data.boxes);
-    var recommended = sorted.find(function (box) {
-      return isRecommendedBox(box);
-    });
-    if (recommended) return recommended;
-    return sorted.find(isBoxAvailable) || null;
+  function resetBoxSelectionState() {
+    selectedBox = null;
+    requiredMeals = 0;
+    selectedMeals = {};
+    mealsRendered = false;
+    if (boxHelper) {
+      boxHelper.textContent = "Choisissez votre box";
+    }
   }
 
-  function initializeDefaultSelection() {
-    if (selectedBox) return;
-    var defaultBox = getDefaultBox();
-    if (!defaultBox) return;
-    selectedBox = defaultBox;
-    requiredMeals = defaultBox.mealCount;
-    boxHelper.textContent = requiredMeals + " repas à sélectionner";
-  }
-
-  function updatePromoBanner() {
-    if (!tunnelPromo) return;
-    var hideOnTunnelSteps = currentStep === "repas" || currentStep === "livraison";
-    tunnelPromo.classList.toggle("hidden", hideOnTunnelSteps || orderType === "one-time");
+  function setSelectedObjective(nextObjective) {
+    var previous = selectedObjective;
+    selectedObjective = nextObjective;
+    if (
+      previous !== nextObjective &&
+      selectedBox &&
+      selectedBox.objective !== selectedObjective
+    ) {
+      resetBoxSelectionState();
+    }
   }
 
   function isValidObjective(value) {
@@ -270,6 +263,16 @@ export const builderClientScript = `
       description.textContent = option.description;
       button.appendChild(description);
 
+      var startingLabel =
+        data.objectiveStartingPriceLabels &&
+        data.objectiveStartingPriceLabels[option.value];
+      if (startingLabel) {
+        var startingPrice = document.createElement("span");
+        startingPrice.className = "objective-card-starting-price";
+        startingPrice.textContent = startingLabel;
+        button.appendChild(startingPrice);
+      }
+
       if (isSelected) {
         var badge = document.createElement("span");
         badge.className = "selected-badge";
@@ -278,7 +281,7 @@ export const builderClientScript = `
       }
 
       button.addEventListener("click", function () {
-        selectedObjective = option.value;
+        setSelectedObjective(option.value);
         renderObjectives();
         updateObjectiveCta();
         setError("");
@@ -358,17 +361,6 @@ export const builderClientScript = `
     }
   }
 
-  function getWeeklyPriceValue(subscriptionPrice) {
-    var value = Number(subscriptionPrice);
-    return Number.isNaN(value) ? null : value;
-  }
-
-  function getFirstWeekDisplayPrice(subscriptionPrice) {
-    var weekly = getWeeklyPriceValue(subscriptionPrice);
-    if (weekly === null) return null;
-    return Math.max(0, weekly - FIRST_WEEK_DISCOUNT_EUR);
-  }
-
   function updateBoxRailNav() {
     if (!boxRailViewport || !boxRailPrev || !boxRailNext) return;
     var maxScroll = boxRailViewport.scrollWidth - boxRailViewport.clientWidth;
@@ -407,9 +399,9 @@ export const builderClientScript = `
 
   function updateFormulaCta() {
     if (!formulaContinue) return;
-    if (!selectedBox || !requiredMeals) {
+    if (!selectedBox || !requiredMeals || !selectedBox.sellingPlanId) {
       formulaContinue.disabled = true;
-      formulaContinue.textContent = "Choisissez votre formule";
+      formulaContinue.textContent = "Choisissez votre box";
       return;
     }
     formulaContinue.disabled = false;
@@ -458,7 +450,6 @@ export const builderClientScript = `
     if (mealsGaugeFooter) {
       mealsGaugeFooter.classList.toggle("hidden", !isMeals);
     }
-    updatePromoBanner();
     if (mealsLead && selectedBox && requiredMeals) {
       mealsLead.textContent = "Pour votre box de " + requiredMeals + " repas";
     }
@@ -500,6 +491,7 @@ export const builderClientScript = `
       renderObjectives();
       updateObjectiveCta();
     } else if (step === "formule") {
+      renderBoxes();
       window.requestAnimationFrame(function () {
         if (selectedBox) {
           var selectedCard = boxGrid.querySelector(".product-card.selected");
@@ -574,7 +566,7 @@ export const builderClientScript = `
   }
 
   function selectBox(box, button) {
-    var isSameBox = selectedBox && selectedBox.id === box.id;
+    var isSameBox = selectedBox && selectedBox.variantId === box.variantId;
     selectedBox = box;
     requiredMeals = box.mealCount;
     if (!isSameBox) {
@@ -616,72 +608,31 @@ export const builderClientScript = `
   function appendRecommendedBadge(badgeRow) {
     var recommendedBadge = document.createElement("span");
     recommendedBadge.className = "recommended-badge";
-    recommendedBadge.textContent = "Le meilleur équilibre";
+    recommendedBadge.textContent = "Recommandé";
     badgeRow.appendChild(recommendedBadge);
   }
 
   function appendSubscriptionPricing(button, box) {
-    var weeklyPrice = getWeeklyPriceValue(box.subscriptionPrice);
-    if (weeklyPrice === null) return;
+    if (!box.price) return;
 
-    var firstWeekPrice = getFirstWeekDisplayPrice(box.subscriptionPrice);
     var priceRow = document.createElement("div");
     priceRow.className = "box-price-row";
 
     var perMeal = document.createElement("span");
     perMeal.className = "box-price-per-meal";
-    perMeal.textContent = formatPricePerMeal(String(firstWeekPrice), box.mealCount) + " / repas";
+    perMeal.textContent = formatPricePerMeal(box.price, box.mealCount) + " / repas";
     priceRow.appendChild(perMeal);
     button.appendChild(priceRow);
-
-    var promoBadge = document.createElement("span");
-    promoBadge.className = "box-promo-badge";
-    promoBadge.textContent = "🎁 20 € offerts";
-    button.appendChild(promoBadge);
-
-    var promo = document.createElement("p");
-    promo.className = "box-promo-price";
-    promo.innerHTML = "<strong>" + formatEuros(firstWeekPrice) + "</strong> la 1ère semaine";
-    button.appendChild(promo);
-
-    var crossedPrice = document.createElement("p");
-    crossedPrice.className = "box-crossed-price";
-    crossedPrice.innerHTML = "au lieu de <s>" + formatEuros(weeklyPrice) + "</s>";
-    button.appendChild(crossedPrice);
 
     var weekly = document.createElement("p");
     weekly.className = "box-weekly-price";
-    weekly.textContent = "Puis " + formatEuros(weeklyPrice) + " / semaine";
+    weekly.textContent = formatEuros(box.price) + " / semaine";
     button.appendChild(weekly);
-
-    var promoNote = document.createElement("p");
-    promoNote.className = "box-promo-note";
-    promoNote.textContent = "Appliqué automatiquement au paiement";
-    button.appendChild(promoNote);
-  }
-
-  function appendOneTimePricing(button, box) {
-    if (!box.variantPrice) return;
-
-    var priceRow = document.createElement("div");
-    priceRow.className = "box-price-row";
-
-    var perMeal = document.createElement("span");
-    perMeal.className = "box-price-per-meal";
-    perMeal.textContent = formatPricePerMeal(box.variantPrice, box.mealCount) + " / repas";
-    priceRow.appendChild(perMeal);
-
-    var total = document.createElement("span");
-    total.className = "box-price-total";
-    total.textContent = "Total : " + formatEuros(box.variantPrice);
-    priceRow.appendChild(total);
-
-    button.appendChild(priceRow);
   }
 
   function renderBoxes() {
     boxGrid.innerHTML = "";
-    sortBoxes(data.boxes).forEach(function (box) {
+    sortBoxes(getBoxesForSelectedObjective()).forEach(function (box) {
       var isAvailable = isBoxAvailable(box);
       var button = document.createElement("button");
       button.className = "product-card formula-card selectable" + (isAvailable ? "" : " unavailable");
@@ -690,6 +641,7 @@ export const builderClientScript = `
       }
       button.type = "button";
       button.disabled = !isAvailable;
+      button.dataset.variantId = box.variantId;
 
       var badgeRow = null;
       if (isAvailable) {
@@ -702,7 +654,7 @@ export const builderClientScript = `
         }
       }
 
-      if (selectedBox && selectedBox.id === box.id) {
+      if (selectedBox && selectedBox.variantId === box.variantId) {
         button.classList.add("selected");
         if (!badgeRow) {
           badgeRow = document.createElement("div");
@@ -718,31 +670,14 @@ export const builderClientScript = `
       if (isAvailable) {
         var mealCount = document.createElement("span");
         mealCount.className = "box-meal-count";
-        mealCount.textContent = box.mealCount + (orderType === "subscription" ? " repas / semaine" : " repas");
+        mealCount.textContent = box.mealCount + " repas / semaine";
         button.appendChild(mealCount);
-
-        if (orderType === "subscription") {
-          if (isBoxSubscriptionReady(box)) {
-            appendSubscriptionPricing(button, box);
-          } else {
-            var subscriptionSoon = document.createElement("span");
-            subscriptionSoon.className = "muted";
-            subscriptionSoon.textContent = "Abonnement bientôt disponible";
-            button.appendChild(subscriptionSoon);
-          }
-        } else {
-          appendOneTimePricing(button, box);
-        }
+        appendSubscriptionPricing(button, box);
       } else {
         var title = document.createElement("span");
         title.className = "product-title";
-        title.textContent = box.title;
+        title.textContent = box.productTitle || box.variantTitle;
         button.appendChild(title);
-
-        var variant = document.createElement("span");
-        variant.className = "muted";
-        variant.textContent = box.variantTitle;
-        button.appendChild(variant);
 
         var unavailable = document.createElement("span");
         unavailable.className = "muted";
@@ -760,6 +695,7 @@ export const builderClientScript = `
 
       boxGrid.appendChild(button);
     });
+    updateFormulaCta();
     updateBoxRailNav();
   }
 
@@ -782,8 +718,8 @@ export const builderClientScript = `
       mealsProgressFill.style.width = Math.min(100, progress) + "%";
     }
 
-    var subscriptionUnavailable = orderType === "subscription" && selectedBox && (!selectedBox.sellingPlanId || !selectedBox.subscriptionPrice);
-    var isComplete = Boolean(selectedBox && requiredMeals > 0 && total === requiredMeals && !subscriptionUnavailable);
+    var subscriptionUnavailable = selectedBox && !selectedBox.sellingPlanId;
+    var isComplete = Boolean(selectedBox && selectedBox.sellingPlanId && requiredMeals > 0 && total === requiredMeals);
     addToCart.disabled = !isComplete;
 
     if (addToCart.textContent !== "Ajout en cours...") {
@@ -806,16 +742,6 @@ export const builderClientScript = `
     } else if (errorMessage.textContent === "Abonnement bientôt disponible pour cette box.") {
       setError("");
     }
-  }
-
-  function setOrderType(nextOrderType) {
-    orderType = nextOrderType;
-    oneTimeToggle.classList.toggle("active", orderType === "one-time");
-    subscriptionToggle.classList.toggle("active", orderType === "subscription");
-    updatePromoBanner();
-    renderBoxes();
-    updateFormulaCta();
-    updateSummary();
   }
 
   function renderMeals() {
@@ -934,9 +860,22 @@ export const builderClientScript = `
       return;
     }
 
+    if (!selectedBox.sellingPlanId) {
+      setError("Abonnement bientôt disponible pour cette box.");
+      updateSummary();
+      return;
+    }
+
+    var sellingPlanId = getVariantCartId(selectedBox.sellingPlanId);
+    if (!sellingPlanId) {
+      setError("Abonnement bientôt disponible pour cette box.");
+      updateSummary();
+      return;
+    }
+
     var properties = {
-      "Type de commande": orderType === "subscription" ? "Abonnement hebdomadaire" : "Commande unique",
-      "Nombre de repas": String(requiredMeals),
+      "Type de commande": "Abonnement hebdomadaire",
+      "Nombre de repas": String(selectedBox.mealCount),
       "_mileyo_delivery_date": selectedDeliveryDate,
       "Date de livraison souhaitée":
         formatDeliveryDateLabelLong(selectedDeliveryDate) +
@@ -960,17 +899,9 @@ export const builderClientScript = `
     var item = {
       id: variantId,
       properties: properties,
-      quantity: 1
+      quantity: 1,
+      selling_plan: sellingPlanId
     };
-
-    if (orderType === "subscription") {
-      if (!selectedBox.sellingPlanId || !selectedBox.subscriptionPrice) {
-        setError("Abonnement bientôt disponible pour cette box.");
-        updateSummary();
-        return;
-      }
-      item.selling_plan = getVariantCartId(selectedBox.sellingPlanId);
-    }
 
     fetch("/cart/add.js", {
       method: "POST",
@@ -988,14 +919,6 @@ export const builderClientScript = `
     });
   });
 
-  oneTimeToggle.addEventListener("click", function () {
-    setOrderType("one-time");
-  });
-
-  subscriptionToggle.addEventListener("click", function () {
-    setOrderType("subscription");
-  });
-
   tunnelBack.addEventListener("click", handleTunnelBack);
 
   if (objectiveContinue) {
@@ -1010,7 +933,7 @@ export const builderClientScript = `
   }
 
   formulaContinue.addEventListener("click", function () {
-    if (!selectedBox || !requiredMeals) return;
+    if (!selectedBox || !requiredMeals || !selectedBox.sellingPlanId) return;
     showStep("livraison");
   });
 
@@ -1054,13 +977,10 @@ export const builderClientScript = `
   window.addEventListener("popstate", handleHistoryNavigation);
   window.addEventListener("hashchange", handleHistoryNavigation);
 
-  initializeDefaultSelection();
   if (data.deliveryConfig && data.deliveryConfig.defaultDate) {
     selectedDeliveryDate = data.deliveryConfig.defaultDate;
   }
-  updatePromoBanner();
   renderObjectives();
-  renderBoxes();
   updateObjectiveCta();
   updateFormulaCta();
   updateDeliveryCta();
