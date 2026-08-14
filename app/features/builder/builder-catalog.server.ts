@@ -3,6 +3,9 @@ import {
   type TrustedBoxCatalogOptionV2,
 } from "../../services/subscriptionBoxCatalog.server";
 import {
+  fetchMealCatalogProducts,
+} from "../../services/subscriptionMealCatalog.server";
+import {
   parseAllergenesMetafield,
   parseCaloriesMetafield,
   parseListMetafield,
@@ -12,13 +15,17 @@ import {
   parseMealCountMetafield,
   warnMissingMealCountMetafield,
 } from "../../utils/mealCountMetafield";
+import { toBuilderMealOptions } from "./builder-meal-selection";
 import type {
   BuilderBoxOption,
   BuilderMeal,
+  BuilderMealOption,
   BuilderProduct,
   CollectionProductsResponse,
   ShopifyProduct,
 } from "./builder-types";
+
+export { toBuilderMealOptions };
 
 const collectionProductsQuery = `#graphql
   query BoxBuilderProducts($id: ID!) {
@@ -200,3 +207,16 @@ export const toBuilderMeals = (products: ShopifyProduct[]): BuilderMeal[] =>
       variantTitle: firstVariant?.title ?? "Variante standard",
     };
   });
+
+export const fetchBuilderMealOptions = async (
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: { id: string } },
+    ) => Promise<Response>;
+  },
+  mealCollectionId: string,
+): Promise<BuilderMealOption[]> => {
+  const catalog = await fetchMealCatalogProducts(admin, mealCollectionId);
+  return toBuilderMealOptions(catalog);
+};

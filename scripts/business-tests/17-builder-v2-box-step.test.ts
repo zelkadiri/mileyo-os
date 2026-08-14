@@ -676,9 +676,9 @@ const runSuite = () => {
       loaderSource.includes("deliveryConfig"),
   );
   ctx.assertTrue(
-    "meals legacy still present",
+    "meals V2 path present",
     clientSource.includes("renderMeals") &&
-      loaderSource.includes("toBuilderMeals"),
+      loaderSource.includes("fetchBuilderMealOptions"),
   );
   ctx.assertTrue(
     "18 variants not truncated by first:10 in handle query",

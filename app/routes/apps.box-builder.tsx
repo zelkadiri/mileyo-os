@@ -4,8 +4,7 @@ import prisma from "../db.server";
 import { unauthenticated } from "../shopify.server";
 import {
   fetchBuilderBoxOptions,
-  getCollectionProducts,
-  toBuilderMeals,
+  fetchBuilderMealOptions,
 } from "../features/builder/builder-catalog.server";
 import { renderBuilder, renderMessage } from "../features/builder/builder-render";
 import {
@@ -45,9 +44,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const { admin } = await unauthenticated.admin(shop);
-  const [boxes, mealProducts] = await Promise.all([
+  const [boxes, meals] = await Promise.all([
     fetchBuilderBoxOptions(admin),
-    getCollectionProducts(admin, settings.mealCollectionId),
+    fetchBuilderMealOptions(admin, settings.mealCollectionId),
   ]);
 
   const availableDates = getAvailableDeliveryDates();
@@ -62,6 +61,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return renderBuilder({
     boxes,
     deliveryConfig,
-    meals: toBuilderMeals(mealProducts),
+    meals,
   });
 };

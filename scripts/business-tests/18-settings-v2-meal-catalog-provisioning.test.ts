@@ -928,30 +928,26 @@ const runSuite = async () => {
   const loader = readRepoFile("app/routes/apps.box-builder.tsx");
 
   ctx.assertTrue(
-    "builder still uses meal.id for selectedMeals",
-    builderClient.includes("selectedMeals[meal.id]"),
+    "builder meals use variantId for selectedMeals",
+    builderClient.includes("selectedMeals[meal.variantId]"),
   );
   ctx.assertTrue(
     "builder Plat N uses meal.title",
     builderClient.includes('properties["Plat " + propertyIndex] = meal.title'),
   );
   ctx.assertTrue(
-    "builder catalog still variants(first: 1)",
+    "legacy getCollectionProducts still has variants(first: 1) for other callers",
     builderCatalog.includes("variants(first: 1)"),
   );
   ctx.assertTrue(
-    "toBuilderMeals still maps product.id",
-    builderCatalog.includes("id: product.id"),
-  );
-  ctx.assertTrue(
-    "BuilderMeal still has id + title",
-    builderTypes.includes("export type BuilderMeal") &&
-      builderTypes.includes("id: string") &&
+    "BuilderMealOption uses productId + title",
+    builderTypes.includes("export type BuilderMealOption") &&
+      builderTypes.includes("productId: string") &&
       builderTypes.includes("title: string"),
   );
   ctx.assertTrue(
-    "loader still uses toBuilderMeals",
-    loader.includes("toBuilderMeals"),
+    "loader uses fetchBuilderMealOptions",
+    loader.includes("fetchBuilderMealOptions"),
   );
   ctx.assertTrue(
     "loader still uses mealCollectionId",

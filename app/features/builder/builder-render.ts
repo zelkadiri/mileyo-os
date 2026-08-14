@@ -3,7 +3,7 @@ import { getObjectiveStartingPriceLabels } from "./builder-box-selection";
 import { escapeHtml, scriptJson } from "./builder-formatters";
 import { BUILDER_OBJECTIVE_OPTIONS } from "./builder-objective-options";
 import { builderStyles } from "./builder-styles";
-import type { BuilderBoxOption, BuilderDeliveryConfig, BuilderMeal } from "./builder-types";
+import type { BuilderBoxOption, BuilderDeliveryConfig, BuilderMealOption } from "./builder-types";
 
 const htmlResponse = (html: string) =>
   new Response(html, {
@@ -42,7 +42,7 @@ export const renderBuilder = ({
 }: {
   boxes: BuilderBoxOption[];
   deliveryConfig: BuilderDeliveryConfig;
-  meals: BuilderMeal[];
+  meals: BuilderMealOption[];
 }) =>
   htmlResponse(`<!doctype html>
 <html lang="fr">
@@ -195,7 +195,7 @@ export const renderBuilder = ({
       <section class="section" id="meals-section">
         <p class="visually-hidden" id="selected-count">0 / 0 plats sélectionnés</p>
         <div class="meals-empty hidden" id="meals-empty">
-          <p>Aucun plat ne correspond à ces filtres.<br>Essayez de retirer un allergène ou une envie.</p>
+          <p id="meals-empty-copy">Aucun plat ne correspond à ces filtres.<br>Essayez de retirer un allergène ou une envie.</p>
           <button class="meals-empty-reset" id="meals-empty-reset" type="button">Réinitialiser les filtres</button>
         </div>
         <div class="card-grid meal-grid" id="meal-grid"></div>

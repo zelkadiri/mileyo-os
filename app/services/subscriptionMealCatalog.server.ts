@@ -64,6 +64,9 @@ const mealCollectionProductsQuery = `#graphql
   query SubscriptionMealCatalogProducts($id: ID!) {
     collection(id: $id) {
       products(first: 50, sortKey: TITLE) {
+        pageInfo {
+          hasNextPage
+        }
         nodes {
           id
           title
@@ -119,10 +122,15 @@ const mealCollectionProductsQuery = `#graphql
   }
 `;
 
+export const MEAL_CATALOG_PRODUCTS_PAGE_SIZE = 50;
+
 type MealCollectionProductsResponse = {
   data?: {
     collection?: {
-      products: { nodes: ShopifyMealCatalogProductNode[] };
+      products: {
+        pageInfo?: { hasNextPage?: boolean | null } | null;
+        nodes: ShopifyMealCatalogProductNode[];
+      };
     } | null;
   };
   errors?: { message?: string | null }[];
@@ -184,6 +192,12 @@ export const fetchMealCatalogProducts = async (
         .map((error) => error.message)
         .filter(Boolean)
         .join(" ") || "Impossible de charger le catalogue repas.",
+    );
+  }
+
+  if (json.data?.collection?.products.pageInfo?.hasNextPage) {
+    throw new Error(
+      `La collection repas dépasse ${MEAL_CATALOG_PRODUCTS_PAGE_SIZE} produits. Catalogue incomplet refusé.`,
     );
   }
 

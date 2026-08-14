@@ -85,6 +85,24 @@ export type BuilderMeal = {
   variantTitle: string;
 };
 
+/** Objective-filtered meal portion for the subscription builder (V2). */
+export type BuilderMealOption = {
+  productId: string;
+  variantId: string;
+  title: string;
+  objective: SubscriptionObjective;
+  imageAlt: string;
+  imageUrl: string | null;
+  calories: number | null;
+  proteins: number | null;
+  carbs: number | null;
+  fat: number | null;
+  portionGrams: number | null;
+  allergenes: string[];
+  badges: string[];
+  ingredients: string[];
+};
+
 export type CollectionProductsResponse = {
   data?: {
     collection?: {

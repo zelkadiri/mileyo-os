@@ -64,6 +64,7 @@ export const builderClientScript = `
   var badgeFilters = document.getElementById("badge-filters");
   var mealFiltersReset = document.getElementById("meal-filters-reset");
   var mealsEmpty = document.getElementById("meals-empty");
+  var mealsEmptyCopy = document.getElementById("meals-empty-copy");
   var mealsEmptyReset = document.getElementById("meals-empty-reset");
   var mealsGaugeFooter = document.getElementById("meals-gauge-footer");
   var mealsGaugeCount = document.getElementById("meals-gauge-count");
@@ -291,8 +292,15 @@ export const builderClientScript = `
     });
   }
 
+  function getMealsForSelectedObjective() {
+    if (!selectedObjective || !data.meals) return [];
+    return data.meals.filter(function (meal) {
+      return meal.objective === selectedObjective;
+    });
+  }
+
   function getVisibleMeals() {
-    return data.meals.filter(mealMatchesFilter);
+    return getMealsForSelectedObjective().filter(mealMatchesFilter);
   }
 
   function hasActiveMealFilters() {
@@ -745,16 +753,35 @@ export const builderClientScript = `
   }
 
   function renderMeals() {
+    var objectiveMeals = getMealsForSelectedObjective();
     var visibleMeals = getVisibleMeals();
     mealGrid.innerHTML = "";
 
+    var noObjectiveMeals = objectiveMeals.length === 0;
+    var noVisibleMeals = visibleMeals.length === 0;
+
     if (mealsEmpty) {
-      mealsEmpty.classList.toggle("hidden", visibleMeals.length > 0);
+      mealsEmpty.classList.toggle("hidden", !noVisibleMeals);
     }
-    mealGrid.classList.toggle("hidden", visibleMeals.length === 0);
+    if (mealsEmptyCopy) {
+      if (noObjectiveMeals) {
+        mealsEmptyCopy.innerHTML =
+          "Aucun plat n’est disponible pour cet objectif pour le moment.";
+      } else {
+        mealsEmptyCopy.innerHTML =
+          "Aucun plat ne correspond à ces filtres.<br>Essayez de retirer un allergène ou une envie.";
+      }
+    }
+    if (mealsEmptyReset) {
+      mealsEmptyReset.classList.toggle("hidden", noObjectiveMeals || !hasActiveMealFilters());
+    }
+    mealGrid.classList.toggle("hidden", noVisibleMeals);
 
     visibleMeals.forEach(function (meal) {
-      selectedMeals[meal.id] = selectedMeals[meal.id] || 0;
+      var quantityValue = selectedMeals[meal.variantId] || 0;
+      if (!selectedMeals[meal.variantId]) {
+        selectedMeals[meal.variantId] = 0;
+      }
 
       var card = document.createElement("article");
       card.className = "product-card meal-card";
@@ -774,7 +801,7 @@ export const builderClientScript = `
       title.textContent = meal.title;
       content.appendChild(title);
 
-      if (meal.calories) {
+      if (meal.calories !== null && meal.calories !== undefined && meal.calories > 0) {
         var calories = document.createElement("p");
         calories.className = "meal-kcal";
         calories.textContent = meal.calories + " kcal";
@@ -813,17 +840,17 @@ export const builderClientScript = `
       var minus = document.createElement("button");
       minus.type = "button";
       minus.textContent = "-";
-      minus.disabled = selectedMeals[meal.id] === 0;
+      minus.disabled = quantityValue === 0;
       minus.setAttribute("aria-label", "Retirer " + meal.title);
       minus.addEventListener("click", function () {
-        selectedMeals[meal.id] = Math.max(0, selectedMeals[meal.id] - 1);
+        selectedMeals[meal.variantId] = Math.max(0, (selectedMeals[meal.variantId] || 0) - 1);
         renderMeals();
         updateSummary();
       });
 
       var quantity = document.createElement("span");
       quantity.className = "meal-quantity";
-      quantity.textContent = String(selectedMeals[meal.id]);
+      quantity.textContent = String(selectedMeals[meal.variantId] || 0);
 
       var plus = document.createElement("button");
       plus.type = "button";
@@ -832,7 +859,7 @@ export const builderClientScript = `
       plus.setAttribute("aria-label", "Ajouter " + meal.title);
       plus.addEventListener("click", function () {
         if (selectedTotal() >= requiredMeals) return;
-        selectedMeals[meal.id] += 1;
+        selectedMeals[meal.variantId] = (selectedMeals[meal.variantId] || 0) + 1;
         renderMeals();
         updateSummary();
       });
@@ -885,7 +912,7 @@ export const builderClientScript = `
     };
     var propertyIndex = 1;
     data.meals.forEach(function (meal) {
-      var quantity = selectedMeals[meal.id] || 0;
+      var quantity = selectedMeals[meal.variantId] || 0;
       for (var index = 0; index < quantity; index += 1) {
         properties["Plat " + propertyIndex] = meal.title;
         propertyIndex += 1;

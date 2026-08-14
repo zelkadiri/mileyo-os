@@ -39,6 +39,7 @@ const BUSINESS_SUITES = [
   "16-settings-v2-box-catalog-provisioning.test.ts",
   "17-builder-v2-box-step.test.ts",
   "18-settings-v2-meal-catalog-provisioning.test.ts",
+  "19-builder-v2-meal-step.test.ts",
 ];
 
 const LEGACY_SUITES = [
