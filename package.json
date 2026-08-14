@@ -4,7 +4,7 @@
   "scripts": {
     "build": "react-router build",
     "dev": "shopify app dev",
-    "test:business": "npx tsx --env-file=.env scripts/business-tests/00-run-business-regression-suite.ts",    "config:link": "shopify app config link",
+    "test:business": "tsx --env-file=.env scripts/business-tests/00-run-business-regression-suite.ts",    "config:link": "shopify app config link",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",
     "config:use": "shopify app config use",
@@ -53,6 +53,7 @@
     "eslint-plugin-react-hooks": "^4.6.2",
     "graphql-config": "^5.1.1",
     "prettier": "^3.6.2",
+    "tsx": "^4.23.12",
     "typescript": "^5.9.3",
     "vite": "^6.3.6",
     "@react-router/dev": "^7.12.0",
