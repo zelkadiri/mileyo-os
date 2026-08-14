@@ -1,5 +1,6 @@
 import { builderClientScript } from "./builder-client";
 import { getObjectiveStartingPriceLabels } from "./builder-box-selection";
+import { FIRST_BOX_LAUNCH_DISCOUNT_EUR } from "../../constants/firstBoxLaunchDiscount";
 import { escapeHtml, scriptJson } from "./builder-formatters";
 import { BUILDER_OBJECTIVE_OPTIONS } from "./builder-objective-options";
 import { builderStyles } from "./builder-styles";
@@ -60,11 +61,12 @@ export const renderBuilder = ({
       <span class="tunnel-back-text tunnel-back-text--delivery">← Box</span>
       <span class="tunnel-back-text tunnel-back-text--meals-long">← Livraison</span>
       <span class="tunnel-back-text tunnel-back-text--meals-short">← Livraison</span>
+      <span class="tunnel-back-text tunnel-back-text--email">← Repas</span>
     </button>
     <!-- Wordmark temporaire : aucun asset logo Mileyo trouvé dans le projet -->
     <p class="tunnel-wordmark" aria-label="Mileyo">Mileyo</p>
     <div class="tunnel-progress-block">
-      <p class="tunnel-step-label" id="tunnel-step-label">Étape 1 sur 4</p>
+      <p class="tunnel-step-label" id="tunnel-step-label">Étape 1 sur 5</p>
       <div aria-hidden="true" class="tunnel-progress">
         <div class="tunnel-progress-fill" id="tunnel-progress-fill"></div>
       </div>
@@ -201,6 +203,37 @@ export const renderBuilder = ({
         <div class="card-grid meal-grid" id="meal-grid"></div>
       </section>
     </section>
+
+    <section class="builder-step builder-step--email hidden" id="step-email">
+      <div class="email-decision">
+        <div class="email-intro">
+          <h1>Plus qu’une étape</h1>
+          <p class="email-lead">Renseignez votre e-mail pour continuer.</p>
+        </div>
+
+        <label class="email-field" for="checkout-email">
+          <span class="email-field-label">Votre adresse e-mail</span>
+          <input
+            autocomplete="email"
+            id="checkout-email"
+            maxlength="254"
+            name="email"
+            placeholder="vous@email.com"
+            required
+            type="email"
+          />
+        </label>
+
+        <aside class="email-offer-card" aria-label="Offre de lancement">
+          <p class="email-offer-kicker">Offre de lancement</p>
+          <p class="email-offer-title">Nouveaux clients : ${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € de réduction sur votre première box.</p>
+          <p class="email-offer-note">La remise est appliquée automatiquement au paiement si vous êtes éligible.</p>
+          <p class="email-weekly-price" id="email-weekly-price"></p>
+        </aside>
+
+        <p class="email-privacy">Nous utilisons votre e-mail pour vous accompagner dans votre commande et, si nécessaire, vous recontacter au sujet de celle-ci.</p>
+      </div>
+    </section>
   </main>
 
   <footer class="tunnel-footer" id="objective-footer">
@@ -223,6 +256,10 @@ export const renderBuilder = ({
       </div>
       <button class="meals-gauge-cta" disabled id="add-to-cart" type="button">Encore 12 plats</button>
     </div>
+  </footer>
+
+  <footer class="tunnel-footer email-footer hidden" id="email-footer">
+    <button class="tunnel-cta" disabled id="email-continue" type="button">Entrez votre e-mail</button>
   </footer>
 
   <script>window.__MILEYO_BOX_BUILDER__ = ${scriptJson({

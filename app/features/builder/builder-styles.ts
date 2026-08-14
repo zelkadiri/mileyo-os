@@ -21,6 +21,7 @@ export const builderStyles = `
   --formula-step-max-width: 1120px;
   --objective-step-max-width: 880px;
   --delivery-step-max-width: 720px;
+  --email-step-max-width: 560px;
   --meals-step-max-width: 1440px;
   --meals-step-gutter: 16px;
   --box-rail-gap: 12px;
@@ -113,7 +114,7 @@ body {
   display: none;
 }
 
-.tunnel-back:not(.is-formula-step):not(.is-delivery-step):not(.is-meals-step) .tunnel-back-text--objective {
+.tunnel-back:not(.is-formula-step):not(.is-delivery-step):not(.is-meals-step):not(.is-email-step) .tunnel-back-text--objective {
   display: inline;
 }
 
@@ -126,6 +127,10 @@ body {
 }
 
 .tunnel-back.is-meals-step .tunnel-back-text--meals-long {
+  display: inline;
+}
+
+.tunnel-back.is-email-step .tunnel-back-text--email {
   display: inline;
 }
 
@@ -179,22 +184,26 @@ body {
   border-radius: inherit;
   height: 100%;
   transition: width 0.28s ease;
-  width: 25%;
+  width: 20%;
 }
 
 .tunnel-progress-fill.is-step-1 {
-  width: 25%;
+  width: 20%;
 }
 
 .tunnel-progress-fill.is-step-2 {
-  width: 50%;
+  width: 40%;
 }
 
 .tunnel-progress-fill.is-step-3 {
-  width: 75%;
+  width: 60%;
 }
 
 .tunnel-progress-fill.is-step-4 {
+  width: 80%;
+}
+
+.tunnel-progress-fill.is-step-5 {
   width: 100%;
 }
 
@@ -222,6 +231,12 @@ body {
   width: 100%;
 }
 
+.builder-step--email {
+  margin: 0 auto;
+  max-width: var(--email-step-max-width);
+  width: 100%;
+}
+
 .builder-step--meals {
   margin: 0 auto;
   max-width: none;
@@ -242,18 +257,31 @@ body {
   padding-bottom: calc(var(--tunnel-footer-height) + 16px);
 }
 
+.tunnel-body.is-step-email .builder-shell {
+  max-width: calc(var(--email-step-max-width) + 80px);
+  padding-bottom: calc(var(--tunnel-footer-height) + 16px);
+}
+
 .tunnel-body.is-step-meals #objective-footer,
 .tunnel-body.is-step-meals #formula-footer,
 .tunnel-body.is-step-meals #delivery-footer,
+.tunnel-body.is-step-meals #email-footer,
 .tunnel-body.is-step-livraison #objective-footer,
 .tunnel-body.is-step-livraison #formula-footer,
 .tunnel-body.is-step-livraison #meals-gauge-footer,
+.tunnel-body.is-step-livraison #email-footer,
 .tunnel-body.is-step-formule #objective-footer,
 .tunnel-body.is-step-formule #delivery-footer,
 .tunnel-body.is-step-formule #meals-gauge-footer,
+.tunnel-body.is-step-formule #email-footer,
 .tunnel-body.is-step-objective #formula-footer,
 .tunnel-body.is-step-objective #delivery-footer,
 .tunnel-body.is-step-objective #meals-gauge-footer,
+.tunnel-body.is-step-objective #email-footer,
+.tunnel-body.is-step-email #objective-footer,
+.tunnel-body.is-step-email #formula-footer,
+.tunnel-body.is-step-email #delivery-footer,
+.tunnel-body.is-step-email #meals-gauge-footer,
 .tunnel-footer.hidden {
   display: none;
 }
@@ -559,6 +587,111 @@ body {
   width: 100%;
 }
 
+.email-decision {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(252, 248, 246, 0.96));
+  border: 1px solid rgba(185, 138, 215, 0.14);
+  border-radius: 24px;
+  box-shadow: var(--mileyo-shadow-soft);
+  margin: 0 auto;
+  max-width: var(--email-step-max-width);
+  padding: 28px 22px 24px;
+}
+
+.email-intro {
+  margin-bottom: 22px;
+  text-align: center;
+}
+
+.email-intro h1 {
+  margin-bottom: 10px;
+}
+
+.email-lead {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 34rem;
+}
+
+.email-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.email-field-label {
+  color: var(--mileyo-purple-black);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.email-field input {
+  appearance: none;
+  background: var(--mileyo-white);
+  border: 1.5px solid rgba(185, 138, 215, 0.32);
+  border-radius: 14px;
+  color: var(--mileyo-text);
+  font: inherit;
+  font-size: 1rem;
+  padding: 14px 16px;
+  width: 100%;
+}
+
+.email-field input:focus-visible {
+  border-color: var(--mileyo-purple);
+  outline: 2px solid var(--mileyo-lilac);
+  outline-offset: 1px;
+}
+
+.email-offer-card {
+  background: rgba(220, 194, 240, 0.22);
+  border: 1px solid rgba(185, 138, 215, 0.2);
+  border-radius: 16px;
+  margin: 0 0 16px;
+  padding: 16px 18px;
+}
+
+.email-offer-kicker {
+  color: var(--mileyo-purple-dark);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.email-offer-title {
+  color: var(--mileyo-purple-black);
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0 0 6px;
+}
+
+.email-offer-note,
+.email-weekly-price,
+.email-privacy {
+  color: var(--mileyo-muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.email-weekly-price {
+  color: var(--mileyo-purple-black);
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.email-privacy {
+  margin-top: 4px;
+}
+
+.email-footer .tunnel-cta {
+  width: 100%;
+}
+
 .objective-decision {
   margin: 0 auto;
   max-width: var(--objective-step-max-width);
@@ -678,6 +811,7 @@ body {
 .objective-lead,
 .delivery-lead,
 .meals-lead,
+.email-lead,
 .setup-card p {
   color: var(--mileyo-muted);
   font-size: 1rem;

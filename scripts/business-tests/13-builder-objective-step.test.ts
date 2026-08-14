@@ -98,17 +98,18 @@ const runSuite = () => {
   );
 
   ctx.scenario("C. Step order — objectif first");
-  ctx.assertEqual("step count is 4", BUILDER_STEP_COUNT, 4);
+  ctx.assertEqual("step count is 5", BUILDER_STEP_COUNT, 5);
   ctx.assertEqual("first step is objectif", BUILDER_STEPS[0], "objectif");
   ctx.assertEqual(
     "full step order",
     BUILDER_STEPS.join("→"),
-    "objectif→formule→livraison→repas",
+    "objectif→formule→livraison→repas→email",
   );
   ctx.assertEqual("objectif index", getBuilderStepIndex("objectif"), 0);
   ctx.assertEqual("formule index", getBuilderStepIndex("formule"), 1);
   ctx.assertEqual("livraison index", getBuilderStepIndex("livraison"), 2);
   ctx.assertEqual("repas index", getBuilderStepIndex("repas"), 3);
+  ctx.assertEqual("email index", getBuilderStepIndex("email"), 4);
   ctx.assertEqual(
     "internal formule id preserved (UX copy is Box)",
     BUILDER_STEPS[1],
@@ -153,39 +154,41 @@ const runSuite = () => {
     );
   }
 
-  ctx.scenario("Progress labels for 4 steps");
+  ctx.scenario("Progress labels for 5 steps");
   ctx.assertEqual(
     "objectif label",
     getBuilderStepLabel("objectif"),
-    "Étape 1 sur 4",
+    "Étape 1 sur 5",
   );
   ctx.assertEqual(
     "formule label",
     getBuilderStepLabel("formule"),
-    "Étape 2 sur 4",
+    "Étape 2 sur 5",
   );
   ctx.assertEqual(
     "livraison label",
     getBuilderStepLabel("livraison"),
-    "Étape 3 sur 4",
+    "Étape 3 sur 5",
   );
-  ctx.assertEqual("repas label", getBuilderStepLabel("repas"), "Étape 4 sur 4");
+  ctx.assertEqual("repas label", getBuilderStepLabel("repas"), "Étape 4 sur 5");
+  ctx.assertEqual("email label", getBuilderStepLabel("email"), "Étape 5 sur 5");
   ctx.assertEqual(
     "objectif progress",
     getBuilderStepProgressPercent("objectif"),
-    25,
+    20,
   );
   ctx.assertEqual(
     "formule progress",
     getBuilderStepProgressPercent("formule"),
-    50,
+    40,
   );
   ctx.assertEqual(
     "livraison progress",
     getBuilderStepProgressPercent("livraison"),
-    75,
+    60,
   );
-  ctx.assertEqual("repas progress", getBuilderStepProgressPercent("repas"), 100);
+  ctx.assertEqual("repas progress", getBuilderStepProgressPercent("repas"), 80);
+  ctx.assertEqual("email progress", getBuilderStepProgressPercent("email"), 100);
 
   return finishSuite("13-builder-objective-step", ctx);
 };

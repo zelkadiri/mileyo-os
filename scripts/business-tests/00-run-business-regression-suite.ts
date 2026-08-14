@@ -41,6 +41,7 @@ const BUSINESS_SUITES = [
   "18-settings-v2-meal-catalog-provisioning.test.ts",
   "19-builder-v2-meal-step.test.ts",
   "20-builder-weekly-delivery-step.test.ts",
+  "21-builder-email-step.test.ts",
 ];
 
 const LEGACY_SUITES = [

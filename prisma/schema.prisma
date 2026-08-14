@@ -154,3 +154,22 @@ model SubscriptionPaymentRecovery {
   @@unique([subscriptionMealSelectionId, billingCycleKey])
   @@index([shop, status, nextRetryAt])
 }
+
+// Pre-checkout prospect capture. convertedAt is reserved for a later order-webhook
+// pass (13I/13J) — 13H never sets it. Abandoned leads may later need a retention purge.
+model CheckoutLead {
+  id                    String    @id @default(cuid())
+  shop                  String
+  email                 String
+  objective             String?
+  boxVariantId          String?
+  mealCount             Int?
+  scheduledDeliveryDate String?   @db.VarChar(10)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  lastSeenAt            DateTime  @default(now())
+  convertedAt           DateTime?
+
+  @@unique([shop, email])
+  @@index([shop, lastSeenAt])
+}

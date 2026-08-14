@@ -1,4 +1,4 @@
-import type { LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import prisma from "../db.server";
 import { unauthenticated } from "../shopify.server";
@@ -6,9 +6,22 @@ import {
   fetchBuilderBoxOptions,
   fetchBuilderMealOptions,
 } from "../features/builder/builder-catalog.server";
+import {
+  CAPTURE_CHECKOUT_LEAD_INTENT,
+  captureCheckoutLead,
+  getBuilderShopFromRequest,
+  parseCaptureCheckoutLeadBody,
+  parseCheckoutLeadContext,
+} from "../features/builder/builder-lead.server";
 import { renderBuilder, renderMessage } from "../features/builder/builder-render";
 import { DELIVERY_TIMEZONE } from "../constants/deliverySchedule";
 import { buildBuilderDeliveryWindowOptions } from "../utils/deliveryDate";
+
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    status,
+  });
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
@@ -53,4 +66,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     deliveryConfig,
     meals,
   });
+};
+
+export const action = async ({ request }: ActionFunctionArgs) => {
+  if (request.method !== "POST") {
+    return jsonResponse({ message: "Méthode non autorisée.", ok: false }, 405);
+  }
+
+  const shop = getBuilderShopFromRequest(request);
+  let payload: unknown;
+
+  try {
+    payload = await request.json();
+  } catch {
+    return jsonResponse(
+      { message: "Impossible de continuer pour le moment. Réessayez.", ok: false },
+      400,
+    );
+  }
+
+  const body = parseCaptureCheckoutLeadBody(payload);
+  if (!body || body.intent !== CAPTURE_CHECKOUT_LEAD_INTENT) {
+    return jsonResponse(
+      { message: "Impossible de continuer pour le moment. Réessayez.", ok: false },
+      400,
+    );
+  }
+
+  const result = await captureCheckoutLead({
+    context: parseCheckoutLeadContext(body),
+    emailInput: body.email,
+    shop,
+  });
+
+  return jsonResponse(result, result.ok ? 200 : 400);
 };

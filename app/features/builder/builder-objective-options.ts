@@ -44,6 +44,7 @@ export const BUILDER_STEPS = [
   "formule",
   "livraison",
   "repas",
+  "email",
 ] as const;
 
 export type BuilderStep = (typeof BUILDER_STEPS)[number];
@@ -63,7 +64,7 @@ export const canContinueFromObjective = (
 export const getBuilderStepIndex = (step: BuilderStep): number =>
   BUILDER_STEPS.indexOf(step);
 
-/** 1-based progress label, e.g. "Étape 1 sur 4". */
+/** 1-based progress label, e.g. "Étape 1 sur 5". */
 export const getBuilderStepLabel = (step: BuilderStep): string =>
   `Étape ${getBuilderStepIndex(step) + 1} sur ${BUILDER_STEP_COUNT}`;
 

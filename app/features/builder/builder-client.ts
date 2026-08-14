@@ -1,4 +1,5 @@
 import { mealFilterRuntimeScript } from "./builder-filter-runtime";
+import { CAPTURE_CHECKOUT_LEAD_INTENT } from "./builder-email";
 import {
   BUILDER_STEP_COUNT,
   getBuilderStepLabel,
@@ -6,6 +7,7 @@ import {
 } from "./builder-objective-options";
 
 const builderStepLabelsJson = JSON.stringify({
+  email: getBuilderStepLabel("email"),
   formule: getBuilderStepLabel("formule"),
   livraison: getBuilderStepLabel("livraison"),
   objectif: getBuilderStepLabel("objectif"),
@@ -13,6 +15,7 @@ const builderStepLabelsJson = JSON.stringify({
 });
 
 const builderStepProgressJson = JSON.stringify({
+  email: getBuilderStepProgressPercent("email"),
   formule: getBuilderStepProgressPercent("formule"),
   livraison: getBuilderStepProgressPercent("livraison"),
   objectif: getBuilderStepProgressPercent("objectif"),
@@ -28,7 +31,9 @@ export const builderClientScript = `
   var selectedMeals = {};
   var selectedDeliveryWindowKey = null;
   var selectedScheduledDeliveryDate = null;
+  var selectedEmail = "";
   var currentStep = "objectif";
+  var isSubmittingCart = false;
   var mealsRendered = false;
   var RECOMMENDED_MEAL_COUNT = 12;
   var STEP_COUNT = ${BUILDER_STEP_COUNT};
@@ -68,6 +73,11 @@ export const builderClientScript = `
   var mealsEmptyCopy = document.getElementById("meals-empty-copy");
   var mealsEmptyReset = document.getElementById("meals-empty-reset");
   var mealsGaugeFooter = document.getElementById("meals-gauge-footer");
+  var emailFooter = document.getElementById("email-footer");
+  var emailContinue = document.getElementById("email-continue");
+  var emailInput = document.getElementById("checkout-email");
+  var emailWeeklyPrice = document.getElementById("email-weekly-price");
+  var CAPTURE_LEAD_INTENT = ${JSON.stringify(CAPTURE_CHECKOUT_LEAD_INTENT)};
   var mealsGaugeCount = document.getElementById("meals-gauge-count");
   var mealsGaugeFill = document.getElementById("meals-gauge-fill");
   var mealsProgressBox = document.getElementById("meals-progress-box");
@@ -408,26 +418,79 @@ export const builderClientScript = `
     formulaContinue.textContent = "Continuer avec " + requiredMeals + " repas →";
   }
 
+  function isMealsSelectionComplete() {
+    return Boolean(
+      selectedBox &&
+        selectedBox.sellingPlanId &&
+        requiredMeals > 0 &&
+        selectedTotal() === requiredMeals
+    );
+  }
+
+  function isBuilderEmailValid(value) {
+    if (!value) return false;
+    var trimmed = String(value).trim();
+    if (!trimmed || trimmed.length > 254) return false;
+    if (/\\s/.test(trimmed)) return false;
+    var separator = trimmed.indexOf("@");
+    if (separator <= 0 || separator !== trimmed.lastIndexOf("@")) return false;
+    var local = trimmed.slice(0, separator);
+    var domain = trimmed.slice(separator + 1);
+    if (!local || !domain || domain.indexOf(".") === -1) return false;
+    if (domain.charAt(0) === "." || domain.charAt(domain.length - 1) === ".") return false;
+    return domain.split(".").every(function (label) {
+      return label.length > 0;
+    });
+  }
+
+  function updateEmailCta() {
+    if (!emailContinue) return;
+    if (isSubmittingCart) {
+      emailContinue.disabled = true;
+      emailContinue.textContent = "Ajout en cours…";
+      return;
+    }
+    if (!isBuilderEmailValid(selectedEmail)) {
+      emailContinue.disabled = true;
+      emailContinue.textContent = "Entrez votre e-mail";
+      return;
+    }
+    emailContinue.disabled = false;
+    emailContinue.textContent = "Ajouter ma box au panier";
+  }
+
+  function updateEmailWeeklyPrice() {
+    if (!emailWeeklyPrice) return;
+    if (!selectedBox || !selectedBox.price) {
+      emailWeeklyPrice.textContent = "";
+      return;
+    }
+    emailWeeklyPrice.textContent = "Puis " + formatEuros(selectedBox.price) + "/semaine.";
+  }
+
   function updateTunnelChrome(step) {
     var isObjective = step === "objectif";
     var isFormula = step === "formule";
     var isDelivery = step === "livraison";
     var isMeals = step === "repas";
+    var isEmail = step === "email";
     currentStep = step;
     document.body.classList.toggle("is-step-objective", isObjective);
     document.body.classList.toggle("is-step-formule", isFormula);
     document.body.classList.toggle("is-step-meals", isMeals);
     document.body.classList.toggle("is-step-livraison", isDelivery);
+    document.body.classList.toggle("is-step-email", isEmail);
 
     if (tunnelStepLabel) {
       tunnelStepLabel.textContent = STEP_LABELS[step] || ("Étape 1 sur " + STEP_COUNT);
     }
     if (tunnelProgressFill) {
-      tunnelProgressFill.classList.remove("is-step-1", "is-step-2", "is-step-3", "is-step-4");
+      tunnelProgressFill.classList.remove("is-step-1", "is-step-2", "is-step-3", "is-step-4", "is-step-5");
       if (isObjective) tunnelProgressFill.classList.add("is-step-1");
       else if (isFormula) tunnelProgressFill.classList.add("is-step-2");
       else if (isDelivery) tunnelProgressFill.classList.add("is-step-3");
       else if (isMeals) tunnelProgressFill.classList.add("is-step-4");
+      else if (isEmail) tunnelProgressFill.classList.add("is-step-5");
       var percent = STEP_PROGRESS[step];
       if (typeof percent === "number") {
         tunnelProgressFill.style.width = percent + "%";
@@ -437,6 +500,7 @@ export const builderClientScript = `
       tunnelBack.classList.toggle("is-formula-step", isFormula);
       tunnelBack.classList.toggle("is-delivery-step", isDelivery);
       tunnelBack.classList.toggle("is-meals-step", isMeals);
+      tunnelBack.classList.toggle("is-email-step", isEmail);
     }
     if (objectiveFooter) {
       objectiveFooter.classList.toggle("hidden", !isObjective);
@@ -449,6 +513,9 @@ export const builderClientScript = `
     }
     if (mealsGaugeFooter) {
       mealsGaugeFooter.classList.toggle("hidden", !isMeals);
+    }
+    if (emailFooter) {
+      emailFooter.classList.toggle("hidden", !isEmail);
     }
     if (mealsLead && selectedBox && requiredMeals) {
       mealsLead.textContent = "Pour votre box de " + requiredMeals + " repas";
@@ -465,6 +532,17 @@ export const builderClientScript = `
     if (!isValidObjective(selectedObjective) && step !== "objectif") {
       step = "objectif";
     }
+    if (step === "email") {
+      if (!isValidObjective(selectedObjective)) {
+        step = "objectif";
+      } else if (!selectedBox) {
+        step = "formule";
+      } else if (!isSelectedDeliveryWindowValid()) {
+        step = "livraison";
+      } else if (!isMealsSelectionComplete()) {
+        step = "repas";
+      }
+    }
     if (step === "repas" && !selectedBox) {
       step = "formule";
     }
@@ -474,7 +552,7 @@ export const builderClientScript = `
     if (step === "livraison" && !selectedBox) {
       step = "formule";
     }
-    if ((step === "formule" || step === "livraison" || step === "repas") && !isValidObjective(selectedObjective)) {
+    if ((step === "formule" || step === "livraison" || step === "repas" || step === "email") && !isValidObjective(selectedObjective)) {
       step = "objectif";
     }
 
@@ -486,6 +564,10 @@ export const builderClientScript = `
     stepFormula.classList.toggle("hidden", step !== "formule");
     stepDelivery.classList.toggle("hidden", step !== "livraison");
     stepMeals.classList.toggle("hidden", step !== "repas");
+    var stepEmail = document.getElementById("step-email");
+    if (stepEmail) {
+      stepEmail.classList.toggle("hidden", step !== "email");
+    }
 
     if (step === "objectif") {
       renderObjectives();
@@ -502,6 +584,12 @@ export const builderClientScript = `
     } else if (step === "livraison") {
       renderDeliveryWindows();
       updateDeliveryCta();
+    } else if (step === "email") {
+      updateEmailWeeklyPrice();
+      updateEmailCta();
+      if (emailInput) {
+        emailInput.value = selectedEmail;
+      }
     } else {
       renderMealFilters();
       if (!mealsRendered) {
@@ -522,6 +610,10 @@ export const builderClientScript = `
       history.back();
       return;
     }
+    if (currentStep === "email") {
+      showStep("repas", { pushHistory: false });
+      return;
+    }
     if (currentStep === "repas") {
       showStep("livraison", { pushHistory: false });
       return;
@@ -536,7 +628,7 @@ export const builderClientScript = `
   }
 
   function handleTunnelBack() {
-    if (currentStep === "repas" || currentStep === "livraison" || currentStep === "formule") {
+    if (currentStep === "email" || currentStep === "repas" || currentStep === "livraison" || currentStep === "formule") {
       goToPreviousStep();
       return;
     }
@@ -547,6 +639,10 @@ export const builderClientScript = `
     var hash = (location.hash || "#objectif").replace("#", "");
     if (!isValidObjective(selectedObjective)) {
       showStep("objectif", { pushHistory: false });
+      return;
+    }
+    if (hash === "email" && selectedBox && isSelectedDeliveryWindowValid() && isMealsSelectionComplete()) {
+      showStep("email", { pushHistory: false });
       return;
     }
     if (hash === "repas" && selectedBox && isSelectedDeliveryWindowValid()) {
@@ -717,14 +813,14 @@ export const builderClientScript = `
     }
 
     var subscriptionUnavailable = selectedBox && !selectedBox.sellingPlanId;
-    var isComplete = Boolean(selectedBox && selectedBox.sellingPlanId && requiredMeals > 0 && total === requiredMeals);
+    var isComplete = isMealsSelectionComplete();
     addToCart.disabled = !isComplete;
 
     if (addToCart.textContent !== "Ajout en cours...") {
       if (!isComplete) {
         addToCart.textContent = "Encore " + remaining + " plat" + (remaining > 1 ? "s" : "");
       } else {
-        addToCart.textContent = "Ajouter ma box au panier";
+        addToCart.textContent = "Continuer";
       }
     }
 
@@ -863,38 +959,53 @@ export const builderClientScript = `
   }
 
   addToCart.addEventListener("click", function () {
-    if (!selectedBox || selectedTotal() !== requiredMeals) return;
+    if (!isMealsSelectionComplete()) return;
+
+    if (!isSelectedDeliveryWindowValid()) {
+      setError("Choisissez une fenêtre de livraison avant de continuer.");
+      showStep("livraison");
+      return;
+    }
+
+    setError("");
+    showStep("email");
+  });
+
+  function addSelectedBoxToCart() {
+    if (!selectedBox || !isMealsSelectionComplete()) {
+      return Promise.reject(new Error("incomplete_box"));
+    }
 
     if (!isSelectedDeliveryWindowValid()) {
       setError("Choisissez une fenêtre de livraison avant d'ajouter votre box au panier.");
       showStep("livraison");
-      return;
+      return Promise.reject(new Error("invalid_delivery"));
     }
 
     var selectedWindow = findDeliveryWindowOption(selectedDeliveryWindowKey);
     if (!selectedWindow) {
       setError("Choisissez une fenêtre de livraison valide.");
       showStep("livraison");
-      return;
+      return Promise.reject(new Error("invalid_delivery"));
     }
 
     var variantId = getVariantCartId(selectedBox.variantId);
     if (!variantId) {
       setError("Cette box n’a pas de variante disponible.");
-      return;
+      return Promise.reject(new Error("missing_variant"));
     }
 
     if (!selectedBox.sellingPlanId) {
       setError("Abonnement bientôt disponible pour cette box.");
       updateSummary();
-      return;
+      return Promise.reject(new Error("missing_selling_plan"));
     }
 
     var sellingPlanId = getVariantCartId(selectedBox.sellingPlanId);
     if (!sellingPlanId) {
       setError("Abonnement bientôt disponible pour cette box.");
       updateSummary();
-      return;
+      return Promise.reject(new Error("missing_selling_plan"));
     }
 
     var properties = {
@@ -916,10 +1027,6 @@ export const builderClientScript = `
       }
     });
 
-    addToCart.disabled = true;
-    addToCart.textContent = "Ajout en cours...";
-    setError("");
-
     var item = {
       id: variantId,
       properties: properties,
@@ -927,7 +1034,7 @@ export const builderClientScript = `
       selling_plan: sellingPlanId
     };
 
-    fetch("/cart/add.js", {
+    return fetch("/cart/add.js", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -936,12 +1043,103 @@ export const builderClientScript = `
     }).then(function (response) {
       if (!response.ok) throw new Error("Add to cart failed");
       window.location.href = "/cart";
-    }).catch(function () {
-      addToCart.textContent = "Ajouter ma box au panier";
-      updateSummary();
-      setError("Impossible d’ajouter la box au panier. Réessayez dans un instant.");
     });
-  });
+  }
+
+  function captureCheckoutLead() {
+    return fetch(window.location.pathname + window.location.search, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        intent: CAPTURE_LEAD_INTENT,
+        email: selectedEmail,
+        objective: selectedObjective,
+        boxVariantId: selectedBox && selectedBox.variantId,
+        mealCount: selectedBox && selectedBox.mealCount,
+        scheduledDeliveryDate: selectedScheduledDeliveryDate
+      })
+    }).then(function (response) {
+      return response.json().then(function (payload) {
+        if (!response.ok || !payload || payload.ok !== true) {
+          throw new Error("lead_capture_failed");
+        }
+      }, function () {
+        throw new Error("lead_capture_failed");
+      });
+    });
+  }
+
+  function handleEmailSubmit() {
+    if (isSubmittingCart) return;
+
+    selectedEmail = emailInput ? String(emailInput.value || "").trim() : String(selectedEmail || "").trim();
+    if (emailInput) {
+      emailInput.value = selectedEmail;
+    }
+
+    if (!isBuilderEmailValid(selectedEmail)) {
+      setError("Entrez une adresse e-mail valide.");
+      updateEmailCta();
+      return;
+    }
+
+    if (!isMealsSelectionComplete()) {
+      setError("Choisissez vos repas avant d'ajouter votre box au panier.");
+      showStep("repas");
+      return;
+    }
+
+    isSubmittingCart = true;
+    updateEmailCta();
+    setError("");
+
+    captureCheckoutLead()
+      .then(function () {
+        return addSelectedBoxToCart();
+      })
+      .catch(function (error) {
+        isSubmittingCart = false;
+        updateEmailCta();
+        if (error && error.message === "lead_capture_failed") {
+          setError("Impossible de continuer pour le moment. Réessayez.");
+          return;
+        }
+        if (!errorMessage.textContent) {
+          setError("Impossible d’ajouter la box au panier. Réessayez dans un instant.");
+        }
+      });
+  }
+
+  if (emailContinue) {
+    emailContinue.addEventListener("click", handleEmailSubmit);
+  }
+
+  if (emailInput) {
+    emailInput.addEventListener("input", function () {
+      selectedEmail = String(emailInput.value || "");
+      if (errorMessage.textContent === "Entrez une adresse e-mail valide.") {
+        setError("");
+      }
+      updateEmailCta();
+    });
+    emailInput.addEventListener("blur", function () {
+      selectedEmail = String(emailInput.value || "").trim();
+      emailInput.value = selectedEmail;
+      if (selectedEmail && !isBuilderEmailValid(selectedEmail)) {
+        setError("Entrez une adresse e-mail valide.");
+      }
+      updateEmailCta();
+    });
+    emailInput.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        handleEmailSubmit();
+      }
+    });
+  }
 
   tunnelBack.addEventListener("click", handleTunnelBack);
 
@@ -1009,6 +1207,8 @@ export const builderClientScript = `
 
   if (!isValidObjective(selectedObjective)) {
     showStep("objectif", { replaceHistory: true });
+  } else if (location.hash === "#email" && selectedBox && isSelectedDeliveryWindowValid() && isMealsSelectionComplete()) {
+    showStep("email", { replaceHistory: true });
   } else if (location.hash === "#repas" && selectedBox && isSelectedDeliveryWindowValid()) {
     showStep("repas", { replaceHistory: true });
   } else if (location.hash === "#livraison" && selectedBox) {
