@@ -8,6 +8,7 @@ import {
   getSelectedMealsFromLineItemProperties,
 } from "../../app/utils/orderLineItemProperties";
 import {
+  buildBuilderDeliveryWindowOptionsFromReferenceDate,
   getAvailableDeliveryDates,
   getDefaultDeliveryDate,
   isSunday,
@@ -138,7 +139,37 @@ const runSuite = () => {
     ctx.assertEqual(`box ${mealsCount} rejects wrong total`, "error" in invalid, true);
   }
 
-  ctx.scenario("Date livraison builder — fenêtre J+3 à J+10 sans dimanche");
+  ctx.scenario("Date livraison builder — deux fenêtres hebdomadaires jeudi/vendredi");
+  ctx.given("une date de référence jeudi 13 août 2026");
+  const weeklyReference = parseDeliveryDate("2026-08-13");
+  ctx.assertTrue("weekly reference parses", weeklyReference !== null);
+  const weeklyOptions = buildBuilderDeliveryWindowOptionsFromReferenceDate(
+    weeklyReference!,
+  );
+  ctx.when("on liste les fenêtres disponibles");
+  ctx.assertEqual("weekly options count", weeklyOptions.length, 2);
+  ctx.assertEqual(
+    "first weekly thursday canonical",
+    weeklyOptions[0]?.scheduledDeliveryDate,
+    "2026-08-20",
+  );
+  ctx.assertEqual(
+    "first weekly friday",
+    weeklyOptions[0]?.fridayDate,
+    "2026-08-21",
+  );
+  ctx.assertEqual(
+    "second weekly thursday",
+    weeklyOptions[1]?.scheduledDeliveryDate,
+    "2026-08-27",
+  );
+  ctx.assertTrue(
+    "weekly range label mentions jeudi and vendredi",
+    weeklyOptions[0]?.rangeLabel.includes("jeudi") &&
+      weeklyOptions[0]?.rangeLabel.includes("vendredi"),
+  );
+
+  ctx.scenario("Legacy delivery window helpers — fenêtre J+3 à J+10 sans dimanche");
   ctx.given("une date de référence vendredi 10 juillet");
   const availableDates = getAvailableDeliveryDates(referenceFriday);
   ctx.when("on liste les dates disponibles");

@@ -1,6 +1,8 @@
 import type { SubscriptionObjective } from "../../constants/subscriptionObjective";
+import type { BuilderDeliveryWindowOption } from "../../utils/deliveryDate";
 
 export type { BuilderObjectiveOption } from "./builder-objective-options";
+export type { BuilderDeliveryWindowOption } from "../../utils/deliveryDate";
 
 /** Checkout-ready Box V2 option for the subscription-only builder. */
 export type BuilderBoxOption = {
@@ -64,10 +66,7 @@ export type BuilderProduct = {
 };
 
 export type BuilderDeliveryConfig = {
-  availableDates: string[];
-  defaultDate: string;
-  maxOffsetDays: number;
-  minOffsetDays: number;
+  deliveryWindowOptions: BuilderDeliveryWindowOption[];
   timezone: string;
 };
 

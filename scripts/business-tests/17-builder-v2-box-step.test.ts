@@ -671,9 +671,10 @@ const runSuite = () => {
     loaderSource.includes("mealCollectionId"),
   );
   ctx.assertTrue(
-    "delivery legacy still present",
-    clientSource.includes("selectedDeliveryDate") &&
-      loaderSource.includes("deliveryConfig"),
+    "delivery weekly windows present",
+    clientSource.includes("selectedDeliveryWindowKey") &&
+      clientSource.includes("deliveryWindowOptions") &&
+      loaderSource.includes("buildBuilderDeliveryWindowOptions"),
   );
   ctx.assertTrue(
     "meals V2 path present",

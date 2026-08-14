@@ -467,6 +467,56 @@ body {
   max-width: 34rem;
 }
 
+.delivery-window-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0 auto;
+  max-width: 640px;
+}
+
+.delivery-window-card {
+  appearance: none;
+  background: var(--mileyo-white);
+  border: 2px solid rgba(185, 138, 215, 0.22);
+  border-radius: 18px;
+  color: var(--mileyo-text);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 8px;
+  line-height: 1.35;
+  min-height: 120px;
+  padding: 16px 14px;
+  text-align: left;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.delivery-window-card:hover,
+.delivery-window-card:focus-visible {
+  border-color: rgba(185, 138, 215, 0.55);
+  box-shadow: 0 4px 16px rgba(90, 27, 105, 0.08);
+  outline: none;
+}
+
+.delivery-window-card.selected {
+  background: rgba(220, 194, 240, 0.28);
+  border-color: var(--mileyo-purple);
+  box-shadow: 0 4px 18px rgba(185, 138, 215, 0.18);
+}
+
+.delivery-window-card-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.delivery-window-card-range {
+  color: rgba(45, 27, 54, 0.82);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
 .delivery-date-grid {
   display: grid;
   gap: 12px;
@@ -1698,9 +1748,10 @@ button:disabled {
     padding-right: 24px;
   }
 
+  .delivery-window-grid,
   .delivery-date-grid {
     gap: 14px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     max-width: 640px;
   }
 

@@ -7,15 +7,8 @@ import {
   fetchBuilderMealOptions,
 } from "../features/builder/builder-catalog.server";
 import { renderBuilder, renderMessage } from "../features/builder/builder-render";
-import {
-  DELIVERY_MAX_OFFSET_DAYS,
-  DELIVERY_MIN_OFFSET_DAYS,
-  DELIVERY_TIMEZONE,
-} from "../constants/deliverySchedule";
-import {
-  getAvailableDeliveryDates,
-  getDefaultDeliveryDate,
-} from "../utils/deliveryDate";
+import { DELIVERY_TIMEZONE } from "../constants/deliverySchedule";
+import { buildBuilderDeliveryWindowOptions } from "../utils/deliveryDate";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
@@ -49,12 +42,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     fetchBuilderMealOptions(admin, settings.mealCollectionId),
   ]);
 
-  const availableDates = getAvailableDeliveryDates();
+  const deliveryWindowOptions = buildBuilderDeliveryWindowOptions();
   const deliveryConfig = {
-    availableDates,
-    defaultDate: getDefaultDeliveryDate(),
-    maxOffsetDays: DELIVERY_MAX_OFFSET_DAYS,
-    minOffsetDays: DELIVERY_MIN_OFFSET_DAYS,
+    deliveryWindowOptions,
     timezone: DELIVERY_TIMEZONE,
   };
 

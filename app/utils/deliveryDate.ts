@@ -1,4 +1,7 @@
 import {
+  SUBSCRIPTION_CYCLE_TIMEZONE,
+} from "../constants/subscriptionCycle";
+import {
   DEFAULT_DELIVERY_SCHEDULE_CONFIG,
   DELIVERY_BILLING_READY_HOUR,
   DELIVERY_BILLING_READY_MINUTE,
@@ -10,6 +13,22 @@ import {
   type DeliveryRescheduleReason,
   type DeliveryScheduleConfig,
 } from "../constants/deliverySchedule";
+
+/** Thursday weekday in JS Date#getDay convention. */
+const DELIVERY_WINDOW_THURSDAY_WEEKDAY = 4;
+
+/** Tuesday and Wednesday — imminent delivery window is skipped after Monday cutoff. */
+const DELIVERY_WINDOW_SKIP_WEEKDAYS = [2, 3] as const;
+
+export type BuilderDeliveryWindowOption = {
+  cardLabel: string;
+  fridayDate: DeliveryDateString;
+  key: DeliveryDateString;
+  rangeLabel: string;
+  scheduledDeliveryDate: DeliveryDateString;
+  thursdayDate: DeliveryDateString;
+  weekStartDate: DeliveryDateString;
+};
 
 /** Calendar date in Europe/Paris, ISO `YYYY-MM-DD`. */
 export type DeliveryDateString = string & { readonly __brand: "DeliveryDateString" };
@@ -871,6 +890,190 @@ export const resolveResumeDeliverySchedule = ({
   } catch {
     return null;
   }
+};
+
+export const getDeliveryWeekStartForDate = (
+  thursdayDate: DeliveryDateString,
+): DeliveryDateString => addCalendarDays(thursdayDate, -3);
+
+export const getNextStrictThursday = (
+  referenceDate: DeliveryDateString,
+): DeliveryDateString => {
+  let cursor = addCalendarDays(referenceDate, 1);
+
+  while (getWeekday(cursor) !== DELIVERY_WINDOW_THURSDAY_WEEKDAY) {
+    cursor = addCalendarDays(cursor, 1);
+  }
+
+  return cursor;
+};
+
+export const getFirstEligibleDeliveryThursday = (
+  referenceDate: DeliveryDateString,
+): DeliveryDateString => {
+  const nextThursday = getNextStrictThursday(referenceDate);
+  const referenceWeekday = getWeekday(referenceDate);
+
+  if (
+    DELIVERY_WINDOW_SKIP_WEEKDAYS.includes(
+      referenceWeekday as (typeof DELIVERY_WINDOW_SKIP_WEEKDAYS)[number],
+    )
+  ) {
+    return addCalendarDays(nextThursday, DELIVERY_WEEKLY_INTERVAL_DAYS);
+  }
+
+  return nextThursday;
+};
+
+const formatDeliveryWindowWeekdayDayMonth = (
+  date: DeliveryDateString,
+  locale: string,
+): string => {
+  const { day, month, year } = splitDeliveryDate(date);
+  const utcNoon = new Date(Date.UTC(year, month - 1, day, 12));
+  const weekday = new Intl.DateTimeFormat(locale, {
+    timeZone: "UTC",
+    weekday: "long",
+  }).format(utcNoon);
+  const rest = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  }).format(utcNoon);
+
+  return `${weekday} ${rest}`;
+};
+
+export const formatDeliveryWindowRangeLabel = (
+  thursdayDate: DeliveryDateString,
+  fridayDate: DeliveryDateString,
+  options?: { locale?: string },
+): string => {
+  const locale = options?.locale ?? "fr-FR";
+  const thursdayLabel = formatDeliveryWindowWeekdayDayMonth(thursdayDate, locale);
+  const fridayLabel = formatDeliveryWindowWeekdayDayMonth(fridayDate, locale);
+  const thursdayParts = splitDeliveryDate(thursdayDate);
+  const fridayParts = splitDeliveryDate(fridayDate);
+  const sameMonth =
+    thursdayParts.year === fridayParts.year &&
+    thursdayParts.month === fridayParts.month;
+
+  if (sameMonth) {
+    return `Livraison entre ${thursdayLabel} et ${fridayLabel}`;
+  }
+
+  return `Livraison entre ${thursdayLabel} et ${fridayLabel}`;
+};
+
+export const buildWeeklyDeliveryWindow = ({
+  cardLabel,
+  locale = "fr-FR",
+  thursdayDate,
+}: {
+  cardLabel: string;
+  locale?: string;
+  thursdayDate: DeliveryDateString;
+}): BuilderDeliveryWindowOption => {
+  const fridayDate = addCalendarDays(thursdayDate, 1);
+  const weekStartDate = getDeliveryWeekStartForDate(thursdayDate);
+
+  return {
+    cardLabel,
+    fridayDate,
+    key: weekStartDate,
+    rangeLabel: formatDeliveryWindowRangeLabel(thursdayDate, fridayDate, {
+      locale,
+    }),
+    scheduledDeliveryDate: thursdayDate,
+    thursdayDate,
+    weekStartDate,
+  };
+};
+
+export const buildBuilderDeliveryWindowOptionsFromReferenceDate = (
+  referenceDate: DeliveryDateString,
+  options?: { locale?: string },
+): BuilderDeliveryWindowOption[] => {
+  const locale = options?.locale ?? "fr-FR";
+  const firstThursday = getFirstEligibleDeliveryThursday(referenceDate);
+  const secondThursday = addCalendarDays(
+    firstThursday,
+    DELIVERY_WEEKLY_INTERVAL_DAYS,
+  );
+
+  return [
+    buildWeeklyDeliveryWindow({
+      cardLabel: "Prochaine livraison",
+      locale,
+      thursdayDate: firstThursday,
+    }),
+    buildWeeklyDeliveryWindow({
+      cardLabel: "Livraison suivante",
+      locale,
+      thursdayDate: secondThursday,
+    }),
+  ];
+};
+
+export const buildBuilderDeliveryWindowOptions = (
+  referenceInstant: Date = new Date(),
+  options?: {
+    locale?: string;
+    timezone?: string;
+  },
+): BuilderDeliveryWindowOption[] => {
+  const timezone = options?.timezone ?? SUBSCRIPTION_CYCLE_TIMEZONE;
+
+  return buildBuilderDeliveryWindowOptionsFromReferenceDate(
+    referenceDateFromInstant(referenceInstant, timezone),
+    options,
+  );
+};
+
+export const getWeeklyFirstOrderAllowedThursdays = (
+  referenceDate: DeliveryDateString,
+): DeliveryDateString[] =>
+  buildBuilderDeliveryWindowOptionsFromReferenceDate(referenceDate).map(
+    (option) => option.scheduledDeliveryDate,
+  );
+
+export const scheduleWeeklyFirstOrderDeliveryDate = ({
+  desiredDeliveryDate,
+  fromCustomerChoice = true,
+  referenceDate,
+}: {
+  desiredDeliveryDate: DeliveryDateString;
+  fromCustomerChoice?: boolean;
+  referenceDate: DeliveryDateString;
+}): DeliveryScheduleResult | null => {
+  const options = buildBuilderDeliveryWindowOptionsFromReferenceDate(referenceDate);
+  const allowedThursdays = options.map((option) => option.scheduledDeliveryDate);
+
+  if (allowedThursdays.includes(desiredDeliveryDate)) {
+    return {
+      deliveryRescheduleReason: null,
+      desiredDeliveryDate,
+      scheduledDeliveryDate: desiredDeliveryDate,
+    };
+  }
+
+  const imminentThursday = getNextStrictThursday(referenceDate);
+  const firstEligibleThursday = options[0]?.scheduledDeliveryDate;
+
+  if (
+    fromCustomerChoice &&
+    firstEligibleThursday &&
+    desiredDeliveryDate === imminentThursday &&
+    desiredDeliveryDate !== firstEligibleThursday
+  ) {
+    return {
+      deliveryRescheduleReason: DELIVERY_RESCHEDULE_REASON.PAYMENT_TOO_LATE,
+      desiredDeliveryDate,
+      scheduledDeliveryDate: firstEligibleThursday,
+    };
+  }
+
+  return null;
 };
 
 export const formatDeliveryDateLabel = (

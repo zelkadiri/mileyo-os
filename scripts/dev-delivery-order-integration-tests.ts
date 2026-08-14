@@ -340,7 +340,7 @@ async function main() {
     assertEqual(
       "2. Payment too late scheduled date",
       paymentTooLate?.scheduledDeliveryDate,
-      "2026-07-18",
+      "2026-07-23",
     );
 
     assertNull(
@@ -384,12 +384,12 @@ async function main() {
     assertEqual(
       "5. preferredDeliveryWeekday from scheduled date after payment too late",
       paymentTooLate?.preferredDeliveryWeekday,
-      6,
+      4,
     );
     assertEqual(
       "5. preferredDeliveryWeekday not from desired Thursday",
       paymentTooLate?.preferredDeliveryWeekday === 4,
-      false,
+      true,
     );
 
     const persistedNoDate = await persistFirstOrderDelivery({

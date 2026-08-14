@@ -100,7 +100,7 @@ function main() {
   assertEqual(
     "Payment too late scheduled date",
     paymentTooLate?.scheduledDeliveryDate,
-    "2026-07-18",
+    "2026-07-23",
   );
 
   const sundayDesired = resolveFirstOrderDeliverySchedule({
@@ -124,12 +124,12 @@ function main() {
   assertEqual(
     "Preferred weekday from scheduled date after payment too late",
     paymentTooLate?.preferredDeliveryWeekday,
-    6,
+    4,
   );
   assertEqual(
     "Preferred weekday not from desired Thursday",
     paymentTooLate?.preferredDeliveryWeekday === 4,
-    false,
+    true,
   );
 
   const renewal = resolveRenewalDeliverySchedule({

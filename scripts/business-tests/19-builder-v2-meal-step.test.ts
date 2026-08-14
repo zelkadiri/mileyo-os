@@ -565,9 +565,10 @@ const runSuite = () => {
     render.includes("BuilderMealOption"),
   );
   ctx.assertTrue(
-    "delivery legacy still present",
-    client.includes("selectedDeliveryDate") &&
-      loader.includes("deliveryConfig"),
+    "delivery weekly windows still present",
+    client.includes("selectedDeliveryWindowKey") &&
+      client.includes("deliveryWindowOptions") &&
+      loader.includes("buildBuilderDeliveryWindowOptions"),
   );
   ctx.assertTrue(
     "box path still fetchBuilderBoxOptions",

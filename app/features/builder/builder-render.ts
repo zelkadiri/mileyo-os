@@ -152,10 +152,10 @@ export const renderBuilder = ({
     <section class="builder-step builder-step--delivery hidden" id="step-delivery">
       <div class="delivery-decision">
         <div class="delivery-intro">
-          <h1>Choisissez votre première livraison</h1>
-          <p class="delivery-lead">Votre abonnement démarre aujourd'hui. Votre première box sera livrée à la date choisie.</p>
+          <h1>Choisissez votre semaine de livraison</h1>
+          <p class="delivery-lead">Votre box sera livrée entre jeudi et vendredi.</p>
         </div>
-        <div class="delivery-date-grid" id="delivery-date-grid" role="group" aria-label="Dates de livraison disponibles"></div>
+        <div class="delivery-window-grid" id="delivery-window-grid" role="group" aria-label="Fenêtres de livraison disponibles"></div>
       </div>
     </section>
 
@@ -212,7 +212,7 @@ export const renderBuilder = ({
   </footer>
 
   <footer class="tunnel-footer delivery-footer hidden" id="delivery-footer">
-    <button class="tunnel-cta" id="delivery-continue" type="button">Continuer vers mes repas →</button>
+    <button class="tunnel-cta" disabled id="delivery-continue" type="button">Choisissez une fenêtre de livraison</button>
   </footer>
 
   <footer class="tunnel-footer meals-gauge-footer hidden" id="meals-gauge-footer">

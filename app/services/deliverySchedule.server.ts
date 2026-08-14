@@ -9,6 +9,7 @@ import {
   referenceDateFromInstant,
   resolveResumeDeliverySchedule,
   scheduleDeliveryDate,
+  scheduleWeeklyFirstOrderDeliveryDate,
   type DeliveryDateString,
   type ResumeDeliveryScheduleMode,
   type ResumeDeliveryScheduleResolution,
@@ -524,11 +525,19 @@ export const resolveFirstOrderDeliverySchedule = ({
     return null;
   }
 
-  const schedule = scheduleDeliveryDate({
+  const weeklySchedule = scheduleWeeklyFirstOrderDeliveryDate({
     desiredDeliveryDate,
     fromCustomerChoice: true,
     referenceDate,
   });
+
+  const schedule =
+    weeklySchedule ??
+    scheduleDeliveryDate({
+      desiredDeliveryDate,
+      fromCustomerChoice: true,
+      referenceDate,
+    });
 
   return {
     deliveryRescheduleReason: schedule.deliveryRescheduleReason,

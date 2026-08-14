@@ -26,7 +26,8 @@ export const builderClientScript = `
   var selectedBox = null;
   var requiredMeals = 0;
   var selectedMeals = {};
-  var selectedDeliveryDate = null;
+  var selectedDeliveryWindowKey = null;
+  var selectedScheduledDeliveryDate = null;
   var currentStep = "objectif";
   var mealsRendered = false;
   var RECOMMENDED_MEAL_COUNT = 12;
@@ -58,7 +59,7 @@ export const builderClientScript = `
   var formulaFooter = document.getElementById("formula-footer");
   var deliveryContinue = document.getElementById("delivery-continue");
   var deliveryFooter = document.getElementById("delivery-footer");
-  var deliveryDateGrid = document.getElementById("delivery-date-grid");
+  var deliveryWindowGrid = document.getElementById("delivery-window-grid");
   var mealsLead = document.getElementById("meals-lead");
   var allergenFilters = document.getElementById("allergen-filters");
   var badgeFilters = document.getElementById("badge-filters");
@@ -78,76 +79,67 @@ export const builderClientScript = `
 
   ${mealFilterRuntimeScript}
 
-  function formatDeliveryDateLabelShort(dateStr) {
-    var parts = dateStr.split("-");
-    var year = Number(parts[0]);
-    var month = Number(parts[1]);
-    var day = Number(parts[2]);
-    var utcNoon = new Date(Date.UTC(year, month - 1, day, 12));
-    var weekday = new Intl.DateTimeFormat("fr-FR", {
-      timeZone: "UTC",
-      weekday: "short"
-    }).format(utcNoon);
-    var rest = new Intl.DateTimeFormat("fr-FR", {
-      day: "numeric",
-      month: "long",
-      timeZone: "UTC"
-    }).format(utcNoon);
-
-    return weekday.charAt(0).toUpperCase() + weekday.slice(1).replace(/\\.$/, ".") + " " + rest;
-  }
-
-  function formatDeliveryDateLabelLong(dateStr) {
-    var parts = dateStr.split("-");
-    var year = Number(parts[0]);
-    var month = Number(parts[1]);
-    var day = Number(parts[2]);
-    var utcNoon = new Date(Date.UTC(year, month - 1, day, 12));
-
-    return new Intl.DateTimeFormat("fr-FR", {
-      day: "numeric",
-      month: "long",
-      timeZone: "UTC",
-      weekday: "long",
-      year: "numeric"
-    }).format(utcNoon);
-  }
-
-  function ensureSelectedDeliveryDate() {
-    var config = data.deliveryConfig;
-    if (!config) return;
-    var available = config.availableDates || [];
-    if (selectedDeliveryDate && available.indexOf(selectedDeliveryDate) !== -1) {
-      return;
+  function getDeliveryWindowOptions() {
+    if (!data.deliveryConfig || !data.deliveryConfig.deliveryWindowOptions) {
+      return [];
     }
-    selectedDeliveryDate = config.defaultDate || available[0] || null;
+    return data.deliveryConfig.deliveryWindowOptions;
   }
 
-  function renderDeliveryDates() {
-    if (!deliveryDateGrid || !data.deliveryConfig) return;
-    deliveryDateGrid.innerHTML = "";
-    data.deliveryConfig.availableDates.forEach(function (dateStr) {
-      var chip = document.createElement("button");
-      var isSelected = selectedDeliveryDate === dateStr;
-      chip.className = "delivery-date-chip" + (isSelected ? " selected" : "");
-      chip.type = "button";
-      chip.textContent = formatDeliveryDateLabelShort(dateStr);
-      chip.setAttribute("aria-pressed", isSelected ? "true" : "false");
-      chip.addEventListener("click", function () {
-        selectedDeliveryDate = dateStr;
-        renderDeliveryDates();
+  function findDeliveryWindowOption(key) {
+    return getDeliveryWindowOptions().find(function (option) {
+      return option.key === key;
+    }) || null;
+  }
+
+  function isSelectedDeliveryWindowValid() {
+    if (!selectedDeliveryWindowKey || !selectedScheduledDeliveryDate) {
+      return false;
+    }
+    var option = findDeliveryWindowOption(selectedDeliveryWindowKey);
+    return Boolean(
+      option &&
+        option.scheduledDeliveryDate === selectedScheduledDeliveryDate,
+    );
+  }
+
+  function renderDeliveryWindows() {
+    if (!deliveryWindowGrid || !data.deliveryConfig) return;
+    deliveryWindowGrid.innerHTML = "";
+    getDeliveryWindowOptions().forEach(function (option) {
+      var button = document.createElement("button");
+      var isSelected = selectedDeliveryWindowKey === option.key;
+      button.className =
+        "delivery-window-card" + (isSelected ? " selected" : "");
+      button.type = "button";
+      button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+
+      var title = document.createElement("span");
+      title.className = "delivery-window-card-title";
+      title.textContent = option.cardLabel;
+      button.appendChild(title);
+
+      var range = document.createElement("span");
+      range.className = "delivery-window-card-range";
+      range.textContent = option.rangeLabel;
+      button.appendChild(range);
+
+      button.addEventListener("click", function () {
+        selectedDeliveryWindowKey = option.key;
+        selectedScheduledDeliveryDate = option.scheduledDeliveryDate;
+        renderDeliveryWindows();
         updateDeliveryCta();
         setError("");
       });
-      deliveryDateGrid.appendChild(chip);
+      deliveryWindowGrid.appendChild(button);
     });
   }
 
   function updateDeliveryCta() {
     if (!deliveryContinue) return;
-    if (!selectedDeliveryDate) {
+    if (!isSelectedDeliveryWindowValid()) {
       deliveryContinue.disabled = true;
-      deliveryContinue.textContent = "Choisissez une date de livraison";
+      deliveryContinue.textContent = "Choisissez une fenêtre de livraison";
       return;
     }
     deliveryContinue.disabled = false;
@@ -476,7 +468,7 @@ export const builderClientScript = `
     if (step === "repas" && !selectedBox) {
       step = "formule";
     }
-    if (step === "repas" && !selectedDeliveryDate) {
+    if (step === "repas" && !isSelectedDeliveryWindowValid()) {
       step = "livraison";
     }
     if (step === "livraison" && !selectedBox) {
@@ -508,8 +500,7 @@ export const builderClientScript = `
         updateBoxRailNav();
       });
     } else if (step === "livraison") {
-      ensureSelectedDeliveryDate();
-      renderDeliveryDates();
+      renderDeliveryWindows();
       updateDeliveryCta();
     } else {
       renderMealFilters();
@@ -558,7 +549,7 @@ export const builderClientScript = `
       showStep("objectif", { pushHistory: false });
       return;
     }
-    if (hash === "repas" && selectedBox && selectedDeliveryDate) {
+    if (hash === "repas" && selectedBox && isSelectedDeliveryWindowValid()) {
       showStep("repas", { pushHistory: false });
       return;
     }
@@ -607,7 +598,6 @@ export const builderClientScript = `
     button.classList.add("selected");
 
     updateFormulaCta();
-    ensureSelectedDeliveryDate();
     updateSummary();
     scrollBoxIntoView(button);
     window.requestAnimationFrame(updateBoxRailNav);
@@ -875,8 +865,15 @@ export const builderClientScript = `
   addToCart.addEventListener("click", function () {
     if (!selectedBox || selectedTotal() !== requiredMeals) return;
 
-    if (!selectedDeliveryDate) {
-      setError("Choisissez une date de livraison avant d'ajouter votre box au panier.");
+    if (!isSelectedDeliveryWindowValid()) {
+      setError("Choisissez une fenêtre de livraison avant d'ajouter votre box au panier.");
+      showStep("livraison");
+      return;
+    }
+
+    var selectedWindow = findDeliveryWindowOption(selectedDeliveryWindowKey);
+    if (!selectedWindow) {
+      setError("Choisissez une fenêtre de livraison valide.");
       showStep("livraison");
       return;
     }
@@ -903,11 +900,11 @@ export const builderClientScript = `
     var properties = {
       "Type de commande": "Abonnement hebdomadaire",
       "Nombre de repas": String(selectedBox.mealCount),
-      "_mileyo_delivery_date": selectedDeliveryDate,
+      "_mileyo_delivery_date": selectedScheduledDeliveryDate,
       "Date de livraison souhaitée":
-        formatDeliveryDateLabelLong(selectedDeliveryDate) +
+        selectedWindow.rangeLabel +
         " (" +
-        selectedDeliveryDate +
+        selectedScheduledDeliveryDate +
         ")"
     };
     var propertyIndex = 1;
@@ -966,8 +963,8 @@ export const builderClientScript = `
 
   if (deliveryContinue) {
     deliveryContinue.addEventListener("click", function () {
-      if (!selectedDeliveryDate) {
-        setError("Choisissez une date de livraison pour continuer.");
+      if (!isSelectedDeliveryWindowValid()) {
+        setError("Choisissez une fenêtre de livraison pour continuer.");
         updateDeliveryCta();
         return;
       }
@@ -1004,9 +1001,6 @@ export const builderClientScript = `
   window.addEventListener("popstate", handleHistoryNavigation);
   window.addEventListener("hashchange", handleHistoryNavigation);
 
-  if (data.deliveryConfig && data.deliveryConfig.defaultDate) {
-    selectedDeliveryDate = data.deliveryConfig.defaultDate;
-  }
   renderObjectives();
   updateObjectiveCta();
   updateFormulaCta();
@@ -1015,7 +1009,7 @@ export const builderClientScript = `
 
   if (!isValidObjective(selectedObjective)) {
     showStep("objectif", { replaceHistory: true });
-  } else if (location.hash === "#repas" && selectedBox && selectedDeliveryDate) {
+  } else if (location.hash === "#repas" && selectedBox && isSelectedDeliveryWindowValid()) {
     showStep("repas", { replaceHistory: true });
   } else if (location.hash === "#livraison" && selectedBox) {
     showStep("livraison", { replaceHistory: true });
