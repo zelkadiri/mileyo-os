@@ -17,7 +17,7 @@ import {
   collectEligibleLocationIds,
   collectInventoryItemIds,
   ensureInventoryItemsActivatedAtEligibleLocations,
-  isEligibleFulfillmentLocation,
+  isEligibleMerchantLocation,
 } from "../../app/features/settings/settings-box-v2-inventory-activation.server";
 import { setupV2BoxCatalog } from "../../app/features/settings/settings-box-catalog-v2.server";
 import { BOX_V2_PRODUCT_HANDLE } from "../../app/constants/subscriptionBoxCatalogV2";
@@ -57,6 +57,14 @@ const ELIGIBLE_LOCATION_PAGE_2 = {
   name: "Atelier",
   isActive: true,
   fulfillsOnlineOrders: true,
+  isFulfillmentService: false,
+};
+
+const FRANCE_LIKE_LOCATION = {
+  id: "gid://shopify/Location/france",
+  name: "France",
+  isActive: true,
+  fulfillsOnlineOrders: false,
   isFulfillmentService: false,
 };
 
@@ -174,69 +182,69 @@ const runSuite = async () => {
   const devToml = readRepoFile("shopify.app.dev.toml");
   const productionToml = readRepoFile("shopify.app.production.toml");
 
-  ctx.scenario("A. Eligible location filter");
+  ctx.scenario("A. Eligible merchant location filter");
   ctx.assertTrue(
-    "active online non-fulfillment location is eligible",
-    isEligibleFulfillmentLocation(ELIGIBLE_LOCATION),
+    "TEST A — active online merchant location is eligible",
+    isEligibleMerchantLocation(ELIGIBLE_LOCATION),
+  );
+  ctx.assertTrue(
+    "TEST B — active merchant location that does not fulfill online orders is eligible",
+    isEligibleMerchantLocation(FRANCE_LIKE_LOCATION),
   );
   ctx.assertFalse(
-    "inactive location is not eligible",
-    isEligibleFulfillmentLocation({
+    "TEST D — inactive location is not eligible",
+    isEligibleMerchantLocation({
       ...ELIGIBLE_LOCATION,
       isActive: false,
     }),
   );
   ctx.assertFalse(
-    "location that does not fulfill online orders is not eligible",
-    isEligibleFulfillmentLocation({
-      ...ELIGIBLE_LOCATION,
-      fulfillsOnlineOrders: false,
-    }),
-  );
-  ctx.assertFalse(
-    "third-party fulfillment service is not eligible",
-    isEligibleFulfillmentLocation({
+    "TEST C — third-party fulfillment service is not eligible",
+    isEligibleMerchantLocation({
       ...ELIGIBLE_LOCATION,
       isFulfillmentService: true,
     }),
   );
   ctx.assertFalse(
+    "TEST C — fulfillment service is excluded even if it fulfills online orders",
+    isEligibleMerchantLocation({
+      ...INELIGIBLE_3PL_LOCATION,
+      fulfillsOnlineOrders: true,
+    }),
+  );
+  ctx.assertFalse(
     "missing id is not eligible",
-    isEligibleFulfillmentLocation({
+    isEligibleMerchantLocation({
       ...ELIGIBLE_LOCATION,
       id: "  ",
     }),
   );
   ctx.assertEqual(
-    "collects only eligible unique ids",
+    "collects merchant locations including France-like, excludes inactive and 3PL",
     JSON.stringify(
       collectEligibleLocationIds([
         ELIGIBLE_LOCATION,
         { ...ELIGIBLE_LOCATION, id: "gid://shopify/Location/inactive", isActive: false },
-        {
-          ...ELIGIBLE_LOCATION,
-          id: "gid://shopify/Location/offline",
-          fulfillsOnlineOrders: false,
-        },
+        FRANCE_LIKE_LOCATION,
         {
           ...ELIGIBLE_LOCATION,
           id: "gid://shopify/Location/3pl",
           isFulfillmentService: true,
         },
         ELIGIBLE_LOCATION,
-        {
-          id: "gid://shopify/Location/online-2",
-          name: "Atelier",
-          isActive: true,
-          fulfillsOnlineOrders: true,
-          isFulfillmentService: false,
-        },
+        ELIGIBLE_LOCATION_PAGE_2,
       ]),
     ),
     JSON.stringify([
       "gid://shopify/Location/online-1",
+      "gid://shopify/Location/france",
       "gid://shopify/Location/online-2",
     ]),
+  );
+  ctx.assertFalse(
+    "helper no longer excludes on fulfillsOnlineOrders",
+    helperSource.includes("fulfillsOnlineOrders !== true") ||
+      helperSource.includes("fulfillsOnlineOrders === true"),
   );
 
   ctx.scenario("B. Inventory item IDs and activation payload");
@@ -286,7 +294,7 @@ const runSuite = async () => {
     BOX_V2_PRODUCT_INVENTORY_ITEMS_QUERY.includes("inventoryItem"),
   );
   ctx.assertTrue(
-    "locations query asks isActive and fulfillsOnlineOrders",
+    "locations query still reads fulfillsOnlineOrders for diagnostics",
     BOX_V2_ELIGIBLE_LOCATIONS_QUERY.includes("isActive") &&
       BOX_V2_ELIGIBLE_LOCATIONS_QUERY.includes("fulfillsOnlineOrders") &&
       BOX_V2_ELIGIBLE_LOCATIONS_QUERY.includes("isFulfillmentService"),
@@ -336,6 +344,31 @@ const runSuite = async () => {
     "no quantity in activation variables",
     JSON.stringify(firstActivation?.variables ?? {}).includes("quantity") ||
       JSON.stringify(firstActivation?.variables ?? {}).includes("availableQuantity"),
+  );
+
+  ctx.scenario("C2. TEST B — France-like merchant location is activated");
+  const franceMock = createActivationAdmin({
+    locations: [ELIGIBLE_LOCATION, FRANCE_LIKE_LOCATION],
+  });
+  const franceResult = await ensureInventoryItemsActivatedAtEligibleLocations(
+    franceMock.admin,
+    "gid://shopify/Product/v2",
+  );
+  ctx.assertTrue("France-like activation ok", franceResult.ok);
+  const franceActivation = franceMock.calls.find((call) =>
+    call.query.includes("inventoryBulkToggleActivation"),
+  );
+  const franceUpdates = franceActivation?.variables?.inventoryItemUpdates as
+    | { activate?: boolean; locationId?: string }[]
+    | undefined;
+  ctx.assertEqual(
+    "online + France-like locations both activated",
+    JSON.stringify((franceUpdates ?? []).map((update) => update.locationId)),
+    JSON.stringify([ELIGIBLE_LOCATION.id, FRANCE_LIKE_LOCATION.id]),
+  );
+  ctx.assertTrue(
+    "France-like updates remain activate true",
+    (franceUpdates ?? []).every((update) => update.activate === true),
   );
 
   ctx.scenario("D. TEST 2 — tracked false / CONTINUE remain target config");
@@ -494,7 +527,7 @@ const runSuite = async () => {
     0,
   );
 
-  ctx.scenario("H. Pagination — eligible locations from page 1 and page 2");
+  ctx.scenario("H. TEST E — pagination uses merchant locations from page 1 and page 2");
   const page2Cursor = "cursor-locations-page-2";
   const pagedMock = createActivationAdmin({
     locationPages: [
@@ -508,7 +541,7 @@ const runSuite = async () => {
         after: page2Cursor,
         endCursor: "cursor-locations-end",
         hasNextPage: false,
-        nodes: [ELIGIBLE_LOCATION_PAGE_2],
+        nodes: [FRANCE_LIKE_LOCATION],
       },
     ],
   });
@@ -543,9 +576,9 @@ const runSuite = async () => {
     | { activate?: boolean; locationId?: string }[]
     | undefined;
   ctx.assertEqual(
-    "eligible locations from both pages",
+    "eligible merchant locations from both pages including France-like",
     JSON.stringify((pagedUpdates ?? []).map((update) => update.locationId)),
-    JSON.stringify([ELIGIBLE_LOCATION.id, ELIGIBLE_LOCATION_PAGE_2.id]),
+    JSON.stringify([ELIGIBLE_LOCATION.id, FRANCE_LIKE_LOCATION.id]),
   );
   ctx.assertFalse(
     "3PL from page 1 is not activated",

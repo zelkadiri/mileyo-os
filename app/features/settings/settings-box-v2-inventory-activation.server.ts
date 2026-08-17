@@ -1,5 +1,8 @@
 /**
- * Activate Box V2 InventoryItems at eligible Shopify locations.
+ * Activate Box V2 InventoryItems at eligible merchant-managed Shopify locations.
+ *
+ * Eligible = active, merchant-managed (not a third-party fulfillment service).
+ * `fulfillsOnlineOrders` is read for diagnostics only and does not exclude a location.
  *
  * Makes untracked CONTINUE variants storefront-available without
  * enabling tracking or writing artificial quantities.
@@ -121,7 +124,7 @@ const graphqlErrorMessages = (json: GraphqlErrorResponse) =>
     .map((error) => error.message)
     .filter((message): message is string => Boolean(message));
 
-export const isEligibleFulfillmentLocation = (
+export const isEligibleMerchantLocation = (
   location: ShopifyLocationNode,
 ): boolean => {
   const id = location.id?.trim();
@@ -130,10 +133,6 @@ export const isEligibleFulfillmentLocation = (
   }
 
   if (location.isActive !== true) {
-    return false;
-  }
-
-  if (location.fulfillsOnlineOrders !== true) {
     return false;
   }
 
@@ -151,7 +150,7 @@ export const collectEligibleLocationIds = (
   const seen = new Set<string>();
 
   for (const location of locations) {
-    if (!isEligibleFulfillmentLocation(location)) {
+    if (!isEligibleMerchantLocation(location)) {
       continue;
     }
 
