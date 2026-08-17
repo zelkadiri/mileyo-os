@@ -45,6 +45,7 @@ export const BUILDER_STEPS = [
   "livraison",
   "repas",
   "email",
+  "recap",
 ] as const;
 
 export type BuilderStep = (typeof BUILDER_STEPS)[number];
@@ -64,10 +65,10 @@ export const canContinueFromObjective = (
 export const getBuilderStepIndex = (step: BuilderStep): number =>
   BUILDER_STEPS.indexOf(step);
 
-/** 1-based progress label, e.g. "Étape 1 sur 5". */
+/** 1-based progress label, e.g. "Étape 1 sur 6". */
 export const getBuilderStepLabel = (step: BuilderStep): string =>
   `Étape ${getBuilderStepIndex(step) + 1} sur ${BUILDER_STEP_COUNT}`;
 
-/** Progress fill percent for the tunnel bar (25 / 50 / 75 / 100). */
+/** Progress fill percent from step index / step count (rounded). */
 export const getBuilderStepProgressPercent = (step: BuilderStep): number =>
-  ((getBuilderStepIndex(step) + 1) / BUILDER_STEP_COUNT) * 100;
+  Math.round(((getBuilderStepIndex(step) + 1) / BUILDER_STEP_COUNT) * 100);

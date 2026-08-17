@@ -42,6 +42,7 @@ const BUSINESS_SUITES = [
   "19-builder-v2-meal-step.test.ts",
   "20-builder-weekly-delivery-step.test.ts",
   "21-builder-email-step.test.ts",
+  "22-builder-recap-checkout-step.test.ts",
 ];
 
 const LEGACY_SUITES = [

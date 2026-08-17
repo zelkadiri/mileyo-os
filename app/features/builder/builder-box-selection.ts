@@ -1,3 +1,4 @@
+import { FIRST_BOX_LAUNCH_DISCOUNT_EUR } from "../../constants/firstBoxLaunchDiscount";
 import {
   SUBSCRIPTION_OBJECTIVES,
   type SubscriptionObjective,
@@ -76,16 +77,94 @@ export const parseBuilderBoxPriceAmount = (
   return amount;
 };
 
+/** Display-only launch pricing for a Box (never billed / never sent to cart). */
+export type BuilderLaunchPricing = {
+  launchPriceCents: number;
+  launchPricePerMealCents: number;
+  regularPriceCents: number;
+};
+
+/** Parse a Shopify money-like value into integer cents. Invalid → null. */
+export const parseBuilderPriceToCents = (
+  price: string | number | null | undefined,
+): number | null => {
+  if (typeof price === "number") {
+    if (!Number.isFinite(price) || price < 0) {
+      return null;
+    }
+    return Math.round(price * 100);
+  }
+
+  const amount = parseBuilderBoxPriceAmount(price);
+  if (amount === null) {
+    return null;
+  }
+
+  return Math.round(amount * 100);
+};
+
 /**
- * Lowest BuilderBoxOption.price for an objective among checkout-ready boxes.
- * Returns the original price string of the minimum option, or null.
+ * UI-only first-box launch pricing.
+ *
+ * launchPrice = max(0, regular − FIRST_BOX_LAUNCH_DISCOUNT_EUR)
+ * launchPricePerMeal = round(launchPrice / mealCount)
+ *
+ * Does not bill, mutate Shopify, or assert eligibility.
  */
-export const getStartingPriceForObjective = (
+export const getBuilderLaunchPricing = ({
+  mealCount,
+  regularPrice,
+}: {
+  mealCount: number | null | undefined;
+  regularPrice: string | number | null | undefined;
+}): BuilderLaunchPricing | null => {
+  if (
+    typeof mealCount !== "number" ||
+    !Number.isFinite(mealCount) ||
+    mealCount <= 0 ||
+    !Number.isInteger(mealCount)
+  ) {
+    return null;
+  }
+
+  const regularPriceCents = parseBuilderPriceToCents(regularPrice);
+  if (regularPriceCents === null) {
+    return null;
+  }
+
+  const discountCents = Math.round(FIRST_BOX_LAUNCH_DISCOUNT_EUR * 100);
+  const launchPriceCents = Math.max(0, regularPriceCents - discountCents);
+  const launchPricePerMealCents = Math.round(launchPriceCents / mealCount);
+
+  return {
+    launchPriceCents,
+    launchPricePerMealCents,
+    regularPriceCents,
+  };
+};
+
+/** Format integer cents as fr-FR EUR (same currency style as builder client). */
+export const formatCentsAsEuroFr = (cents: number): string => {
+  if (!Number.isFinite(cents)) {
+    return "";
+  }
+
+  return new Intl.NumberFormat("fr-FR", {
+    currency: "EUR",
+    style: "currency",
+  }).format(cents / 100);
+};
+
+/**
+ * Lowest-priced checkout-ready Box for an objective.
+ * Launch + recurring labels must both derive from this same variant.
+ */
+export const getStartingBoxForObjective = (
   boxes: readonly BuilderBoxOption[],
   objective: SubscriptionObjective,
-): string | null => {
+): BuilderBoxOption | null => {
   let minAmount: number | null = null;
-  let minPrice: string | null = null;
+  let minBox: BuilderBoxOption | null = null;
 
   for (const box of boxes) {
     if (box.objective !== objective) {
@@ -99,11 +178,23 @@ export const getStartingPriceForObjective = (
 
     if (minAmount === null || amount < minAmount) {
       minAmount = amount;
-      minPrice = box.price.trim();
+      minBox = box;
     }
   }
 
-  return minPrice;
+  return minBox;
+};
+
+/**
+ * Lowest BuilderBoxOption.price for an objective among checkout-ready boxes.
+ * Returns the original price string of the minimum option, or null.
+ */
+export const getStartingPriceForObjective = (
+  boxes: readonly BuilderBoxOption[],
+  objective: SubscriptionObjective,
+): string | null => {
+  const box = getStartingBoxForObjective(boxes, objective);
+  return box ? box.price.trim() : null;
 };
 
 export const getStartingPricesByObjective = (
@@ -139,6 +230,7 @@ export const formatEuroAmountFr = (price: string): string | null => {
   }).format(amount);
 };
 
+/** Fallback when launch pricing cannot be computed. */
 export const formatObjectiveStartingPriceLabel = (
   price: string,
 ): string | null => {
@@ -147,23 +239,61 @@ export const formatObjectiveStartingPriceLabel = (
     return null;
   }
 
-  return `À partir de ${formatted}/semaine`;
+  return `À partir de ${formatted} / semaine`;
 };
+
+/** Display-only objective card pricing (same reference Box for both lines). */
+export type ObjectiveStartingPriceLabelSet = {
+  launchLine: string | null;
+  recurringLine: string;
+};
+
+export const formatObjectiveLaunchStartingPriceLabel = (
+  launchPriceCents: number,
+): string =>
+  `À partir de ${formatCentsAsEuroFr(launchPriceCents)} la première box*`;
+
+export const formatObjectiveRecurringStartingPriceLabel = (
+  regularPriceCents: number,
+): string =>
+  `Puis à partir de ${formatCentsAsEuroFr(regularPriceCents)} / semaine`;
 
 export const getObjectiveStartingPriceLabels = (
   boxes: readonly BuilderBoxOption[],
-): Partial<Record<SubscriptionObjective, string>> => {
-  const labels: Partial<Record<SubscriptionObjective, string>> = {};
+): Partial<Record<SubscriptionObjective, ObjectiveStartingPriceLabelSet>> => {
+  const labels: Partial<
+    Record<SubscriptionObjective, ObjectiveStartingPriceLabelSet>
+  > = {};
 
   for (const objective of SUBSCRIPTION_OBJECTIVES) {
-    const price = getStartingPriceForObjective(boxes, objective);
-    if (!price) {
+    const box = getStartingBoxForObjective(boxes, objective);
+    if (!box) {
       continue;
     }
 
-    const label = formatObjectiveStartingPriceLabel(price);
-    if (label) {
-      labels[objective] = label;
+    const launch = getBuilderLaunchPricing({
+      mealCount: box.mealCount,
+      regularPrice: box.price,
+    });
+
+    if (launch) {
+      labels[objective] = {
+        launchLine: formatObjectiveLaunchStartingPriceLabel(
+          launch.launchPriceCents,
+        ),
+        recurringLine: formatObjectiveRecurringStartingPriceLabel(
+          launch.regularPriceCents,
+        ),
+      };
+      continue;
+    }
+
+    const fallback = formatObjectiveStartingPriceLabel(box.price);
+    if (fallback) {
+      labels[objective] = {
+        launchLine: null,
+        recurringLine: fallback,
+      };
     }
   }
 

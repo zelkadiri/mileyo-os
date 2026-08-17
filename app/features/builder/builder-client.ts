@@ -1,4 +1,9 @@
+import { FIRST_BOX_LAUNCH_DISCOUNT_EUR } from "../../constants/firstBoxLaunchDiscount";
 import { mealFilterRuntimeScript } from "./builder-filter-runtime";
+import {
+  BUILDER_CART_PREPARE_ERROR,
+  builderCartRuntimeScript,
+} from "./builder-cart";
 import { CAPTURE_CHECKOUT_LEAD_INTENT } from "./builder-email";
 import {
   BUILDER_STEP_COUNT,
@@ -11,6 +16,7 @@ const builderStepLabelsJson = JSON.stringify({
   formule: getBuilderStepLabel("formule"),
   livraison: getBuilderStepLabel("livraison"),
   objectif: getBuilderStepLabel("objectif"),
+  recap: getBuilderStepLabel("recap"),
   repas: getBuilderStepLabel("repas"),
 });
 
@@ -19,6 +25,7 @@ const builderStepProgressJson = JSON.stringify({
   formule: getBuilderStepProgressPercent("formule"),
   livraison: getBuilderStepProgressPercent("livraison"),
   objectif: getBuilderStepProgressPercent("objectif"),
+  recap: getBuilderStepProgressPercent("recap"),
   repas: getBuilderStepProgressPercent("repas"),
 });
 
@@ -32,13 +39,16 @@ export const builderClientScript = `
   var selectedDeliveryWindowKey = null;
   var selectedScheduledDeliveryDate = null;
   var selectedEmail = "";
+  var capturedLeadKey = "";
   var currentStep = "objectif";
-  var isSubmittingCart = false;
+  var isSubmittingLead = false;
+  var isSubmittingCheckout = false;
   var mealsRendered = false;
   var RECOMMENDED_MEAL_COUNT = 12;
   var STEP_COUNT = ${BUILDER_STEP_COUNT};
   var STEP_LABELS = ${builderStepLabelsJson};
   var STEP_PROGRESS = ${builderStepProgressJson};
+  var LAUNCH_DISCOUNT_EUR = ${FIRST_BOX_LAUNCH_DISCOUNT_EUR};
 
   var boxGrid = document.getElementById("box-grid");
   var boxRailViewport = document.getElementById("box-rail-viewport");
@@ -77,7 +87,19 @@ export const builderClientScript = `
   var emailContinue = document.getElementById("email-continue");
   var emailInput = document.getElementById("checkout-email");
   var emailWeeklyPrice = document.getElementById("email-weekly-price");
+  var recapFooter = document.getElementById("recap-footer");
+  var recapContinue = document.getElementById("recap-continue");
+  var recapObjective = document.getElementById("recap-objective");
+  var recapBox = document.getElementById("recap-box");
+  var recapLaunchPrice = document.getElementById("recap-launch-price");
+  var recapPerMeal = document.getElementById("recap-per-meal");
+  var recapWeeklyPrice = document.getElementById("recap-weekly-price");
+  var recapPricing = document.getElementById("recap-pricing");
+  var recapDelivery = document.getElementById("recap-delivery");
+  var recapMeals = document.getElementById("recap-meals");
+  var recapEmail = document.getElementById("recap-email");
   var CAPTURE_LEAD_INTENT = ${JSON.stringify(CAPTURE_CHECKOUT_LEAD_INTENT)};
+  var CART_PREPARE_ERROR = ${JSON.stringify(BUILDER_CART_PREPARE_ERROR)};
   var mealsGaugeCount = document.getElementById("meals-gauge-count");
   var mealsGaugeFill = document.getElementById("meals-gauge-fill");
   var mealsProgressBox = document.getElementById("meals-progress-box");
@@ -88,6 +110,7 @@ export const builderClientScript = `
   var selectedBadgeFilters = [];
 
   ${mealFilterRuntimeScript}
+  ${builderCartRuntimeScript}
 
   function getDeliveryWindowOptions() {
     if (!data.deliveryConfig || !data.deliveryConfig.deliveryWindowOptions) {
@@ -157,7 +180,7 @@ export const builderClientScript = `
   }
 
   function formatEuros(price) {
-    if (!price) return "";
+    if (!price && price !== 0) return "";
     var value = Number(price);
     if (Number.isNaN(value)) return price;
     return new Intl.NumberFormat("fr-FR", {
@@ -166,20 +189,47 @@ export const builderClientScript = `
     }).format(value);
   }
 
-  function formatPricePerMeal(totalPrice, mealCount) {
-    if (!totalPrice || !mealCount) return "";
-    var value = Number(totalPrice) / mealCount;
-    if (Number.isNaN(value)) return "";
-    return new Intl.NumberFormat("fr-FR", {
-      currency: "EUR",
-      style: "currency"
-    }).format(value);
+  function formatEurosFromCents(cents) {
+    if (typeof cents !== "number" || !Number.isFinite(cents)) return "";
+    return formatEuros(cents / 100);
+  }
+
+  function parsePriceToCents(price) {
+    if (typeof price === "number") {
+      if (!Number.isFinite(price) || price < 0) return null;
+      return Math.round(price * 100);
+    }
+    if (price == null) return null;
+    var trimmed = String(price).trim().replace(",", ".");
+    if (!trimmed) return null;
+    var amount = Number.parseFloat(trimmed);
+    if (!Number.isFinite(amount) || amount < 0) return null;
+    return Math.round(amount * 100);
+  }
+
+  /** Display-only launch pricing — never billed, never sent to cart. */
+  function getBuilderLaunchPricing(regularPrice, mealCount) {
+    if (
+      typeof mealCount !== "number" ||
+      !Number.isFinite(mealCount) ||
+      mealCount <= 0 ||
+      !Number.isInteger(mealCount)
+    ) {
+      return null;
+    }
+    var regularPriceCents = parsePriceToCents(regularPrice);
+    if (regularPriceCents == null) return null;
+    var discountCents = Math.round(LAUNCH_DISCOUNT_EUR * 100);
+    var launchPriceCents = Math.max(0, regularPriceCents - discountCents);
+    return {
+      launchPriceCents: launchPriceCents,
+      launchPricePerMealCents: Math.round(launchPriceCents / mealCount),
+      regularPriceCents: regularPriceCents
+    };
   }
 
   function getVariantCartId(variantId) {
-    if (!variantId) return "";
-    var parts = variantId.split("/");
-    return parts[parts.length - 1] || "";
+    return getShopifyNumericId(variantId);
   }
 
   function isBoxAvailable(box) {
@@ -266,14 +316,31 @@ export const builderClientScript = `
       description.textContent = option.description;
       button.appendChild(description);
 
-      var startingLabel =
+      var priceInfo =
         data.objectiveStartingPriceLabels &&
         data.objectiveStartingPriceLabels[option.value];
-      if (startingLabel) {
-        var startingPrice = document.createElement("span");
-        startingPrice.className = "objective-card-starting-price";
-        startingPrice.textContent = startingLabel;
-        button.appendChild(startingPrice);
+      if (priceInfo) {
+        var pricingBlock = document.createElement("div");
+        pricingBlock.className = "objective-card-pricing";
+
+        if (priceInfo.launchLine) {
+          var launchPrice = document.createElement("span");
+          launchPrice.className = "objective-card-launch-price";
+          launchPrice.textContent = priceInfo.launchLine;
+          pricingBlock.appendChild(launchPrice);
+
+          var recurringPrice = document.createElement("span");
+          recurringPrice.className = "objective-card-recurring-price";
+          recurringPrice.textContent = priceInfo.recurringLine;
+          pricingBlock.appendChild(recurringPrice);
+        } else if (priceInfo.recurringLine) {
+          var startingPrice = document.createElement("span");
+          startingPrice.className = "objective-card-starting-price";
+          startingPrice.textContent = priceInfo.recurringLine;
+          pricingBlock.appendChild(startingPrice);
+        }
+
+        button.appendChild(pricingBlock);
       }
 
       if (isSelected) {
@@ -443,11 +510,49 @@ export const builderClientScript = `
     });
   }
 
+  function currentLeadKey() {
+    if (
+      !selectedEmail ||
+      !selectedObjective ||
+      !selectedBox ||
+      !selectedBox.variantId ||
+      selectedBox.mealCount == null ||
+      !selectedScheduledDeliveryDate
+    ) {
+      return "";
+    }
+    return [
+      String(selectedEmail).trim(),
+      selectedObjective,
+      selectedBox.variantId,
+      selectedBox.mealCount,
+      selectedScheduledDeliveryDate
+    ].join("|");
+  }
+
+  function isCapturedLeadFresh() {
+    var key = currentLeadKey();
+    return Boolean(key) && capturedLeadKey === key;
+  }
+
+  function canEnterEmailStep() {
+    return (
+      isValidObjective(selectedObjective) &&
+      Boolean(selectedBox && selectedBox.sellingPlanId) &&
+      isSelectedDeliveryWindowValid() &&
+      isMealsSelectionComplete()
+    );
+  }
+
+  function canEnterRecapStep() {
+    return canEnterEmailStep() && isBuilderEmailValid(selectedEmail) && isCapturedLeadFresh();
+  }
+
   function updateEmailCta() {
     if (!emailContinue) return;
-    if (isSubmittingCart) {
+    if (isSubmittingLead) {
       emailContinue.disabled = true;
-      emailContinue.textContent = "Ajout en cours…";
+      emailContinue.textContent = "Un instant…";
       return;
     }
     if (!isBuilderEmailValid(selectedEmail)) {
@@ -456,7 +561,18 @@ export const builderClientScript = `
       return;
     }
     emailContinue.disabled = false;
-    emailContinue.textContent = "Ajouter ma box au panier";
+    emailContinue.textContent = "Continuer";
+  }
+
+  function updateRecapCta() {
+    if (!recapContinue) return;
+    if (isSubmittingCheckout) {
+      recapContinue.disabled = true;
+      recapContinue.textContent = "Préparation du paiement…";
+      return;
+    }
+    recapContinue.disabled = !canEnterRecapStep();
+    recapContinue.textContent = "Passer au paiement";
   }
 
   function updateEmailWeeklyPrice() {
@@ -474,23 +590,33 @@ export const builderClientScript = `
     var isDelivery = step === "livraison";
     var isMeals = step === "repas";
     var isEmail = step === "email";
+    var isRecap = step === "recap";
     currentStep = step;
     document.body.classList.toggle("is-step-objective", isObjective);
     document.body.classList.toggle("is-step-formule", isFormula);
     document.body.classList.toggle("is-step-meals", isMeals);
     document.body.classList.toggle("is-step-livraison", isDelivery);
     document.body.classList.toggle("is-step-email", isEmail);
+    document.body.classList.toggle("is-step-recap", isRecap);
 
     if (tunnelStepLabel) {
       tunnelStepLabel.textContent = STEP_LABELS[step] || ("Étape 1 sur " + STEP_COUNT);
     }
     if (tunnelProgressFill) {
-      tunnelProgressFill.classList.remove("is-step-1", "is-step-2", "is-step-3", "is-step-4", "is-step-5");
+      tunnelProgressFill.classList.remove(
+        "is-step-1",
+        "is-step-2",
+        "is-step-3",
+        "is-step-4",
+        "is-step-5",
+        "is-step-6"
+      );
       if (isObjective) tunnelProgressFill.classList.add("is-step-1");
       else if (isFormula) tunnelProgressFill.classList.add("is-step-2");
       else if (isDelivery) tunnelProgressFill.classList.add("is-step-3");
       else if (isMeals) tunnelProgressFill.classList.add("is-step-4");
       else if (isEmail) tunnelProgressFill.classList.add("is-step-5");
+      else if (isRecap) tunnelProgressFill.classList.add("is-step-6");
       var percent = STEP_PROGRESS[step];
       if (typeof percent === "number") {
         tunnelProgressFill.style.width = percent + "%";
@@ -501,6 +627,7 @@ export const builderClientScript = `
       tunnelBack.classList.toggle("is-delivery-step", isDelivery);
       tunnelBack.classList.toggle("is-meals-step", isMeals);
       tunnelBack.classList.toggle("is-email-step", isEmail);
+      tunnelBack.classList.toggle("is-recap-step", isRecap);
     }
     if (objectiveFooter) {
       objectiveFooter.classList.toggle("hidden", !isObjective);
@@ -517,6 +644,9 @@ export const builderClientScript = `
     if (emailFooter) {
       emailFooter.classList.toggle("hidden", !isEmail);
     }
+    if (recapFooter) {
+      recapFooter.classList.toggle("hidden", !isRecap);
+    }
     if (mealsLead && selectedBox && requiredMeals) {
       mealsLead.textContent = "Pour votre box de " + requiredMeals + " repas";
     }
@@ -525,12 +655,102 @@ export const builderClientScript = `
     }
   }
 
+  function findObjectiveLabel(value) {
+    if (!value || !data.objectives) return "";
+    var match = data.objectives.find(function (option) {
+      return option.value === value;
+    });
+    return match ? match.label : "";
+  }
+
+  function formatRecapMealLabel(title, quantity) {
+    return quantity > 1 ? title + " ×" + quantity : title;
+  }
+
+  function renderRecap() {
+    if (recapObjective) {
+      recapObjective.textContent = findObjectiveLabel(selectedObjective);
+    }
+    if (recapBox) {
+      recapBox.textContent = selectedBox ? selectedBox.mealCount + " repas" : "";
+    }
+    if (recapPricing) {
+      var launchPricing =
+        selectedBox && selectedBox.price
+          ? getBuilderLaunchPricing(selectedBox.price, selectedBox.mealCount)
+          : null;
+      if (launchPricing) {
+        recapPricing.classList.remove("is-regular-only");
+        if (recapLaunchPrice) {
+          recapLaunchPrice.textContent =
+            formatEurosFromCents(launchPricing.launchPriceCents) + " la première box*";
+        }
+        if (recapPerMeal) {
+          recapPerMeal.textContent =
+            formatEurosFromCents(launchPricing.launchPricePerMealCents) + " / repas";
+        }
+        if (recapWeeklyPrice) {
+          recapWeeklyPrice.textContent =
+            "Puis " + formatEurosFromCents(launchPricing.regularPriceCents) + " / semaine";
+        }
+      } else {
+        recapPricing.classList.add("is-regular-only");
+        if (recapLaunchPrice) {
+          recapLaunchPrice.textContent = "";
+        }
+        if (recapPerMeal) {
+          recapPerMeal.textContent = "";
+        }
+        if (recapWeeklyPrice) {
+          recapWeeklyPrice.textContent =
+            selectedBox && selectedBox.price
+              ? formatEuros(selectedBox.price) + " / semaine"
+              : "";
+        }
+      }
+    }
+    if (recapDelivery) {
+      var selectedWindow = findDeliveryWindowOption(selectedDeliveryWindowKey);
+      recapDelivery.textContent = selectedWindow ? selectedWindow.rangeLabel : "";
+    }
+    if (recapMeals) {
+      recapMeals.innerHTML = "";
+      (data.meals || []).forEach(function (meal) {
+        if (selectedObjective && meal.objective && meal.objective !== selectedObjective) {
+          return;
+        }
+        var quantity = selectedMeals[meal.variantId] || 0;
+        if (quantity <= 0) return;
+        var item = document.createElement("li");
+        item.textContent = formatRecapMealLabel(meal.title, quantity);
+        recapMeals.appendChild(item);
+      });
+    }
+    if (recapEmail) {
+      recapEmail.textContent = selectedEmail;
+    }
+    updateRecapCta();
+  }
+
   function showStep(step, options) {
     var pushHistory = !options || options.pushHistory !== false;
     var replaceHistory = options && options.replaceHistory;
 
     if (!isValidObjective(selectedObjective) && step !== "objectif") {
       step = "objectif";
+    }
+    if (step === "recap") {
+      if (!isValidObjective(selectedObjective)) {
+        step = "objectif";
+      } else if (!selectedBox || !selectedBox.sellingPlanId) {
+        step = "formule";
+      } else if (!isSelectedDeliveryWindowValid()) {
+        step = "livraison";
+      } else if (!isMealsSelectionComplete()) {
+        step = "repas";
+      } else if (!isBuilderEmailValid(selectedEmail) || !isCapturedLeadFresh()) {
+        step = "email";
+      }
     }
     if (step === "email") {
       if (!isValidObjective(selectedObjective)) {
@@ -552,7 +772,7 @@ export const builderClientScript = `
     if (step === "livraison" && !selectedBox) {
       step = "formule";
     }
-    if ((step === "formule" || step === "livraison" || step === "repas" || step === "email") && !isValidObjective(selectedObjective)) {
+    if ((step === "formule" || step === "livraison" || step === "repas" || step === "email" || step === "recap") && !isValidObjective(selectedObjective)) {
       step = "objectif";
     }
 
@@ -567,6 +787,10 @@ export const builderClientScript = `
     var stepEmail = document.getElementById("step-email");
     if (stepEmail) {
       stepEmail.classList.toggle("hidden", step !== "email");
+    }
+    var stepRecap = document.getElementById("step-recap");
+    if (stepRecap) {
+      stepRecap.classList.toggle("hidden", step !== "recap");
     }
 
     if (step === "objectif") {
@@ -590,6 +814,8 @@ export const builderClientScript = `
       if (emailInput) {
         emailInput.value = selectedEmail;
       }
+    } else if (step === "recap") {
+      renderRecap();
     } else {
       renderMealFilters();
       if (!mealsRendered) {
@@ -610,6 +836,10 @@ export const builderClientScript = `
       history.back();
       return;
     }
+    if (currentStep === "recap") {
+      showStep("email", { pushHistory: false });
+      return;
+    }
     if (currentStep === "email") {
       showStep("repas", { pushHistory: false });
       return;
@@ -628,7 +858,7 @@ export const builderClientScript = `
   }
 
   function handleTunnelBack() {
-    if (currentStep === "email" || currentStep === "repas" || currentStep === "livraison" || currentStep === "formule") {
+    if (currentStep === "recap" || currentStep === "email" || currentStep === "repas" || currentStep === "livraison" || currentStep === "formule") {
       goToPreviousStep();
       return;
     }
@@ -641,7 +871,11 @@ export const builderClientScript = `
       showStep("objectif", { pushHistory: false });
       return;
     }
-    if (hash === "email" && selectedBox && isSelectedDeliveryWindowValid() && isMealsSelectionComplete()) {
+    if (hash === "recap" && canEnterRecapStep()) {
+      showStep("recap", { pushHistory: false });
+      return;
+    }
+    if (hash === "email" && canEnterEmailStep()) {
       showStep("email", { pushHistory: false });
       return;
     }
@@ -709,19 +943,34 @@ export const builderClientScript = `
   function appendSubscriptionPricing(button, box) {
     if (!box.price) return;
 
-    var priceRow = document.createElement("div");
-    priceRow.className = "box-price-row";
+    var launch = getBuilderLaunchPricing(box.price, box.mealCount);
+    if (launch) {
+      var promo = document.createElement("p");
+      promo.className = "box-promo-price";
+      var promoStrong = document.createElement("strong");
+      promoStrong.textContent = formatEurosFromCents(launch.launchPriceCents);
+      promo.appendChild(promoStrong);
+      promo.appendChild(document.createTextNode(" la première box*"));
+      button.appendChild(promo);
 
-    var perMeal = document.createElement("span");
-    perMeal.className = "box-price-per-meal";
-    perMeal.textContent = formatPricePerMeal(box.price, box.mealCount) + " / repas";
-    priceRow.appendChild(perMeal);
-    button.appendChild(priceRow);
+      var perMeal = document.createElement("p");
+      perMeal.className = "box-price-per-meal";
+      perMeal.textContent =
+        formatEurosFromCents(launch.launchPricePerMealCents) + " / repas";
+      button.appendChild(perMeal);
 
-    var weekly = document.createElement("p");
-    weekly.className = "box-weekly-price";
-    weekly.textContent = formatEuros(box.price) + " / semaine";
-    button.appendChild(weekly);
+      var weekly = document.createElement("p");
+      weekly.className = "box-weekly-price";
+      weekly.textContent =
+        "Puis " + formatEurosFromCents(launch.regularPriceCents) + " / semaine";
+      button.appendChild(weekly);
+      return;
+    }
+
+    var weeklyOnly = document.createElement("p");
+    weeklyOnly.className = "box-weekly-price";
+    weeklyOnly.textContent = formatEuros(box.price) + " / semaine";
+    button.appendChild(weeklyOnly);
   }
 
   function renderBoxes() {
@@ -764,7 +1013,7 @@ export const builderClientScript = `
       if (isAvailable) {
         var mealCount = document.createElement("span");
         mealCount.className = "box-meal-count";
-        mealCount.textContent = box.mealCount + " repas / semaine";
+        mealCount.textContent = box.mealCount + " repas";
         button.appendChild(mealCount);
         appendSubscriptionPricing(button, box);
       } else {
@@ -1042,8 +1291,59 @@ export const builderClientScript = `
       })
     }).then(function (response) {
       if (!response.ok) throw new Error("Add to cart failed");
-      window.location.href = "/cart";
+      window.location.href = "/checkout";
     });
+  }
+
+  function fetchStorefrontCart() {
+    return fetch("/cart.js", {
+      headers: { Accept: "application/json" }
+    }).then(function (response) {
+      if (!response.ok) throw new Error("cart_inspect_failed");
+      return response.json();
+    });
+  }
+
+  function removeCartLineByKey(key) {
+    return fetch("/cart/change.js", {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        id: key,
+        quantity: 0
+      })
+    }).then(function (response) {
+      if (!response.ok) throw new Error("cart_remove_failed");
+    });
+  }
+
+  function removeExistingMileyoBoxes(cart) {
+    var items = cart && cart.items ? cart.items : [];
+    var catalogNumericIds = toCatalogNumericIds(data.boxes);
+    var keys = collectMileyoBuilderBoxLineKeys(items, catalogNumericIds);
+    var chain = Promise.resolve();
+    keys.forEach(function (key) {
+      chain = chain.then(function () {
+        return removeCartLineByKey(key);
+      });
+    });
+    return chain;
+  }
+
+  function replaceSelectedBoxInCart() {
+    return fetchStorefrontCart()
+      .catch(function () {
+        throw new Error("cart_inspect_failed");
+      })
+      .then(function (cart) {
+        return removeExistingMileyoBoxes(cart);
+      })
+      .then(function () {
+        return addSelectedBoxToCart();
+      });
   }
 
   function captureCheckoutLead() {
@@ -1072,8 +1372,36 @@ export const builderClientScript = `
     });
   }
 
+  function redirectInvalidCheckoutState() {
+    if (!isValidObjective(selectedObjective)) {
+      showStep("objectif");
+      return true;
+    }
+    if (!selectedBox || !selectedBox.variantId || !selectedBox.sellingPlanId) {
+      setError("Choisissez votre box pour continuer.");
+      showStep("formule");
+      return true;
+    }
+    if (!isSelectedDeliveryWindowValid()) {
+      setError("Choisissez une fenêtre de livraison pour continuer.");
+      showStep("livraison");
+      return true;
+    }
+    if (!isMealsSelectionComplete()) {
+      setError("Choisissez vos repas avant de continuer.");
+      showStep("repas");
+      return true;
+    }
+    if (!isBuilderEmailValid(selectedEmail) || !isCapturedLeadFresh()) {
+      setError("Entrez une adresse e-mail valide.");
+      showStep("email");
+      return true;
+    }
+    return false;
+  }
+
   function handleEmailSubmit() {
-    if (isSubmittingCart) return;
+    if (isSubmittingLead || isSubmittingCheckout) return;
 
     selectedEmail = emailInput ? String(emailInput.value || "").trim() : String(selectedEmail || "").trim();
     if (emailInput) {
@@ -1087,24 +1415,53 @@ export const builderClientScript = `
     }
 
     if (!isMealsSelectionComplete()) {
-      setError("Choisissez vos repas avant d'ajouter votre box au panier.");
+      setError("Choisissez vos repas avant de continuer.");
       showStep("repas");
       return;
     }
 
-    isSubmittingCart = true;
+    if (!isSelectedDeliveryWindowValid()) {
+      setError("Choisissez une fenêtre de livraison avant de continuer.");
+      showStep("livraison");
+      return;
+    }
+
+    isSubmittingLead = true;
     updateEmailCta();
     setError("");
 
     captureCheckoutLead()
       .then(function () {
-        return addSelectedBoxToCart();
-      })
-      .catch(function (error) {
-        isSubmittingCart = false;
+        capturedLeadKey = currentLeadKey();
+        isSubmittingLead = false;
         updateEmailCta();
-        if (error && error.message === "lead_capture_failed") {
-          setError("Impossible de continuer pour le moment. Réessayez.");
+        showStep("recap");
+      })
+      .catch(function () {
+        isSubmittingLead = false;
+        updateEmailCta();
+        setError("Impossible de continuer pour le moment. Réessayez.");
+      });
+  }
+
+  function handleRecapSubmit() {
+    if (isSubmittingCheckout || isSubmittingLead) return;
+
+    if (redirectInvalidCheckoutState()) {
+      updateRecapCta();
+      return;
+    }
+
+    isSubmittingCheckout = true;
+    updateRecapCta();
+    setError("");
+
+    replaceSelectedBoxInCart()
+      .catch(function (error) {
+        isSubmittingCheckout = false;
+        updateRecapCta();
+        if (error && (error.message === "cart_inspect_failed" || error.message === "cart_remove_failed")) {
+          setError(CART_PREPARE_ERROR);
           return;
         }
         if (!errorMessage.textContent) {
@@ -1115,6 +1472,10 @@ export const builderClientScript = `
 
   if (emailContinue) {
     emailContinue.addEventListener("click", handleEmailSubmit);
+  }
+
+  if (recapContinue) {
+    recapContinue.addEventListener("click", handleRecapSubmit);
   }
 
   if (emailInput) {
@@ -1207,7 +1568,9 @@ export const builderClientScript = `
 
   if (!isValidObjective(selectedObjective)) {
     showStep("objectif", { replaceHistory: true });
-  } else if (location.hash === "#email" && selectedBox && isSelectedDeliveryWindowValid() && isMealsSelectionComplete()) {
+  } else if (location.hash === "#recap" && canEnterRecapStep()) {
+    showStep("recap", { replaceHistory: true });
+  } else if (location.hash === "#email" && canEnterEmailStep()) {
     showStep("email", { replaceHistory: true });
   } else if (location.hash === "#repas" && selectedBox && isSelectedDeliveryWindowValid()) {
     showStep("repas", { replaceHistory: true });

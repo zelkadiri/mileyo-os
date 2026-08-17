@@ -16,13 +16,16 @@ import {
   createBuilderBoxSelectionReset,
   filterBuilderBoxesByObjective,
   findBuilderBoxByVariantId,
+  formatCentsAsEuroFr,
   formatEuroAmountFr,
   formatObjectiveStartingPriceLabel,
+  getBuilderLaunchPricing,
   getObjectiveStartingPriceLabels,
   getStartingPriceForObjective,
   isBuilderBoxCtaEnabled,
   shouldResetBoxOnObjectiveChange,
 } from "../../app/features/builder/builder-box-selection";
+import { FIRST_BOX_LAUNCH_DISCOUNT_EUR } from "../../app/constants/firstBoxLaunchDiscount";
 import { BUILDER_STEPS } from "../../app/features/builder/builder-objective-options";
 import type { BuilderBoxOption } from "../../app/features/builder/builder-types";
 import {
@@ -607,11 +610,40 @@ const runSuite = () => {
     ),
   );
 
-  ctx.scenario("I. Price + promo");
+  ctx.scenario("I. Price + launch promo display");
   ctx.assertTrue(
     "client prices from box.price",
     clientSource.includes("box.price"),
   );
+  ctx.assertTrue(
+    "client uses getBuilderLaunchPricing for display",
+    clientSource.includes("function getBuilderLaunchPricing"),
+  );
+  ctx.assertTrue(
+    "box cards show première box*",
+    clientSource.includes(" la première box*"),
+  );
+  ctx.assertTrue(
+    "box cards show Puis weekly",
+    clientSource.includes('"Puis "') &&
+      clientSource.includes('" / semaine"'),
+  );
+  ctx.assertTrue(
+    "box cards show launch per-meal",
+    clientSource.includes("launchPricePerMealCents") &&
+      clientSource.includes('" / repas"'),
+  );
+  ctx.assertTrue(
+    "eligibility note under box list",
+    renderSource.includes("box-launch-eligibility-note") &&
+      renderSource.includes("nouveaux clients éligibles"),
+  );
+  ctx.assertTrue(
+    "eligibility note uses FIRST_BOX_LAUNCH_DISCOUNT_EUR",
+    renderSource.includes("${FIRST_BOX_LAUNCH_DISCOUNT_EUR} €") ||
+      renderSource.includes(`${FIRST_BOX_LAUNCH_DISCOUNT_EUR} €`),
+  );
+  ctx.assertEqual("discount constant is 20", FIRST_BOX_LAUNCH_DISCOUNT_EUR, 20);
   ctx.assertFalse(
     "no FIRST_WEEK_DISCOUNT_EUR",
     clientSource.includes("FIRST_WEEK_DISCOUNT_EUR"),
@@ -631,15 +663,106 @@ const runSuite = () => {
   );
   ctx.assertFalse(
     "no première semaine promo copy",
-    renderSource.includes("1ʳᵉ box") ||
-      clientSource.includes("la 1ère semaine"),
+    clientSource.includes("la 1ère semaine"),
   );
+
+  {
+    const sample8 = getBuilderLaunchPricing({
+      mealCount: 8,
+      regularPrice: "76.11",
+    });
+    ctx.assertTrue("sample 8 pricing exists", Boolean(sample8));
+    ctx.assertEqual("sample 8 regular cents", sample8?.regularPriceCents, 7611);
+    ctx.assertEqual("sample 8 launch cents", sample8?.launchPriceCents, 5611);
+    ctx.assertEqual(
+      "sample 8 per-meal cents",
+      sample8?.launchPricePerMealCents,
+      701,
+    );
+    ctx.assertEqual(
+      "sample 8 launch formatted",
+      formatCentsAsEuroFr(sample8!.launchPriceCents),
+      "56,11\u00a0€",
+    );
+    ctx.assertEqual(
+      "sample 8 per-meal formatted",
+      formatCentsAsEuroFr(sample8!.launchPricePerMealCents),
+      "7,01\u00a0€",
+    );
+
+    const sample10 = getBuilderLaunchPricing({
+      mealCount: 10,
+      regularPrice: "96.22",
+    });
+    ctx.assertEqual("sample 10 launch", sample10?.launchPriceCents, 7622);
+    ctx.assertEqual(
+      "sample 10 per meal",
+      sample10?.launchPricePerMealCents,
+      762,
+    );
+
+    const sample12 = getBuilderLaunchPricing({
+      mealCount: 12,
+      regularPrice: "125.22",
+    });
+    ctx.assertEqual("sample 12 launch", sample12?.launchPriceCents, 10522);
+    ctx.assertEqual(
+      "sample 12 per meal",
+      sample12?.launchPricePerMealCents,
+      877,
+    );
+
+    const sample24 = getBuilderLaunchPricing({
+      mealCount: 24,
+      regularPrice: "200.33",
+    });
+    ctx.assertEqual("sample 24 launch", sample24?.launchPriceCents, 18033);
+    ctx.assertEqual(
+      "sample 24 per meal",
+      sample24?.launchPricePerMealCents,
+      751,
+    );
+
+    const exact20 = getBuilderLaunchPricing({
+      mealCount: 8,
+      regularPrice: "20.00",
+    });
+    ctx.assertEqual("exact 20 → launch 0", exact20?.launchPriceCents, 0);
+    ctx.assertEqual("exact 20 → per meal 0", exact20?.launchPricePerMealCents, 0);
+
+    const under20 = getBuilderLaunchPricing({
+      mealCount: 8,
+      regularPrice: "15.50",
+    });
+    ctx.assertEqual("under 20 → launch 0", under20?.launchPriceCents, 0);
+
+    ctx.assertNull(
+      "invalid price → null",
+      getBuilderLaunchPricing({ mealCount: 8, regularPrice: "abc" }),
+    );
+    ctx.assertNull(
+      "mealCount 0 → null",
+      getBuilderLaunchPricing({ mealCount: 0, regularPrice: "76.11" }),
+    );
+    ctx.assertNull(
+      "mealCount negative → null",
+      getBuilderLaunchPricing({ mealCount: -1, regularPrice: "76.11" }),
+    );
+    ctx.assertNull(
+      "mealCount NaN → null",
+      getBuilderLaunchPricing({ mealCount: Number.NaN, regularPrice: "76.11" }),
+    );
+    ctx.assertNull(
+      "mealCount non-integer → null",
+      getBuilderLaunchPricing({ mealCount: 8.5, regularPrice: "76.11" }),
+    );
+  }
 
   ctx.scenario("J. Copy Box / step id formule + loader");
   ctx.assertEqual(
-    "internal steps include email after repas",
+    "internal steps include email then recap after repas",
     BUILDER_STEPS.join("→"),
-    "objectif→formule→livraison→repas→email",
+    "objectif→formule→livraison→repas→email→recap",
   );
   ctx.assertTrue(
     "render copy Choisissez votre box",
@@ -686,7 +809,7 @@ const runSuite = () => {
     BOX_V2_CATALOG_PRODUCT_BY_HANDLE_QUERY.includes("variants(first: 100)"),
   );
 
-  ctx.scenario("K. Objective starting price — À partir de X €/semaine");
+  ctx.scenario("K. Objective starting price — launch primary + recurring secondary");
   const pricedBoxes: BuilderBoxOption[] = [
     {
       productId: PRODUCT_ID,
@@ -825,14 +948,14 @@ const runSuite = () => {
     ),
   );
 
-  const weightLossLabel = formatObjectiveStartingPriceLabel("76.11");
+  const weightLossFallback = formatObjectiveStartingPriceLabel("76.11");
   ctx.assertTrue(
-    "H. label contains À partir de",
-    Boolean(weightLossLabel?.includes("À partir de")),
+    "H. fallback label contains À partir de",
+    Boolean(weightLossFallback?.includes("À partir de")),
   );
   ctx.assertTrue(
-    "H. label contains /semaine",
-    Boolean(weightLossLabel?.includes("/semaine")),
+    "H. fallback label contains / semaine",
+    Boolean(weightLossFallback?.includes("/ semaine")),
   );
   ctx.assertEqual(
     "formatter 76.11 → 76,11 €",
@@ -852,19 +975,34 @@ const runSuite = () => {
 
   const labels = getObjectiveStartingPriceLabels(pricedBoxes);
   ctx.assertEqual(
-    "D. labels derived from BuilderBoxOption.price mins",
-    labels[SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS],
-    formatObjectiveStartingPriceLabel("76.11"),
+    "D. weight_loss launch from shared helper",
+    labels[SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS]?.launchLine,
+    "À partir de 56,11\u00a0€ la première box*",
   );
   ctx.assertEqual(
-    "labels balanced",
-    labels[SUBSCRIPTION_OBJECTIVE.BALANCED],
-    formatObjectiveStartingPriceLabel("76.22"),
+    "D. weight_loss recurring from same box",
+    labels[SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS]?.recurringLine,
+    "Puis à partir de 76,11\u00a0€ / semaine",
   );
   ctx.assertEqual(
-    "labels bulk",
-    labels[SUBSCRIPTION_OBJECTIVE.BULK],
-    formatObjectiveStartingPriceLabel("76.33"),
+    "labels balanced launch",
+    labels[SUBSCRIPTION_OBJECTIVE.BALANCED]?.launchLine,
+    "À partir de 56,22\u00a0€ la première box*",
+  );
+  ctx.assertEqual(
+    "labels balanced recurring",
+    labels[SUBSCRIPTION_OBJECTIVE.BALANCED]?.recurringLine,
+    "Puis à partir de 76,22\u00a0€ / semaine",
+  );
+  ctx.assertEqual(
+    "labels bulk launch",
+    labels[SUBSCRIPTION_OBJECTIVE.BULK]?.launchLine,
+    "À partir de 56,33\u00a0€ la première box*",
+  );
+  ctx.assertEqual(
+    "labels bulk recurring",
+    labels[SUBSCRIPTION_OBJECTIVE.BULK]?.recurringLine,
+    "Puis à partir de 76,33\u00a0€ / semaine",
   );
   ctx.assertEqual(
     "empty boxes → no labels",
@@ -881,12 +1019,22 @@ const runSuite = () => {
     renderSource.includes("objectiveStartingPriceLabels"),
   );
   ctx.assertTrue(
-    "client renders objective-card-starting-price",
-    clientSource.includes("objective-card-starting-price"),
+    "client renders objective launch price",
+    clientSource.includes("objective-card-launch-price"),
   );
   ctx.assertTrue(
-    "styles include starting-price class",
-    stylesSource.includes("objective-card-starting-price"),
+    "client renders objective recurring price",
+    clientSource.includes("objective-card-recurring-price"),
+  );
+  ctx.assertTrue(
+    "styles include launch/recurring objective classes",
+    stylesSource.includes("objective-card-launch-price") &&
+      stylesSource.includes("objective-card-recurring-price"),
+  );
+  ctx.assertTrue(
+    "objective eligibility note present",
+    renderSource.includes("objective-launch-eligibility-note") &&
+      renderSource.includes("nouveaux clients éligibles"),
   );
   ctx.assertFalse(
     "I. no hardcoded 76.11 in render",
@@ -911,10 +1059,43 @@ const runSuite = () => {
     clientSource.includes("FIRST_WEEK_DISCOUNT_EUR") ||
       selectionSource.includes("FIRST_WEEK_DISCOUNT"),
   );
+  ctx.assertEqual(
+    "J. fallback regular label when launch unavailable",
+    formatObjectiveStartingPriceLabel("76.11"),
+    "À partir de 76,11\u00a0€ / semaine",
+  );
+  ctx.assertTrue(
+    "J. launch helper lives in selection module",
+    selectionSource.includes("export const getBuilderLaunchPricing"),
+  );
+  ctx.assertTrue(
+    "J. objective labels use getBuilderLaunchPricing on same starting box",
+    selectionSource.includes("getStartingBoxForObjective") &&
+      /getObjectiveStartingPriceLabels[\s\S]*?getBuilderLaunchPricing/.test(
+        selectionSource,
+      ),
+  );
+  const startingPriceFn =
+    selectionSource.match(
+      /export const getStartingPriceForObjective = [\s\S]*?\n\};/,
+    )?.[0] ?? "";
+  ctx.assertTrue(
+    "J. getStartingPriceForObjective body found",
+    startingPriceFn.includes("box.price.trim()"),
+  );
   ctx.assertFalse(
-    "J. no -20 promo in starting-price path",
-    selectionSource.includes("20 €") ||
-      selectionSource.includes("première semaine"),
+    "J. getStartingPriceForObjective itself does not subtract discount",
+    /getBuilderLaunchPricing|FIRST_BOX_LAUNCH_DISCOUNT/.test(startingPriceFn),
+  );
+  const addToCartFn =
+    clientSource.match(/function addSelectedBoxToCart[\s\S]*?\n {2}function /)?.[0] ??
+    "";
+  ctx.assertTrue("addSelectedBoxToCart found", addToCartFn.includes("cart/add.js"));
+  ctx.assertFalse(
+    "J. cart add does not send launchPrice",
+    /launchPrice|launchPricePerMeal|discountCents|LAUNCH_DISCOUNT/.test(
+      addToCartFn,
+    ),
   );
 
   return finishSuite("17-builder-v2-box-step", ctx);

@@ -22,6 +22,7 @@ export const builderStyles = `
   --objective-step-max-width: 880px;
   --delivery-step-max-width: 720px;
   --email-step-max-width: 560px;
+  --recap-step-max-width: 600px;
   --meals-step-max-width: 1440px;
   --meals-step-gutter: 16px;
   --box-rail-gap: 12px;
@@ -114,7 +115,7 @@ body {
   display: none;
 }
 
-.tunnel-back:not(.is-formula-step):not(.is-delivery-step):not(.is-meals-step):not(.is-email-step) .tunnel-back-text--objective {
+.tunnel-back:not(.is-formula-step):not(.is-delivery-step):not(.is-meals-step):not(.is-email-step):not(.is-recap-step) .tunnel-back-text--objective {
   display: inline;
 }
 
@@ -131,6 +132,10 @@ body {
 }
 
 .tunnel-back.is-email-step .tunnel-back-text--email {
+  display: inline;
+}
+
+.tunnel-back.is-recap-step .tunnel-back-text--recap {
   display: inline;
 }
 
@@ -184,26 +189,30 @@ body {
   border-radius: inherit;
   height: 100%;
   transition: width 0.28s ease;
-  width: 20%;
+  width: 17%;
 }
 
 .tunnel-progress-fill.is-step-1 {
-  width: 20%;
+  width: 17%;
 }
 
 .tunnel-progress-fill.is-step-2 {
-  width: 40%;
+  width: 33%;
 }
 
 .tunnel-progress-fill.is-step-3 {
-  width: 60%;
+  width: 50%;
 }
 
 .tunnel-progress-fill.is-step-4 {
-  width: 80%;
+  width: 67%;
 }
 
 .tunnel-progress-fill.is-step-5 {
+  width: 83%;
+}
+
+.tunnel-progress-fill.is-step-6 {
   width: 100%;
 }
 
@@ -237,6 +246,12 @@ body {
   width: 100%;
 }
 
+.builder-step--recap {
+  margin: 0 auto;
+  max-width: var(--recap-step-max-width);
+  width: 100%;
+}
+
 .builder-step--meals {
   margin: 0 auto;
   max-width: none;
@@ -262,26 +277,43 @@ body {
   padding-bottom: calc(var(--tunnel-footer-height) + 16px);
 }
 
+.tunnel-body.is-step-recap:not(.is-step-meals):not(.is-step-livraison) .builder-shell {
+  max-width: calc(var(--recap-step-max-width) + 80px);
+  padding-bottom: calc(
+    var(--tunnel-footer-height) + env(safe-area-inset-bottom, 0px) + 40px
+  );
+}
+
 .tunnel-body.is-step-meals #objective-footer,
 .tunnel-body.is-step-meals #formula-footer,
 .tunnel-body.is-step-meals #delivery-footer,
 .tunnel-body.is-step-meals #email-footer,
+.tunnel-body.is-step-meals #recap-footer,
 .tunnel-body.is-step-livraison #objective-footer,
 .tunnel-body.is-step-livraison #formula-footer,
 .tunnel-body.is-step-livraison #meals-gauge-footer,
 .tunnel-body.is-step-livraison #email-footer,
+.tunnel-body.is-step-livraison #recap-footer,
 .tunnel-body.is-step-formule #objective-footer,
 .tunnel-body.is-step-formule #delivery-footer,
 .tunnel-body.is-step-formule #meals-gauge-footer,
 .tunnel-body.is-step-formule #email-footer,
+.tunnel-body.is-step-formule #recap-footer,
 .tunnel-body.is-step-objective #formula-footer,
 .tunnel-body.is-step-objective #delivery-footer,
 .tunnel-body.is-step-objective #meals-gauge-footer,
 .tunnel-body.is-step-objective #email-footer,
+.tunnel-body.is-step-objective #recap-footer,
 .tunnel-body.is-step-email #objective-footer,
 .tunnel-body.is-step-email #formula-footer,
 .tunnel-body.is-step-email #delivery-footer,
 .tunnel-body.is-step-email #meals-gauge-footer,
+.tunnel-body.is-step-email #recap-footer,
+.tunnel-body.is-step-recap #objective-footer,
+.tunnel-body.is-step-recap #formula-footer,
+.tunnel-body.is-step-recap #delivery-footer,
+.tunnel-body.is-step-recap #meals-gauge-footer,
+.tunnel-body.is-step-recap #email-footer,
 .tunnel-footer.hidden {
   display: none;
 }
@@ -692,6 +724,127 @@ body {
   width: 100%;
 }
 
+.recap-decision {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(252, 248, 246, 0.96));
+  border: 1px solid rgba(185, 138, 215, 0.14);
+  border-radius: 24px;
+  box-shadow: var(--mileyo-shadow-soft);
+  margin: 0 auto;
+  max-width: var(--recap-step-max-width);
+  padding: 28px 22px 24px;
+}
+
+.recap-intro {
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.recap-intro h1 {
+  margin-bottom: 10px;
+}
+
+.recap-lead {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 34rem;
+}
+
+.recap-card {
+  background: var(--mileyo-white);
+  border: 1px solid rgba(185, 138, 215, 0.16);
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0 0 16px;
+  padding: 18px 18px 16px;
+}
+
+.recap-section {
+  margin: 0;
+}
+
+.recap-section-label {
+  color: var(--mileyo-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.recap-section-value,
+.recap-price,
+.recap-launch-price,
+.recap-weekly-price {
+  color: var(--mileyo-purple-black);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.recap-pricing {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.recap-launch-price {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.recap-per-meal {
+  color: var(--mileyo-text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.recap-weekly-price {
+  color: var(--mileyo-text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.recap-eligible-note {
+  color: var(--mileyo-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  margin: 2px 0 0;
+}
+
+.recap-pricing.is-regular-only .recap-launch-price,
+.recap-pricing.is-regular-only .recap-per-meal,
+.recap-pricing.is-regular-only .recap-eligible-note {
+  display: none;
+}
+
+.recap-meals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.recap-meals li {
+  color: var(--mileyo-text);
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.45;
+  padding: 2px 0;
+}
+
+.recap-email {
+  word-break: break-word;
+}
+
+.recap-footer .tunnel-cta {
+  width: 100%;
+}
+
 .objective-decision {
   margin: 0 auto;
   max-width: var(--objective-step-max-width);
@@ -764,12 +917,40 @@ body {
   line-height: 1.4;
 }
 
+.objective-card-pricing {
+  display: grid;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.objective-card-launch-price {
+  color: var(--mileyo-purple-black);
+  font-size: 0.88rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.objective-card-recurring-price {
+  color: var(--mileyo-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .objective-card-starting-price {
   color: var(--mileyo-muted);
   font-size: 0.8rem;
   font-weight: 600;
   line-height: 1.35;
   margin-top: 2px;
+}
+
+.objective-launch-eligibility-note {
+  color: var(--mileyo-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 12px 0 0;
+  max-width: 36rem;
 }
 
 .objective-card .selected-badge {
@@ -1082,9 +1263,10 @@ body {
 }
 
 .box-price-per-meal {
-  color: var(--mileyo-purple-black);
-  font-size: 1.1rem;
-  font-weight: 800;
+  color: var(--mileyo-text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin: 0;
 }
 
 .box-price-total {
@@ -1093,20 +1275,17 @@ body {
 }
 
 #box-grid .formula-card .box-price-per-meal {
-  font-size: 0.95rem;
+  font-size: 0.88rem;
 }
 
 #box-grid .formula-card .box-promo-price {
   font-size: 0.9rem;
-  line-height: 1.2;
+  line-height: 1.25;
+  margin: 0;
 }
 
 #box-grid .formula-card .box-promo-price strong {
-  font-size: 1.22rem;
-}
-
-#box-grid .formula-card .box-crossed-price {
-  font-size: 0.8rem;
+  font-size: 1.18rem;
 }
 
 #box-grid .formula-card .box-weekly-price {
@@ -1120,7 +1299,7 @@ body {
 .box-promo-price {
   color: var(--mileyo-purple-black);
   font-size: 0.95rem;
-  line-height: 1.2;
+  line-height: 1.25;
   margin: 0;
 }
 
@@ -1129,26 +1308,19 @@ body {
   font-weight: 800;
 }
 
-.box-promo-price s {
-  color: var(--mileyo-muted);
-  font-weight: 500;
-}
-
-.box-crossed-price {
+.box-weekly-price {
   color: var(--mileyo-muted);
   font-size: 0.86rem;
-  margin: 0;
-}
-
-.box-crossed-price s {
-  color: var(--mileyo-muted);
-}
-
-.box-weekly-price {
-  color: var(--mileyo-text);
-  font-size: 0.9rem;
   font-weight: 600;
   margin: 0;
+}
+
+.box-launch-eligibility-note {
+  color: var(--mileyo-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 12px 0 0;
+  max-width: 36rem;
 }
 
 .box-promo-note {
@@ -2008,6 +2180,13 @@ button:disabled {
     padding-top: 20px;
   }
 
+  .tunnel-body.is-step-recap:not(.is-step-meals):not(.is-step-livraison) .builder-shell {
+    max-width: calc(var(--recap-step-max-width) + 96px);
+    padding-bottom: calc(
+      var(--tunnel-footer-height) + env(safe-area-inset-bottom, 0px) + 48px
+    );
+  }
+
   .delivery-date-grid {
     gap: 16px;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2129,11 +2308,6 @@ button:disabled {
 
   #box-grid .formula-card .box-promo-price strong {
     font-size: 1.42rem;
-  }
-
-  #box-grid .formula-card .box-crossed-price {
-    font-size: 0.82rem;
-    margin-top: -2px;
   }
 
   #box-grid .formula-card .box-weekly-price {

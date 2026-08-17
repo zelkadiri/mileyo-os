@@ -99,14 +99,16 @@ const runSuite = () => {
   }
 
   ctx.scenario("B. Step system");
-  ctx.assertEqual("step count is 5", BUILDER_STEP_COUNT, 5);
+  ctx.assertEqual("step count is 6", BUILDER_STEP_COUNT, 6);
   ctx.assertEqual(
     "exact step order",
     BUILDER_STEPS.join("→"),
-    "objectif→formule→livraison→repas→email",
+    "objectif→formule→livraison→repas→email→recap",
   );
-  ctx.assertEqual("email is last", BUILDER_STEPS[4], "email");
+  ctx.assertEqual("email remains fifth", BUILDER_STEPS[4], "email");
+  ctx.assertEqual("recap is last", BUILDER_STEPS[5], "recap");
   ctx.assertTrue("hash #email in client", clientSource.includes('"#email"'));
+  ctx.assertTrue("hash #recap in client", clientSource.includes('"#recap"'));
   ctx.assertTrue("hash #repas preserved", clientSource.includes('"#repas"'));
   ctx.assertTrue(
     "hash #livraison preserved",
@@ -139,13 +141,17 @@ const runSuite = () => {
     Boolean(mealsClickMatch?.[0].includes("/cart/add.js")),
   );
   ctx.assertTrue(
-    "cart add stays after email submit",
+    "cart add exists for recap checkout",
     clientSource.includes('fetch("/cart/add.js"'),
   );
 
   ctx.scenario("D. Email UI copy");
   ctx.assertTrue(
-    "title Plus qu’une étape",
+    "title Votre e-mail",
+    renderSource.includes("Votre e-mail"),
+  );
+  ctx.assertFalse(
+    "stale plus qu une etape title removed",
     renderSource.includes("Plus qu’une étape"),
   );
   ctx.assertTrue(
@@ -185,24 +191,33 @@ const runSuite = () => {
   );
   ctx.assertTrue(
     "email CTA label",
-    renderSource.includes("Ajouter ma box au panier") ||
-      clientSource.includes('"Ajouter ma box au panier"'),
+    clientSource.includes('emailContinue.textContent = "Continuer"'),
+  );
+  ctx.assertFalse(
+    "email CTA is no longer add to cart",
+    clientSource.includes('"Ajouter ma box au panier"') ||
+      renderSource.includes("Ajouter ma box au panier"),
   );
 
-  ctx.scenario("E. No fake first-week promo math");
+  ctx.scenario("E. Launch offer display math — no guaranteed checkout price");
   ctx.assertFalse(
     "no FIRST_WEEK_DISCOUNT_EUR",
     clientSource.includes("FIRST_WEEK_DISCOUNT_EUR"),
   );
   ctx.assertFalse(
-    "no firstBoxPrice",
+    "no firstBoxPrice identifier",
     clientSource.includes("firstBoxPrice") ||
       renderSource.includes("firstBoxPrice"),
   );
   ctx.assertFalse(
-    "no local price minus 20",
+    "no fragile selectedBox.price - 20 float math",
     clientSource.includes("selectedBox.price - 20") ||
       clientSource.includes("price - FIRST_BOX_LAUNCH_DISCOUNT"),
+  );
+  ctx.assertTrue(
+    "display math uses getBuilderLaunchPricing / cents",
+    clientSource.includes("function getBuilderLaunchPricing") &&
+      clientSource.includes("Math.round(LAUNCH_DISCOUNT_EUR * 100)"),
   );
   ctx.assertFalse(
     "no guaranteed you get 20",
@@ -222,8 +237,13 @@ const runSuite = () => {
   ctx.assertTrue(
     "constant documents Shopify alignment",
     discountSource.includes(
-      "Must stay aligned with the automatic Shopify LANCEMENT discount.",
+      "Must stay aligned with the automatic Shopify LANCEMENT discount",
     ),
+  );
+  ctx.assertTrue(
+    "constant documents eligibility is not guaranteed",
+    discountSource.includes("Does not determine visitor eligibility") ||
+      discountSource.includes("eligibility"),
   );
   ctx.assertFalse(
     "constant does not configure selling plans",
@@ -312,10 +332,24 @@ const runSuite = () => {
     "client does not send shop",
     /JSON\.stringify\(\{[\s\S]*shop:/.test(clientSource),
   );
+  const emailSubmitMatch = clientSource.match(
+    /function handleEmailSubmit\(\) \{[\s\S]*?\n {2}function handleRecapSubmit/,
+  );
+  ctx.assertTrue("email submit handler exists", Boolean(emailSubmitMatch));
   ctx.assertTrue(
-    "lead then cart",
-    clientSource.includes("captureCheckoutLead") &&
-      /captureCheckoutLead\(\)[\s\S]*addSelectedBoxToCart/.test(clientSource),
+    "lead then recap",
+    Boolean(
+      emailSubmitMatch?.[0].includes("captureCheckoutLead") &&
+        emailSubmitMatch?.[0].includes('showStep("recap")'),
+    ),
+  );
+  ctx.assertFalse(
+    "email submit does not add to cart",
+    Boolean(emailSubmitMatch?.[0].includes("addSelectedBoxToCart")),
+  );
+  ctx.assertFalse(
+    "email submit does not call cart/add.js",
+    Boolean(emailSubmitMatch?.[0].includes("/cart/add.js")),
   );
   ctx.assertTrue(
     "lead failure copy",
