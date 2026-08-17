@@ -23,6 +23,7 @@ import {
 } from "../../constants/subscriptionObjective";
 import { parseMealCountMetafield } from "../../utils/mealCountMetafield";
 import { parseSubscriptionObjective } from "../../utils/subscriptionObjective";
+import { ensureInventoryItemsActivatedAtEligibleLocations } from "./settings-box-v2-inventory-activation.server";
 
 export const SETUP_V2_BOX_CATALOG_INTENT = "setupV2BoxCatalog" as const;
 
@@ -79,6 +80,10 @@ export type SetupV2BoxCatalogResult = {
 export type BoxV2ProductSetVariantInput = {
   optionValues: { optionName: string; name: string }[];
   price: string;
+  inventoryPolicy: "CONTINUE";
+  inventoryItem: {
+    tracked: false;
+  };
   metafields: {
     namespace: string;
     key: string;
@@ -270,6 +275,10 @@ export const buildBoxV2ProductSetInput = (
       },
     ],
     price: spec.price,
+    inventoryPolicy: "CONTINUE",
+    inventoryItem: {
+      tracked: false,
+    },
     metafields: [
       {
         namespace: "mileyo",
@@ -544,6 +553,20 @@ export const setupV2BoxCatalog = async (
   const decision = resolveV2BoxCatalogDecision(lookup.products);
 
   if (decision.action === "alreadyConfigured") {
+    const activation = await ensureInventoryItemsActivatedAtEligibleLocations(
+      admin,
+      decision.productId,
+    );
+    if (!activation.ok) {
+      return {
+        errors: activation.errors,
+        message: "Impossible d’activer Box Mileyo V2 sur les emplacements de stock.",
+        ok: false,
+        productId: decision.productId,
+        status: "error",
+      };
+    }
+
     return {
       errors: [],
       message: formatV2BoxCatalogSetupMessage({
@@ -579,6 +602,29 @@ export const setupV2BoxCatalog = async (
       errors: created.errors,
       message: "Impossible de créer Box Mileyo V2.",
       ok: false,
+      status: "error",
+    };
+  }
+
+  if (!created.productId) {
+    return {
+      errors: ["productSet returned no product id"],
+      message: "Impossible de créer Box Mileyo V2.",
+      ok: false,
+      status: "error",
+    };
+  }
+
+  const activation = await ensureInventoryItemsActivatedAtEligibleLocations(
+    admin,
+    created.productId,
+  );
+  if (!activation.ok) {
+    return {
+      errors: activation.errors,
+      message: "Impossible d’activer Box Mileyo V2 sur les emplacements de stock.",
+      ok: false,
+      productId: created.productId,
       status: "error",
     };
   }

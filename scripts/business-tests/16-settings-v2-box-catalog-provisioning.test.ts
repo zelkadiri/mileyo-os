@@ -59,11 +59,13 @@ const createMockAdmin = ({
   products = [],
   productId = "gid://shopify/Product/v2-created",
   queryErrors,
+  activationUserErrors = [],
 }: {
   createUserErrors?: { message: string }[];
   products?: unknown[];
   productId?: string;
   queryErrors?: { message: string }[];
+  activationUserErrors?: { message: string }[];
 } = {}) => {
   const calls: GraphqlCall[] = [];
 
@@ -79,6 +81,56 @@ const createMockAdmin = ({
           return jsonResponse({
             data: { products: { nodes: products } },
             errors: queryErrors,
+          });
+        }
+
+        if (query.includes("BoxV2ProductInventoryItems")) {
+          return jsonResponse({
+            data: {
+              product: {
+                variants: {
+                  nodes: Array.from({ length: 18 }, (_, index) => ({
+                    id: `gid://shopify/ProductVariant/v2-${index + 1}`,
+                    inventoryItem: {
+                      id: `gid://shopify/InventoryItem/v2-${index + 1}`,
+                    },
+                  })),
+                },
+              },
+            },
+          });
+        }
+
+        if (query.includes("BoxV2EligibleLocations")) {
+          return jsonResponse({
+            data: {
+              locations: {
+                nodes: [
+                  {
+                    id: "gid://shopify/Location/online-1",
+                    name: "Entrepôt principal",
+                    isActive: true,
+                    fulfillsOnlineOrders: true,
+                    isFulfillmentService: false,
+                  },
+                ],
+                pageInfo: {
+                  hasNextPage: false,
+                  endCursor: null,
+                },
+              },
+            },
+          });
+        }
+
+        if (query.includes("inventoryBulkToggleActivation")) {
+          return jsonResponse({
+            data: {
+              inventoryBulkToggleActivation: {
+                inventoryItem: { id: "gid://shopify/InventoryItem/activated" },
+                userErrors: activationUserErrors,
+              },
+            },
           });
         }
 
@@ -366,6 +418,8 @@ const runSuite = async () => {
   const firstVariant = input.variants[0];
   ctx.assertEqual("first variant option count", firstVariant.optionValues.length, 2);
   ctx.assertEqual("first variant price", firstVariant.price, "76.11");
+  ctx.assertEqual("first variant inventoryPolicy", firstVariant.inventoryPolicy, "CONTINUE");
+  ctx.assertEqual("first variant tracked", firstVariant.inventoryItem.tracked, false);
   ctx.assertEqual("first variant metafield count", firstVariant.metafields.length, 2);
   ctx.assertEqual(
     "first objective metafield",
@@ -381,6 +435,17 @@ const runSuite = async () => {
   ctx.assertFalse("no legacy collection id", serialized.includes("Collection/"));
   ctx.assertFalse("no selling plan", serialized.toLowerCase().includes("sellingplan"));
   ctx.assertFalse("no prix_abonnement", serialized.includes("prix_abonnement"));
+  ctx.assertFalse("no inventorySetQuantities", serialized.includes("inventorySetQuantities"));
+  ctx.assertFalse("no inventoryAdjustQuantities", serialized.includes("inventoryAdjustQuantities"));
+  ctx.assertFalse("no availableQuantity", serialized.includes("availableQuantity"));
+  ctx.assertTrue(
+    "all variants CONTINUE",
+    input.variants.every((variant) => variant.inventoryPolicy === "CONTINUE"),
+  );
+  ctx.assertTrue(
+    "all variants untracked",
+    input.variants.every((variant) => variant.inventoryItem.tracked === false),
+  );
   ctx.assertFalse(
     "no PRODUCT meal_count metafield on product input",
     Object.prototype.hasOwnProperty.call(input, "metafields"),
@@ -515,6 +580,43 @@ const runSuite = async () => {
   ctx.assertEqual("create handle", createInput?.handle, BOX_V2_PRODUCT_HANDLE);
   ctx.assertEqual("create status DRAFT", createInput?.status, "DRAFT");
   ctx.assertEqual("create 18 variants", createInput?.variants?.length, 18);
+  ctx.assertEqual(
+    "create fetches inventory items",
+    createMock.calls.filter((call) => call.query.includes("BoxV2ProductInventoryItems"))
+      .length,
+    1,
+  );
+  ctx.assertEqual(
+    "create fetches eligible locations",
+    createMock.calls.filter((call) => call.query.includes("BoxV2EligibleLocations"))
+      .length,
+    1,
+  );
+  ctx.assertEqual(
+    "create activates 18 inventory items",
+    createMock.calls.filter((call) =>
+      call.query.includes("inventoryBulkToggleActivation"),
+    ).length,
+    18,
+  );
+  const createActivationVariables = createMock.calls.find((call) =>
+    call.query.includes("inventoryBulkToggleActivation"),
+  )?.variables as
+    | {
+        inventoryItemUpdates?: { activate?: boolean; locationId?: string }[];
+      }
+    | undefined;
+  ctx.assertTrue(
+    "create activation uses activate true",
+    (createActivationVariables?.inventoryItemUpdates ?? []).every(
+      (update) => update.activate === true,
+    ),
+  );
+  ctx.assertFalse(
+    "create activation payload has no quantity",
+    JSON.stringify(createActivationVariables ?? {}).includes("quantity") ||
+      JSON.stringify(createActivationVariables ?? {}).includes("available"),
+  );
 
   const alreadyMock = createMockAdmin({ products: [buildExactGraphqlNode()] });
   const alreadyResult = await setupV2BoxCatalog(alreadyMock.admin);
@@ -523,6 +625,13 @@ const runSuite = async () => {
     "alreadyConfigured performs no productSet",
     mutationCalls(alreadyMock.calls).length,
     0,
+  );
+  ctx.assertEqual(
+    "alreadyConfigured still activates inventory",
+    alreadyMock.calls.filter((call) =>
+      call.query.includes("inventoryBulkToggleActivation"),
+    ).length,
+    18,
   );
 
   const blockedMock = createMockAdmin({
@@ -541,9 +650,32 @@ const runSuite = async () => {
     mutationCalls(blockedMock.calls).length,
     0,
   );
+  ctx.assertEqual(
+    "blocked performs no inventory activation",
+    blockedMock.calls.filter((call) =>
+      call.query.includes("inventoryBulkToggleActivation"),
+    ).length,
+    0,
+  );
   ctx.assertTrue(
     "blocked surfaces reasons",
     (blockedResult.errors?.length ?? 0) > 0,
+  );
+
+  const activationFailMock = createMockAdmin({
+    products: [buildExactGraphqlNode()],
+    activationUserErrors: [{ message: "Location not found" }],
+  });
+  const activationFailResult = await setupV2BoxCatalog(activationFailMock.admin);
+  ctx.assertEqual(
+    "alreadyConfigured activation failure is error",
+    activationFailResult.status,
+    "error",
+  );
+  ctx.assertFalse("activation failure is not ok", activationFailResult.ok);
+  ctx.assertTrue(
+    "activation failure is not a fake success",
+    activationFailResult.message.includes("emplacements"),
   );
 
   ctx.scenario("I. Settings intent and UI");
@@ -638,6 +770,15 @@ const runSuite = async () => {
     "no destructive productSet repair path for blocked",
     catalogSource.includes("sellingPlanGroupDelete") ||
       catalogSource.includes("productDelete"),
+  );
+  ctx.assertTrue(
+    "catalog service wires inventory activation helper",
+    catalogSource.includes("ensureInventoryItemsActivatedAtEligibleLocations"),
+  );
+  ctx.assertFalse(
+    "catalog service does not set quantities",
+    catalogSource.includes("inventorySetQuantities") ||
+      catalogSource.includes("inventoryAdjustQuantities"),
   );
 
   return finishSuite("16-settings-v2-box-catalog-provisioning", ctx);

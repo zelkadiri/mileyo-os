@@ -53,7 +53,10 @@ api_version = "2026-07"
 # TODO(dunning): After merging, deploy updated Shopify app config and reinstall / approve
 # new scopes on each shop (dev + production): read_customers, write_customers.
 # Required for customerPaymentMethodSendUpdateEmail (secure payment-method update emails).
-scopes = "write_metaobject_definitions,write_metaobjects,read_orders,write_products,read_own_subscription_contracts,write_own_subscription_contracts,read_customers,write_customers"
+# TODO(box-v2-inventory): After merging, deploy updated Shopify app config and reinstall /
+# approve new scopes on each shop (dev + production): read_locations, write_inventory.
+# Required to activate Box V2 InventoryItems at Online Store fulfillment locations.
+scopes = "write_metaobject_definitions,write_metaobjects,read_orders,write_products,read_own_subscription_contracts,write_own_subscription_contracts,read_customers,write_customers,read_locations,write_inventory"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
