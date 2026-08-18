@@ -19,10 +19,14 @@ import {
 } from "../../services/subscriptionBillingWorker.server";
 import { closeRecoveryOnSuccessfulOrder } from "../../services/subscriptionPaymentRecovery.server";
 import {
+  convertCheckoutLead,
+  shouldConvertCheckoutLead,
+} from "../../services/checkoutLeadConversion.server";
+import {
   getPropertyValue,
   getSelectedMealsFromLineItemProperties,
 } from "../../utils/orderLineItemProperties";
-import { normalizeShopifyId } from "../../utils/shopifyIds.server";
+import { normalizeShopifyId, shopifyIdsMatch } from "../../utils/shopifyIds.server";
 import { unauthenticated } from "../../shopify.server";
 import {
   alignFirstOrderBillingWithDeliverySchedule,
@@ -226,6 +230,19 @@ export const handleOrdersCreateWebhook = async ({
     }
   }
 
+  const isFirstOrderReplay = Boolean(
+    matchedSelection &&
+      shopifyIdsMatch(matchedSelection.shopifyOrderId, shopifyOrderId),
+  );
+  const isResumeRenewal = Boolean(
+    matchedSelection && isResumeRenewalOrder(matchedSelection),
+  );
+  const shouldConvertLead = shouldConvertCheckoutLead({
+    isCreateFirstSubscription: decision === "create_first_subscription",
+    isFirstOrderReplay,
+    isResumeRenewal,
+  });
+
   const freshMatchedSelection =
     isRenewal && matchedSelection
       ? await db.subscriptionMealSelection.findUnique({
@@ -300,7 +317,9 @@ export const handleOrdersCreateWebhook = async ({
 
   console.log("[SUBSCRIPTION_SELECTION] order processed", {
     decision,
+    isFirstOrderReplay,
     isRenewal,
+    isResumeRenewal,
     isSubscription,
     matchedSelectionId: matchedSelection?.id ?? null,
     mealSnapshotSource: selectedMealsSource,
@@ -309,6 +328,7 @@ export const handleOrdersCreateWebhook = async ({
     reconciliationReason,
     reconciliationSource,
     shop,
+    shouldConvertLead,
     subscriptionContractId: resolvedSubscriptionContractId,
   });
 
@@ -362,6 +382,13 @@ export const handleOrdersCreateWebhook = async ({
       },
     },
   });
+
+  if (shouldConvertLead) {
+    await convertCheckoutLead({
+      email: customerEmail,
+      shop,
+    });
+  }
 
   if (decision === "create_first_subscription") {
     const selection = await upsertSubscriptionMealSelectionFromFirstOrder({
