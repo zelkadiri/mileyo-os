@@ -1,7 +1,7 @@
 import type { DeliveryRescheduleReason } from "../constants/deliverySchedule";
 import db from "../db.server";
+import { resolveNextBillingCycleAfterDelivery } from "../utils/subscriptionBillingSchedule";
 import {
-  computeNextBillingDateFromCurrentDelivery,
   computeNextWeeklyDeliveryDate,
   computeRenewalDeliveryDate,
   getWeekday,
@@ -168,7 +168,7 @@ export const resolveFirstOrderBillingAlignment = (
     return null;
   }
 
-  const alignedNextBillingDate = computeNextBillingDateFromCurrentDelivery(
+  const alignedNextBillingDate = resolveNextBillingCycleAfterDelivery(
     firstDeliverySchedule.scheduledDeliveryDate,
   );
 
@@ -266,7 +266,7 @@ export const alignRenewalBillingWithDeliverySchedule = async ({
     return { reason: "missing_renewal_delivery_date", status: "skipped" };
   }
 
-  const alignedNextBillingDate = computeNextBillingDateFromCurrentDelivery(
+  const alignedNextBillingDate = resolveNextBillingCycleAfterDelivery(
     renewalScheduledDeliveryDate,
   );
 

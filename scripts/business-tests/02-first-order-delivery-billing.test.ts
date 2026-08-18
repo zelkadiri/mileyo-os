@@ -22,7 +22,7 @@ const sampleMealProperties = [
   { name: "Plat 1", value: "Poulet tikka" },
 ];
 
-const ALIGNED_NEXT_BILLING_ISO = "2026-07-20T22:05:00.000Z";
+const ALIGNED_NEXT_BILLING_ISO = "2026-07-17T22:05:00.000Z";
 
 const runSuite = () => {
   const ctx = createBusinessTestContext("02-first-order-delivery-billing");
@@ -50,7 +50,7 @@ const runSuite = () => {
   );
   ctx.then("le billing prépare la deuxième livraison");
   ctx.assertEqual(
-    "J+3 next billing aligned on second delivery cutoff",
+    "J+3 next billing aligned on Saturday of the second delivery",
     jPlus3Alignment?.alignedNextBillingDate.toISOString(),
     ALIGNED_NEXT_BILLING_ISO,
   );
@@ -86,19 +86,23 @@ const runSuite = () => {
     computeNextWeeklyDeliveryDate(parseDeliveryDate("2026-07-16")!),
     "2026-07-23",
   );
-  ctx.then("pas de prélèvement avant cutoff deuxième livraison");
+  ctx.then("le runner ne bloque plus le billing sur la gate J-2");
   const gateBeforeBilling = getBillingRunnerDeliveryGate({
     now: new Date("2026-07-13T12:00:00.000Z"),
     selection: {
-      nextBillingDate: new Date("2026-07-13T10:00:00.000Z"),
+      nextBillingDate: new Date(ALIGNED_NEXT_BILLING_ISO),
       nextScheduledDeliveryDate: "2026-07-16",
       preferredDeliveryWeekday: 4,
     },
   });
-  ctx.assertEqual(
-    "J+10 cron before cutoff skips billing",
+  ctx.assertNull(
+    "J+10 cron is not blocked by delivery J-2",
     gateBeforeBilling.skipReason,
-    "delivery_billing_not_ready",
+  );
+  ctx.assertEqual(
+    "J+10 cron does not realign Saturday to Tuesday",
+    gateBeforeBilling.shouldRealignLegacyBillingDate,
+    false,
   );
 
   ctx.scenario("Rejeu webhook orders-create — idempotence logique");

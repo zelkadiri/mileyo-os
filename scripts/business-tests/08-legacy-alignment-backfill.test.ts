@@ -14,7 +14,9 @@ import {
   finishSuite,
 } from "./_framework";
 
-const BILLING_FOR_JULY_23 = "2026-07-20T22:05:00.000Z";
+const SATURDAY_OF_JULY_23 = "2026-07-17T22:05:00.000Z";
+const SATURDAY_OF_JULY_30 = "2026-07-24T22:05:00.000Z";
+const TUESDAY_J2_OF_JULY_23 = "2026-07-20T22:05:00.000Z";
 
 const activeSelection = () => ({
   active: true,
@@ -59,7 +61,7 @@ const runSuite = () => {
   ctx.assertEqual(
     "audit recommends second box billing",
     recommended?.toISOString(),
-    BILLING_FOR_JULY_23,
+    SATURDAY_OF_JULY_23,
   );
   ctx.assertEqual(
     "dry-run marks Shopify+DB update needed",
@@ -75,7 +77,7 @@ const runSuite = () => {
       activeDeliveryDate: requireDate("2026-07-16"),
       hasBoxOrderForActiveDelivery: true,
     })?.toISOString(),
-    BILLING_FOR_JULY_23,
+    SATURDAY_OF_JULY_23,
   );
 
   ctx.scenario("Livraison active non payée — billing cette livraison");
@@ -86,7 +88,7 @@ const runSuite = () => {
       activeDeliveryDate: requireDate("2026-07-23"),
       hasBoxOrderForActiveDelivery: false,
     })?.toISOString(),
-    BILLING_FOR_JULY_23,
+    SATURDAY_OF_JULY_23,
   );
 
   ctx.scenario("Données invalides — skipped sans mutation");
@@ -142,18 +144,41 @@ const runSuite = () => {
     projectedActiveDeliveryDate: requireDate("2026-07-30"),
     selection: {
       ...activeSelection(),
-      nextBillingDate: new Date("2026-07-27T22:05:00.000Z"),
+      nextBillingDate: new Date(SATURDAY_OF_JULY_30),
       nextScheduledDeliveryDate: "2026-07-30",
     },
-    shopifyNextBillingDate: new Date("2026-07-27T22:05:00.000Z"),
+    shopifyNextBillingDate: new Date(SATURDAY_OF_JULY_30),
   });
   ctx.assertEqual("already aligned contracts unchanged", alignedAudit.action, "ok_already_aligned");
   ctx.assertTrue(
     "billing tolerance accepts small drift",
     areBillingDatesAligned(
-      new Date("2026-07-27T22:05:30.000Z"),
-      new Date("2026-07-27T22:05:00.000Z"),
+      new Date("2026-07-24T22:05:30.000Z"),
+      new Date(SATURDAY_OF_JULY_30),
     ),
+  );
+
+  ctx.scenario("Mardi J-2 legacy — mise à jour recommandée");
+  ctx.given("DB et Shopify encore sur J-2 mardi pour jeudi 23 unpaid");
+  const legacyTuesdayAudit = computeDeliveryBillingAlignmentAudit({
+    hasBoxOrderForActiveDelivery: false,
+    projectedActiveDeliveryDate: requireDate("2026-07-23"),
+    selection: {
+      ...activeSelection(),
+      nextBillingDate: new Date(TUESDAY_J2_OF_JULY_23),
+      nextScheduledDeliveryDate: "2026-07-23",
+    },
+    shopifyNextBillingDate: new Date(TUESDAY_J2_OF_JULY_23),
+  });
+  ctx.assertEqual(
+    "legacy Tuesday is marked for Shopify+DB update",
+    legacyTuesdayAudit.action,
+    "would_update_shopify_and_db",
+  );
+  ctx.assertEqual(
+    "legacy Tuesday recommendation is Saturday of current delivery",
+    legacyTuesdayAudit.recommendedNextBillingDate?.toISOString(),
+    SATURDAY_OF_JULY_23,
   );
 
   return finishSuite("08-legacy-alignment-backfill", ctx);

@@ -11,6 +11,7 @@ import {
   type RecoveryStatus,
 } from "../constants/subscriptionPaymentRecovery";
 import db from "../db.server";
+import { computeNextSubscriptionCycleRetryAt } from "../utils/subscriptionCycleBilling";
 import {
   fetchShopifyBillingAttempt,
   isResumeRenewalOrder,
@@ -30,10 +31,23 @@ export {
   type RecoveryStatus,
 } from "../constants/subscriptionPaymentRecovery";
 
-const RETRY_DELAY_MS = {
-  1: 24 * 60 * 60 * 1000,
-  2: 48 * 60 * 60 * 1000,
-} as const;
+export const resolvePaymentRecoveryNextRetryAt = ({
+  nextFailureCount,
+  reference,
+}: {
+  nextFailureCount: number;
+  reference: Date;
+}): Date | null => {
+  if (nextFailureCount >= MAX_RECOVERY_FAILURES) {
+    return null;
+  }
+
+  if (nextFailureCount !== 1 && nextFailureCount !== 2) {
+    return null;
+  }
+
+  return computeNextSubscriptionCycleRetryAt(reference, nextFailureCount);
+};
 
 const subscriptionContractPauseMutation = `#graphql
   mutation SubscriptionContractPause($subscriptionContractId: ID!) {
@@ -445,13 +459,10 @@ const scheduleRecoveryAfterFailure = async ({
     return existing;
   }
 
-  const nextRetryAt =
-    nextFailureCount < MAX_RECOVERY_FAILURES
-      ? new Date(
-          now.getTime() +
-            (RETRY_DELAY_MS[nextFailureCount as 1 | 2] ?? 48 * 60 * 60 * 1000),
-        )
-      : null;
+  const nextRetryAt = resolvePaymentRecoveryNextRetryAt({
+    nextFailureCount,
+    reference: now,
+  });
 
   const recoveryData = {
     failureCount: nextFailureCount,

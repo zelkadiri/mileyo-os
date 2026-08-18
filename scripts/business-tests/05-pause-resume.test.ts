@@ -129,9 +129,9 @@ const runSuite = () => {
     "2026-07-23",
   );
   ctx.assertEqual(
-    "schedule-only resume billing for target delivery",
+    "schedule-only resume billing is Saturday cycle of the target delivery or next cycle",
     scheduleOnly?.alignedNextBillingDate.toISOString(),
-    "2026-07-20T22:05:00.000Z",
+    "2026-07-24T22:05:00.000Z",
   );
 
   ctx.scenario("Reprise simple après cutoff");
@@ -166,9 +166,9 @@ const runSuite = () => {
     "2026-07-23",
   );
   ctx.assertEqual(
-    "immediate payment billing targets following week",
+    "immediate payment billing targets following Saturday cycle",
     payNowBefore?.alignedNextBillingDate.toISOString(),
-    "2026-07-27T22:05:00.000Z",
+    "2026-07-24T22:05:00.000Z",
   );
 
   ctx.scenario("Reprise avec paiement immédiat après cutoff");
@@ -187,9 +187,9 @@ const runSuite = () => {
     "2026-07-30",
   );
   ctx.assertEqual(
-    "immediate payment after cutoff bills week after target",
+    "immediate payment after cutoff bills Saturday of week after target",
     payNowAfter?.alignedNextBillingDate.toISOString(),
-    "2026-08-03T22:05:00.000Z",
+    "2026-07-31T22:05:00.000Z",
   );
 
   ctx.scenario("Ancienne logique paymentAt + 7 absente du flow actif");

@@ -1,11 +1,13 @@
 import { isTerminalSubscriptionSelectionStatus } from "../constants/subscriptionMealSelection";
 import db from "../db.server";
 import {
-  computeBillingReadyAtForDelivery,
-  computeNextBillingDateFromCurrentDelivery,
   projectActiveScheduledDeliveryDate,
   type DeliveryDateString,
 } from "../utils/deliveryDate";
+import {
+  resolveBillingCycleDateForDelivery,
+  resolveNextBillingCycleAfterDelivery,
+} from "../utils/subscriptionBillingSchedule";
 import {
   fetchSubscriptionContractNextBillingDate,
   setSubscriptionContractNextBillingDate,
@@ -53,10 +55,10 @@ export const resolveRecommendedNextBillingDate = ({
   hasBoxOrderForActiveDelivery: boolean;
 }): Date | null => {
   if (hasBoxOrderForActiveDelivery) {
-    return computeNextBillingDateFromCurrentDelivery(activeDeliveryDate);
+    return resolveNextBillingCycleAfterDelivery(activeDeliveryDate);
   }
 
-  return computeBillingReadyAtForDelivery(activeDeliveryDate);
+  return resolveBillingCycleDateForDelivery(activeDeliveryDate);
 };
 
 export const resolveProjectedActiveDeliveryDate = ({

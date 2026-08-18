@@ -15,10 +15,7 @@ import {
   type RecoveryWorkerSummary,
 } from "./subscriptionPaymentRecovery.server";
 import { alignImmediatePaymentResumeWithDeliverySchedule } from "./deliverySchedule.server";
-import {
-  evaluateDeliveryBillingReadiness,
-  shouldRealignLegacyNextBillingDate,
-} from "../utils/deliveryDate";
+import { evaluateDeliveryBillingReadiness } from "../utils/deliveryDate";
 
 const billingAttemptCreateMutation = `#graphql
   mutation SubscriptionBillingAttemptCreate(
@@ -1960,37 +1957,15 @@ export const getBillingRunnerDeliveryGate = ({
     preferredDeliveryWeekday: selection.preferredDeliveryWeekday,
   });
 
-  if (readiness.reason === "unknown_delivery") {
-    console.log("[BILLING_RUNNER] delivery_not_ready", {
-      reason: "unknown_delivery_schedule",
-      selectionNextBillingDate: selection.nextBillingDate?.toISOString() ?? null,
-    });
-
-    return {
-      readiness,
-      shouldRealignLegacyBillingDate: false,
-      skipReason: "delivery_billing_not_ready",
-    };
-  }
-
-  if (!readiness.isReady) {
-    console.log("[BILLING_RUNNER] delivery_not_ready", {
-      billingReadyAt: readiness.billingReadyAt?.toISOString() ?? null,
-      billingTargetDeliveryDate: readiness.billingTargetDeliveryDate,
-      projectedActiveDeliveryDate: readiness.projectedActiveDeliveryDate,
-      reason: "delivery_billing_not_ready",
-      selectionNextBillingDate: selection.nextBillingDate?.toISOString() ?? null,
-    });
-
-    return {
-      readiness,
-      shouldRealignLegacyBillingDate: shouldRealignLegacyNextBillingDate({
-        billingReadyAt: readiness.billingReadyAt,
-        nextBillingDate: selection.nextBillingDate,
-      }),
-      skipReason: "delivery_billing_not_ready",
-    };
-  }
+  console.log("[BILLING_RUNNER] cycle_gate", {
+    billingReadyAt: readiness.billingReadyAt?.toISOString() ?? null,
+    billingTargetDeliveryDate: readiness.billingTargetDeliveryDate,
+    deliveryReady: readiness.isReady,
+    projectedActiveDeliveryDate: readiness.projectedActiveDeliveryDate,
+    readinessReason: readiness.reason,
+    selectionNextBillingDate: selection.nextBillingDate?.toISOString() ?? null,
+    skipReason: null,
+  });
 
   return {
     readiness,
@@ -1999,7 +1974,8 @@ export const getBillingRunnerDeliveryGate = ({
   };
 };
 
-const realignLegacyNextBillingDateFromDeliverySchedule = async ({
+/** Historical J-2 realign. Kept for audits. Not called by processDueSubscriptionBillings. */
+export const realignLegacyNextBillingDateFromDeliverySchedule = async ({
   admin,
   billingReadyAt,
   selectionId,
@@ -2266,19 +2242,6 @@ export const processDueSubscriptionBillings = async (
     });
 
     if (deliveryGate.skipReason) {
-      if (
-        deliveryGate.shouldRealignLegacyBillingDate &&
-        deliveryGate.readiness.billingReadyAt &&
-        currentSelection.subscriptionContractId
-      ) {
-        await realignLegacyNextBillingDateFromDeliverySchedule({
-          admin,
-          billingReadyAt: deliveryGate.readiness.billingReadyAt,
-          selectionId: currentSelection.id,
-          subscriptionContractId: currentSelection.subscriptionContractId,
-        });
-      }
-
       summary.skipped += 1;
       summary.skipReasons[deliveryGate.skipReason] += 1;
       continue;

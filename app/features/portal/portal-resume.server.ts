@@ -153,6 +153,7 @@ export const resolvePortalResumeMode = async ({
     !isSubscriptionBillingDue(freshNextBillingDate, localNextBillingDate)
   ) {
     const resumeSchedule = resolveResumeDeliverySchedule({
+      existingNextBillingDate: freshNextBillingDate ?? localNextBillingDate,
       mode: "schedule_only",
       selection: {
         nextScheduledDeliveryDate: selection.nextScheduledDeliveryDate,

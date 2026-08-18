@@ -163,7 +163,7 @@ const persistFirstOrderDelivery = async ({
   return { boxOrder, schedule, selection };
 };
 
-const ALIGNED_NEXT_BILLING_ISO = "2026-07-20T22:05:00.000Z";
+const ALIGNED_NEXT_BILLING_ISO = "2026-07-17T22:05:00.000Z";
 const RENEWAL_ALIGNED_NEXT_BILLING_ISO = "2026-07-27T22:05:00.000Z";
 
 const createBillingAlignmentMockAdmin = ({
@@ -654,7 +654,7 @@ async function main() {
       "2026-07-16",
     );
     assertEqual(
-      "12. J+10 aligned billing uses second delivery cutoff",
+      "12. J+10 aligned billing uses Saturday of second delivery",
       jPlus10Alignment?.alignedNextBillingDate.toISOString(),
       ALIGNED_NEXT_BILLING_ISO,
     );

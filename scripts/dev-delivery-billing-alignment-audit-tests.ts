@@ -27,8 +27,9 @@ const assertEqual = (name: string, actual: unknown, expected: unknown) => {
   }
 };
 
-const BILLING_FOR_JULY_23 = "2026-07-20T22:05:00.000Z";
-const BILLING_FOR_JULY_30 = "2026-07-27T22:05:00.000Z";
+const SATURDAY_OF_JULY_23 = "2026-07-17T22:05:00.000Z";
+const SATURDAY_OF_JULY_30 = "2026-07-24T22:05:00.000Z";
+const TUESDAY_J2_OF_JULY_23 = "2026-07-20T22:05:00.000Z";
 
 const requireDate = (value: string) => {
   const parsed = parseDeliveryDate(value);
@@ -56,7 +57,7 @@ function main() {
       activeDeliveryDate: requireDate("2026-07-16"),
       hasBoxOrderForActiveDelivery: true,
     })?.toISOString(),
-    BILLING_FOR_JULY_23,
+    SATURDAY_OF_JULY_23,
   );
 
   assertEqual(
@@ -65,7 +66,7 @@ function main() {
       activeDeliveryDate: requireDate("2026-07-23"),
       hasBoxOrderForActiveDelivery: false,
     })?.toISOString(),
-    BILLING_FOR_JULY_23,
+    SATURDAY_OF_JULY_23,
   );
 
   assertEqual(
@@ -74,7 +75,7 @@ function main() {
       activeDeliveryDate: requireDate("2026-07-16"),
       hasBoxOrderForActiveDelivery: true,
     })?.toISOString(),
-    BILLING_FOR_JULY_23,
+    SATURDAY_OF_JULY_23,
   );
 
   assertEqual(
@@ -159,7 +160,7 @@ function main() {
   assertEqual(
     "8. dry-run does not mutate anything by itself",
     dryRunAudit.recommendedNextBillingDate?.toISOString(),
-    BILLING_FOR_JULY_23,
+    SATURDAY_OF_JULY_23,
   );
 
   const alignedAudit = computeDeliveryBillingAlignmentAudit({
@@ -167,10 +168,10 @@ function main() {
     projectedActiveDeliveryDate: requireDate("2026-07-30"),
     selection: {
       ...activeSelection(),
-      nextBillingDate: new Date(BILLING_FOR_JULY_30),
+      nextBillingDate: new Date(SATURDAY_OF_JULY_30),
       nextScheduledDeliveryDate: "2026-07-30",
     },
-    shopifyNextBillingDate: new Date(BILLING_FOR_JULY_30),
+    shopifyNextBillingDate: new Date(SATURDAY_OF_JULY_30),
   });
 
   assertEqual(
@@ -182,11 +183,28 @@ function main() {
   assertEqual(
     "10. billing date tolerance accepts 30 second drift",
     areBillingDatesAligned(
-      new Date("2026-07-20T22:05:30.000Z"),
-      new Date(BILLING_FOR_JULY_23),
+      new Date("2026-07-17T22:05:30.000Z"),
+      new Date(SATURDAY_OF_JULY_23),
       BILLING_DATE_ALIGNMENT_TOLERANCE_MS,
     ),
     true,
+  );
+
+  const legacyTuesdayAudit = computeDeliveryBillingAlignmentAudit({
+    hasBoxOrderForActiveDelivery: false,
+    projectedActiveDeliveryDate: requireDate("2026-07-23"),
+    selection: {
+      ...activeSelection(),
+      nextBillingDate: new Date(TUESDAY_J2_OF_JULY_23),
+      nextScheduledDeliveryDate: "2026-07-23",
+    },
+    shopifyNextBillingDate: new Date(TUESDAY_J2_OF_JULY_23),
+  });
+
+  assertEqual(
+    "11. legacy Tuesday J-2 is marked for update",
+    legacyTuesdayAudit.action,
+    "would_update_shopify_and_db",
   );
 
   const failed = checks.filter((check) => !check.ok);

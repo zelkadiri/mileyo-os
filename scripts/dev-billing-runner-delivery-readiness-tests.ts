@@ -139,14 +139,18 @@ function main() {
     },
   });
 
-  assertEqual(
-    "1. cron before cutoff skips billing",
+  assertNull(
+    "1. cron before J-2 no longer skips billing",
     gateBeforeCutoff.skipReason,
-    "delivery_billing_not_ready",
   );
   assertEqual(
-    "1. cron before cutoff does not mark ready",
+    "1. delivery context still reports not ready before J-2",
     gateBeforeCutoff.readiness.isReady,
+    false,
+  );
+  assertEqual(
+    "1. cron before J-2 does not realign nextBillingDate",
+    gateBeforeCutoff.shouldRealignLegacyBillingDate,
     false,
   );
 
@@ -183,23 +187,22 @@ function main() {
     selection: baseSelection(),
   });
 
-  assertEqual(
-    "3. legacy Shopify J+7 skips before delivery billing ready",
+  assertNull(
+    "3. legacy Shopify J+7 is not skipped by delivery J-2",
     legacyGate.skipReason,
-    "delivery_billing_not_ready",
   );
   assertEqual(
-    "3. legacy gate targets second weekly delivery",
+    "3. legacy gate still exposes second weekly delivery context",
     legacyGate.readiness.billingTargetDeliveryDate,
     "2026-07-23",
   );
   assertEqual(
-    "4. legacy nextBillingDate triggers realignment",
+    "4. gate never requests legacy realignment",
     legacyGate.shouldRealignLegacyBillingDate,
-    true,
+    false,
   );
   assertEqual(
-    "4. legacy realignment target billing instant",
+    "4. delivery context still reports J-2 billing instant",
     legacyGate.readiness.billingReadyAt?.toISOString(),
     BILLING_READY_FOR_JULY_23,
   );
@@ -245,10 +248,9 @@ function main() {
     },
   });
 
-  assertEqual(
-    "6. billing gate skips unknown delivery schedule",
+  assertNull(
+    "6. billing gate does not skip unknown delivery schedule",
     unknownGate.skipReason,
-    "delivery_billing_not_ready",
   );
 
   assertEqual(

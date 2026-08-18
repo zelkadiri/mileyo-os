@@ -45,6 +45,13 @@ const BUSINESS_SUITES = [
   "22-builder-recap-checkout-step.test.ts",
   "23-settings-v2-box-inventory-activation.test.ts",
   "24-checkout-lead-conversion.test.ts",
+  "25-subscription-cycle-billing.test.ts",
+  "26-subscription-billing-schedule-resolver.test.ts",
+  "27-first-order-renewal-cycle-alignment.test.ts",
+  "28-billing-runner-cycle-gate.test.ts",
+  "29-subscription-payment-recovery-cycle.test.ts",
+  "30-portal-resume-cycle-billing.test.ts",
+  "31-subscription-delivery-billing-alignment-cycle.test.ts",
 ];
 
 const LEGACY_SUITES = [

@@ -2,6 +2,10 @@ import {
   SUBSCRIPTION_CYCLE_TIMEZONE,
 } from "../constants/subscriptionCycle";
 import {
+  resolveNextBillingCycleAfterDelivery,
+  resolveScheduleOnlyResumeBillingDate,
+} from "./subscriptionBillingSchedule";
+import {
   DEFAULT_DELIVERY_SCHEDULE_CONFIG,
   DELIVERY_BILLING_READY_HOUR,
   DELIVERY_BILLING_READY_MINUTE,
@@ -803,12 +807,14 @@ export const logResumeAlignment = ({
 
 export const resolveResumeDeliverySchedule = ({
   config = DEFAULT_DELIVERY_SCHEDULE_CONFIG,
+  existingNextBillingDate = null,
   mode,
   now = new Date(),
   selection,
   selectionId,
 }: {
   config?: DeliveryScheduleConfig;
+  existingNextBillingDate?: Date | null;
   mode: ResumeDeliveryScheduleMode;
   now?: Date;
   selection: {
@@ -850,10 +856,15 @@ export const resolveResumeDeliverySchedule = ({
 
     const alignedNextBillingDate =
       mode === "schedule_only"
-        ? computeBillingReadyAtForDelivery(resumeTargetDeliveryDate, config)
-        : computeNextBillingDateFromCurrentDelivery(
+        ? resolveScheduleOnlyResumeBillingDate({
+            existingNextBillingDate,
+            now,
+            targetDeliveryDate: resumeTargetDeliveryDate,
+            timezone: config.timezone,
+          })
+        : resolveNextBillingCycleAfterDelivery(
             resumeTargetDeliveryDate,
-            config,
+            config.timezone,
           );
 
     if (!alignedNextBillingDate) {

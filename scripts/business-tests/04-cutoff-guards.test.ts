@@ -170,39 +170,44 @@ const runSuite = () => {
     ),
   );
 
-  ctx.scenario("Billing ne part jamais avant cutoff");
-  ctx.given("livraison jeudi 23, cron lundi 20 juillet 22h");
-  const gateBefore = getBillingRunnerDeliveryGate({
+  ctx.scenario("Billing cycle — nextBillingDate est la source de vérité");
+  ctx.given("livraison jeudi 23, nextBillingDate samedi 18 juillet déjà dû");
+  const saturdayJuly18 = new Date("2026-07-17T22:05:00.000Z");
+  const gateBeforeJ2 = getBillingRunnerDeliveryGate({
     now: parisWallClockToInstant({
       date: requireDate("2026-07-20"),
       hour: 22,
       minute: 0,
     }),
     selection: {
-      nextBillingDate: new Date("2026-07-20T20:00:00.000Z"),
+      nextBillingDate: saturdayJuly18,
       nextScheduledDeliveryDate: "2026-07-23",
       preferredDeliveryWeekday: 4,
     },
   });
+  ctx.assertNull(
+    "due Saturday is not blocked by delivery J-2",
+    gateBeforeJ2.skipReason,
+  );
   ctx.assertEqual(
-    "cron before billingReadyAt skips",
-    gateBefore.skipReason,
-    "delivery_billing_not_ready",
+    "due Saturday is not realigned to Tuesday",
+    gateBeforeJ2.shouldRealignLegacyBillingDate,
+    false,
   );
   ctx.when("cron passe mardi 21 juillet 00h10 Paris");
-  const gateAfter = getBillingRunnerDeliveryGate({
+  const gateAfterJ2 = getBillingRunnerDeliveryGate({
     now: parisWallClockToInstant({
       date: requireDate("2026-07-21"),
       hour: 0,
       minute: 10,
     }),
     selection: {
-      nextBillingDate: new Date("2026-07-20T22:05:00.000Z"),
+      nextBillingDate: saturdayJuly18,
       nextScheduledDeliveryDate: "2026-07-23",
       preferredDeliveryWeekday: 4,
     },
   });
-  ctx.assertNull("cron after billingReadyAt allows billing", gateAfter.skipReason);
+  ctx.assertNull("cron after delivery J-2 still allows billing", gateAfterJ2.skipReason);
 
   ctx.scenario("Cutoff status exposé pour UI");
   ctx.given("livraison jeudi 16 juillet");
