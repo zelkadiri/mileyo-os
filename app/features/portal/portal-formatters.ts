@@ -6,6 +6,7 @@ import {
   formatDeliveryDateLabel,
   parseDeliveryDate,
 } from "../../utils/deliveryDate";
+import type { SubscriptionObjective } from "../../constants/subscriptionObjective";
 import type { PortalMeal } from "./portal-types";
 import { escapeHtml, scriptJson } from "../../utils/html";
 import {
@@ -182,10 +183,12 @@ export const parseMealQuantities = (
 export const validateMealSelection = ({
   meals,
   mealsCount,
+  objective,
   quantities,
 }: {
   meals: PortalMeal[];
   mealsCount: number;
+  objective?: SubscriptionObjective | null;
   quantities: Record<string, number>;
 }): { error: string } | { titles: string[] } => {
   const totalSelected = Object.values(quantities).reduce(
@@ -197,6 +200,24 @@ export const validateMealSelection = ({
     return {
       error: `Tu dois sélectionner exactement ${mealsCount} plats.`,
     };
+  }
+
+  const selectedEntries = Object.entries(quantities).filter(
+    ([, quantity]) => Number.isFinite(quantity) && quantity > 0,
+  );
+
+  if (objective) {
+    const hasOffObjectiveMeal = selectedEntries.some(([mealId]) => {
+      const meal = meals.find(
+        (candidate) =>
+          candidate.variantId === mealId || candidate.id === mealId,
+      );
+      return !meal || meal.objective !== objective;
+    });
+
+    if (hasOffObjectiveMeal) {
+      return { error: "Un ou plusieurs plats sélectionnés ne sont pas valides." };
+    }
   }
 
   const titles = quantitiesToTitles(quantities, meals);

@@ -29,6 +29,17 @@ export const portalClientScript = `
     });
   });
 
+  function mealsForSelection(selection) {
+    if (!data.meals || !selection || !selection.objective) return [];
+    return data.meals.filter(function (meal) {
+      return meal.objective === selection.objective;
+    });
+  }
+
+  function mealKey(meal) {
+    return meal.variantId || meal.id;
+  }
+
   function selectedTotal(quantities) {
     return Object.keys(quantities).reduce(function (total, mealId) {
       return total + (quantities[mealId] || 0);
@@ -37,9 +48,13 @@ export const portalClientScript = `
 
   function renderMealGrid(editor) {
     if (!editor.mealGrid) return;
+    var selection = data.selections.find(function (item) {
+      return item.id === editor.selectionId;
+    });
     editor.mealGrid.innerHTML = "";
-    data.meals.forEach(function (meal) {
-      editor.quantities[meal.id] = editor.quantities[meal.id] || 0;
+    mealsForSelection(selection).forEach(function (meal) {
+      var mealId = mealKey(meal);
+      editor.quantities[mealId] = editor.quantities[mealId] || 0;
 
       var card = document.createElement("article");
       card.className = "meal-card";
@@ -67,15 +82,15 @@ export const portalClientScript = `
       var minus = document.createElement("button");
       minus.type = "button";
       minus.textContent = "-";
-      minus.disabled = editor.quantities[meal.id] === 0;
+      minus.disabled = editor.quantities[mealId] === 0;
       minus.setAttribute("aria-label", "Retirer " + meal.title);
       minus.addEventListener("click", function () {
-        editor.quantities[meal.id] = Math.max(0, editor.quantities[meal.id] - 1);
+        editor.quantities[mealId] = Math.max(0, editor.quantities[mealId] - 1);
         updateEditor(editor);
       });
 
       var quantity = document.createElement("span");
-      quantity.textContent = String(editor.quantities[meal.id]);
+      quantity.textContent = String(editor.quantities[mealId]);
 
       var plus = document.createElement("button");
       plus.type = "button";
@@ -84,7 +99,7 @@ export const portalClientScript = `
       plus.setAttribute("aria-label", "Ajouter " + meal.title);
       plus.addEventListener("click", function () {
         if (selectedTotal(editor.quantities) >= editor.requiredMeals) return;
-        editor.quantities[meal.id] += 1;
+        editor.quantities[mealId] += 1;
         updateEditor(editor);
       });
 
@@ -392,8 +407,9 @@ export const portalClientScript = `
       function renderBoxChangeMealGrid() {
         if (!boxChangeState.mealGrid) return;
         boxChangeState.mealGrid.innerHTML = "";
-        data.meals.forEach(function (meal) {
-          boxChangeState.quantities[meal.id] = boxChangeState.quantities[meal.id] || 0;
+        mealsForSelection(selection).forEach(function (meal) {
+          var mealId = mealKey(meal);
+          boxChangeState.quantities[mealId] = boxChangeState.quantities[mealId] || 0;
 
           var mealCard = document.createElement("article");
           mealCard.className = "meal-card";
@@ -421,15 +437,15 @@ export const portalClientScript = `
           var minus = document.createElement("button");
           minus.type = "button";
           minus.textContent = "-";
-          minus.disabled = boxChangeState.quantities[meal.id] === 0;
+          minus.disabled = boxChangeState.quantities[mealId] === 0;
           minus.addEventListener("click", function () {
-            boxChangeState.quantities[meal.id] = Math.max(0, boxChangeState.quantities[meal.id] - 1);
+            boxChangeState.quantities[mealId] = Math.max(0, boxChangeState.quantities[mealId] - 1);
             renderBoxChangeMealGrid();
             updateBoxChangeCounts();
           });
 
           var quantity = document.createElement("span");
-          quantity.textContent = String(boxChangeState.quantities[meal.id]);
+          quantity.textContent = String(boxChangeState.quantities[mealId]);
 
           var plus = document.createElement("button");
           plus.type = "button";
@@ -437,7 +453,7 @@ export const portalClientScript = `
           plus.disabled = selectedTotal(boxChangeState.quantities) >= boxChangeState.requiredMeals;
           plus.addEventListener("click", function () {
             if (selectedTotal(boxChangeState.quantities) >= boxChangeState.requiredMeals) return;
-            boxChangeState.quantities[meal.id] += 1;
+            boxChangeState.quantities[mealId] += 1;
             renderBoxChangeMealGrid();
             updateBoxChangeCounts();
           });

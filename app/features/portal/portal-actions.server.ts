@@ -33,8 +33,11 @@ import {
   filterBuilderBoxesByObjective,
   findBuilderBoxByVariantId,
 } from "../builder/builder-box-selection";
-import { fetchBuilderBoxOptions } from "../builder/builder-catalog.server";
-import { getCollectionProducts, toPortalMeals } from "./portal-catalog.server";
+import {
+  fetchBuilderBoxOptions,
+  fetchBuilderMealOptions,
+} from "../builder/builder-catalog.server";
+import { getPortalMealsForObjective } from "./portal-catalog.server";
 import { getPortalV2BoxTitle, isPortalV2MealCount } from "./portal-boxes";
 import {
   getCustomerIdFromRequest,
@@ -139,6 +142,25 @@ type PortalActionContext = {
   formData: FormData;
   selectionId: string;
   shop: string;
+};
+
+const resolveSelectionObjective = async (
+  admin: Awaited<ReturnType<typeof unauthenticated.admin>>["admin"],
+  selection: {
+    boxVariantShopifyId: string | null;
+    subscriptionContractId: string | null;
+  },
+  boxCatalog: Awaited<ReturnType<typeof fetchBuilderBoxOptions>>,
+) => {
+  const currentVariantId =
+    (selection.subscriptionContractId
+      ? await fetchSubscriptionContractCurrentVariantId(
+          admin,
+          selection.subscriptionContractId,
+        )
+      : null) ?? selection.boxVariantShopifyId;
+
+  return findBuilderBoxByVariantId(boxCatalog, currentVariantId)?.objective ?? null;
 };
 
 const loadSyncedSelectionForAction = async ({
@@ -449,15 +471,23 @@ const handleResumeSubscriptionAction = async ({
     return renderMessage("Configuration incomplète.");
   }
 
-  const mealProducts = await getCollectionProducts(
-    admin,
-    settings.mealCollectionId,
-  );
-  const meals = toPortalMeals(mealProducts);
+  const [boxCatalog, mealCatalog] = await Promise.all([
+    fetchBuilderBoxOptions(admin),
+    fetchBuilderMealOptions(admin, settings.mealCollectionId),
+  ]);
+  const objective = await resolveSelectionObjective(admin, selection, boxCatalog);
+  const meals = getPortalMealsForObjective(mealCatalog, objective);
+
+  if (!objective) {
+    return renderMessage(
+      "Impossible de modifier les plats : l’objectif actuel n’a pas pu être déterminé.",
+    );
+  }
 
   const validation = validateMealSelection({
     meals,
     mealsCount: selection.mealsCount,
+    objective,
     quantities: parsedQuantities.quantities,
   });
 
@@ -578,15 +608,23 @@ const handleResumeSubscriptionAndPayAction = async ({
       return renderMessage("Configuration incomplète.");
     }
 
-    const mealProducts = await getCollectionProducts(
-      admin,
-      settings.mealCollectionId,
-    );
-    const meals = toPortalMeals(mealProducts);
+    const [boxCatalog, mealCatalog] = await Promise.all([
+      fetchBuilderBoxOptions(admin),
+      fetchBuilderMealOptions(admin, settings.mealCollectionId),
+    ]);
+    const objective = await resolveSelectionObjective(admin, selection, boxCatalog);
+    const meals = getPortalMealsForObjective(mealCatalog, objective);
+
+    if (!objective) {
+      return renderMessage(
+        "Impossible de modifier les plats : l’objectif actuel n’a pas pu être déterminé.",
+      );
+    }
 
     const validation = validateMealSelection({
       meals,
       mealsCount: selection.mealsCount,
+      objective,
       quantities: parsedQuantities.quantities,
     });
 
@@ -1054,9 +1092,9 @@ const handleChangeSubscriptionBoxAction = async ({
       return blockedResponse;
     }
 
-    const [catalog, mealProducts] = await Promise.all([
+    const [catalog, mealCatalog] = await Promise.all([
       fetchBuilderBoxOptions(admin),
-      getCollectionProducts(admin, settings.mealCollectionId),
+      fetchBuilderMealOptions(admin, settings.mealCollectionId),
     ]);
     const currentVariantId =
       (await fetchSubscriptionContractCurrentVariantId(
@@ -1101,10 +1139,11 @@ const handleChangeSubscriptionBoxAction = async ({
       });
     }
 
-    const meals = toPortalMeals(mealProducts);
+    const meals = getPortalMealsForObjective(mealCatalog, currentBox.objective);
     const validation = validateMealSelection({
       meals,
       mealsCount: selectedBox.mealCount,
+      objective: currentBox.objective,
       quantities: parsedQuantities.quantities,
     });
 
@@ -1202,12 +1241,23 @@ const handleUpdateFutureMealSelectionAction = async ({
     return renderMessage("Configuration incomplète.");
   }
 
-  const mealProducts = await getCollectionProducts(admin, settings.mealCollectionId);
-  const meals = toPortalMeals(mealProducts);
+  const [boxCatalog, mealCatalog] = await Promise.all([
+    fetchBuilderBoxOptions(admin),
+    fetchBuilderMealOptions(admin, settings.mealCollectionId),
+  ]);
+  const objective = await resolveSelectionObjective(admin, selection, boxCatalog);
+  const meals = getPortalMealsForObjective(mealCatalog, objective);
+
+  if (!objective) {
+    return renderMessage(
+      "Impossible de modifier les plats : l’objectif actuel n’a pas pu être déterminé.",
+    );
+  }
 
   const validation = validateMealSelection({
     meals,
     mealsCount: selection.mealsCount,
+    objective,
     quantities: parsedQuantities.quantities,
   });
 

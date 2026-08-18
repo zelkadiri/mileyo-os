@@ -18,7 +18,9 @@ export type PortalMeal = {
   id: string;
   imageAlt: string;
   imageUrl: string | null;
+  objective: SubscriptionObjective;
   title: string;
+  variantId: string;
   variantTitle: string;
 };
 

@@ -1,4 +1,5 @@
 import type { PortalMeal } from "../../app/features/portal/portal-types";
+import { SUBSCRIPTION_OBJECTIVE } from "../../app/constants/subscriptionObjective";
 
 export type BusinessCheck = {
   detail: string;
@@ -12,8 +13,10 @@ export const samplePortalMeals = (count: number): PortalMeal[] =>
     id: `meal-${index + 1}`,
     imageAlt: `Plat ${index + 1}`,
     imageUrl: null,
+    objective: SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS,
     title: `Plat ${index + 1}`,
-    variantTitle: "Standard",
+    variantId: `meal-${index + 1}`,
+    variantTitle: "Perte de poids",
   }));
 
 export type BusinessSuiteResult = {

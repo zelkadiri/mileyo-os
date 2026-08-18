@@ -483,7 +483,12 @@ export const renderPortal = ({
   const initialQuantities = Object.fromEntries(
     selections.map((selection) => [
       selection.id,
-      titlesToQuantities(selection.selectedMeals, meals),
+      titlesToQuantities(
+        selection.selectedMeals,
+        selection.objective
+          ? meals.filter((meal) => meal.objective === selection.objective)
+          : [],
+      ),
     ]),
   );
 

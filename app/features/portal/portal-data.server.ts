@@ -30,7 +30,10 @@ import {
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
 import { dedupeSubscriptionSelectionsByContract } from "../../services/subscriptionMealSelection.server";
 import { derivePortalResumeUi } from "./portal-resume.server";
-import { getCollectionProducts, toPortalMeals } from "./portal-catalog.server";
+import {
+  fetchPortalMealOptions,
+  toPortalMealsFromBuilder,
+} from "./portal-catalog.server";
 import {
   getPortalObjectiveLabel,
   getPortalV2BoxTitle,
@@ -188,11 +191,11 @@ export const loadPortalData = async ({
   }
 
   const { admin } = await unauthenticated.admin(shop);
-  const [mealProducts, catalog] = await Promise.all([
-    getCollectionProducts(admin, settings.mealCollectionId),
+  const [mealCatalog, catalog] = await Promise.all([
+    fetchPortalMealOptions(admin, settings.mealCollectionId),
     fetchBuilderBoxOptions(admin),
   ]);
-  const meals = toPortalMeals(mealProducts);
+  const meals = toPortalMealsFromBuilder(mealCatalog);
   const boxes = toPortalV2BoxProducts(catalog);
 
   const manageableRecords = await prisma.subscriptionMealSelection.findMany({
