@@ -29,7 +29,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   if (!portalData) {
     return renderMessage(
-      "Configuration incomplète. Les collections box et plats doivent être configurées.",
+      "Configuration incomplète. La collection de plats doit être configurée.",
     );
   }
 

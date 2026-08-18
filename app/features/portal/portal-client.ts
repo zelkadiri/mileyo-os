@@ -349,7 +349,7 @@ export const portalClientScript = `
         changeBoxButton: changeBoxButton,
         confirmButton: boxChangeEditor.querySelector(".box-change-confirm"),
         counts: boxChangeEditor.querySelectorAll(".box-change-count"),
-        currentBoxId: selection.boxProductShopifyId,
+        currentVariantId: selection.currentVariantId,
         errorMessages: boxChangeEditor.querySelectorAll(".box-change-error"),
         mealGrid: boxChangeEditor.querySelector(".box-change-meal-grid"),
         quantities: {},
@@ -452,7 +452,7 @@ export const portalClientScript = `
 
       function updateSelectedBoxLabels() {
         var label = boxChangeState.selectedBox
-          ? boxChangeState.selectedBox.title + " · " + boxChangeState.selectedBox.mealCount + " repas · " + formatPrice(boxChangeState.selectedBox.subscriptionPrice)
+          ? boxChangeState.selectedBox.title + " · " + boxChangeState.selectedBox.mealCount + " repas · " + formatPrice(boxChangeState.selectedBox.price)
           : "";
         boxChangeEditor.querySelectorAll(".box-change-selected-box").forEach(function (node) {
           node.textContent = label;
@@ -466,7 +466,7 @@ export const portalClientScript = `
         boxChangeState.quantities = {};
         boxChangeState.requiredMeals = 0;
         boxChangeEditor.querySelectorAll(".box-card").forEach(function (node) {
-          node.classList.toggle("selected", node.getAttribute("data-box-id") === boxChangeState.currentBoxId);
+          node.classList.toggle("selected", node.getAttribute("data-variant-id") === boxChangeState.currentVariantId);
         });
         setBoxChangeError(boxChangeState, "");
         changeBoxButton.classList.add("hidden");
@@ -484,17 +484,22 @@ export const portalClientScript = `
             return;
           }
 
-          var boxId = boxCard.getAttribute("data-box-id");
+          var variantId = boxCard.getAttribute("data-variant-id");
           var selectedBox = data.boxes.find(function (box) {
-            return box.id === boxId;
+            return box.variantId === variantId;
           });
           if (!selectedBox || selectedBox.mealCount == null) return;
+
+          if (selection.objective && selectedBox.objective !== selection.objective) {
+            setBoxChangeError(boxChangeState, "Cette box n’est pas disponible pour votre objectif actuel.");
+            return;
+          }
 
           boxChangeState.selectedBox = selectedBox;
           boxChangeState.requiredMeals = selectedBox.mealCount;
           boxChangeState.quantities = {};
           boxChangeEditor.querySelectorAll(".box-card").forEach(function (node) {
-            node.classList.toggle("selected", node.getAttribute("data-box-id") === boxId);
+            node.classList.toggle("selected", node.getAttribute("data-variant-id") === variantId);
           });
           updateSelectedBoxLabels();
           setBoxChangeError(boxChangeState, "");
@@ -537,7 +542,7 @@ export const portalClientScript = `
           var body = new URLSearchParams();
           body.set("intent", "changeSubscriptionBox");
           body.set("selectionId", boxChangeState.selectionId);
-          body.set("boxProductId", boxChangeState.selectedBox.id);
+          body.set("productVariantId", boxChangeState.selectedBox.variantId);
           body.set("selectedMeals", JSON.stringify(boxChangeState.quantities));
 
           fetch(window.location.pathname + window.location.search, {

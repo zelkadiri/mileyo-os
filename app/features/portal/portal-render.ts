@@ -1,4 +1,3 @@
-import type { PortalBoxProduct } from "../../services/subscriptionBoxCatalog.server";
 import { escapeHtml, scriptJson } from "../../utils/html";
 import {
   formatFinancialStatus,
@@ -24,6 +23,7 @@ import type {
   PortalSelection,
   PortalSubscriptionState,
   PortalTerminalSelection,
+  PortalBoxProduct,
 } from "./portal-types";
 
 const htmlResponse = (html: string) =>
@@ -87,40 +87,16 @@ export const renderMessage = (message: string, options?: { loginLink?: boolean }
 
 const renderBoxPickerCards = (
   boxes: PortalBoxProduct[],
-  currentBoxProductId: string | null,
+  currentVariantId: string | null,
 ) =>
   boxes
     .map((box) => {
-      const isCurrent = box.id === currentBoxProductId;
-      const isAvailable = box.mealCount !== null;
-
-      if (!isAvailable) {
-        return `<button
-        class="box-card unavailable"
-        data-available="false"
-        data-box-id="${escapeHtml(box.id)}"
-        disabled
-        type="button"
-      >
-        ${
-          box.imageUrl
-            ? `<img alt="${escapeHtml(box.imageAlt)}" src="${escapeHtml(box.imageUrl)}" />`
-            : ""
-        }
-        <span class="box-card-title">${escapeHtml(box.title)}</span>
-        <span class="box-card-meta">Non disponible</span>
-        ${
-          box.subscriptionPrice
-            ? `<span class="box-card-price">${escapeHtml(formatSubscriptionPrice(box.subscriptionPrice))}</span>`
-            : ""
-        }
-      </button>`;
-      }
+      const isCurrent = box.variantId === currentVariantId;
 
       return `<button
         class="box-card${isCurrent ? " selected" : ""}"
         data-available="true"
-        data-box-id="${escapeHtml(box.id)}"
+        data-variant-id="${escapeHtml(box.variantId)}"
         data-meal-count="${box.mealCount}"
         type="button"
       >
@@ -131,7 +107,7 @@ const renderBoxPickerCards = (
         }
         <span class="box-card-title">${escapeHtml(box.title)}</span>
         <span class="box-card-meta">${box.mealCount} repas</span>
-        <span class="box-card-price">${escapeHtml(formatSubscriptionPrice(box.subscriptionPrice))}</span>
+        <span class="box-card-price">${escapeHtml(formatSubscriptionPrice(box.price))}</span>
         ${isCurrent ? `<span class="box-card-badge">Box actuelle</span>` : ""}
       </button>`;
     })
@@ -218,6 +194,14 @@ const renderKeyInfoGrid = (selection: PortalSelection) => {
         <span class="key-info-label">Box</span>
         <span class="key-info-value">${escapeHtml(selection.boxTitle ?? "Non renseignée")}</span>
       </div>
+      ${
+        selection.objectiveLabel
+          ? `<div class="key-info-item">
+        <span class="key-info-label">Objectif</span>
+        <span class="key-info-value">${escapeHtml(selection.objectiveLabel)}</span>
+      </div>`
+          : ""
+      }
       <div class="key-info-item">
         <span class="key-info-label">Nombre de repas</span>
         <span class="key-info-value">${selection.mealsCount}</span>
@@ -249,6 +233,11 @@ const renderNextBoxCard = ({
   const isModificationBlocked = selection.modificationBlocked;
   const modificationBlockedReason =
     selection.modificationBlockedReason ?? selection.boxChangeBlockedReason;
+  const pickerBoxes = selection.objective
+    ? boxes.filter((box) => box.objective === selection.objective)
+    : [];
+  const canChangeBox =
+    !isResumeProcessing && !isModificationBlocked && pickerBoxes.length > 0;
   const resumeRequiresPayment = selection.resumeRequiresPayment;
   const resumeButtonLabel = resumeRequiresPayment
     ? "Reprendre mon abonnement et payer maintenant"
@@ -289,7 +278,7 @@ const renderNextBoxCard = ({
           : ""
       }
       ${
-        !isResumeProcessing && !isModificationBlocked
+        canChangeBox
           ? `<button class="portal-button secondary change-box-button" type="button">Changer de box</button>`
           : ""
       }
@@ -309,7 +298,7 @@ const renderNextBoxCard = ({
           <h3>Choisir une nouvelle box</h3>
           <p class="editor-notice">Ce changement sera appliqué uniquement à votre prochaine commande.</p>
           <p class="editor-notice">Le prix de votre prochain prélèvement sera ajusté selon la box choisie.</p>
-          <div class="box-grid">${renderBoxPickerCards(boxes, selection.boxProductShopifyId)}</div>
+          <div class="box-grid">${renderBoxPickerCards(pickerBoxes, selection.currentVariantId)}</div>
           <p class="error box-change-error hidden"></p>
           <button class="portal-button secondary box-change-cancel" type="button">Annuler</button>
         </div>

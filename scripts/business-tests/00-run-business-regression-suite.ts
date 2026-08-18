@@ -52,6 +52,7 @@ const BUSINESS_SUITES = [
   "29-subscription-payment-recovery-cycle.test.ts",
   "30-portal-resume-cycle-billing.test.ts",
   "31-subscription-delivery-billing-alignment-cycle.test.ts",
+  "32-portal-v2-box-catalog.test.ts",
 ];
 
 const LEGACY_SUITES = [

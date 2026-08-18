@@ -17,14 +17,10 @@ import {
   getPortalModificationBlockMessage,
   getPortalModificationBlockReason,
 } from "../../services/subscriptionModificationBlock.server";
-import {
-  fetchBoxCatalogProducts,
-  resolveCurrentBoxProduct,
-  toPortalBoxProducts,
-  toTrustedBoxProducts,
-  type PortalBoxProduct,
-} from "../../services/subscriptionBoxCatalog.server";
+import { fetchSubscriptionContractCurrentVariantId } from "../../services/subscriptionContractBoxChange.server";
 import { getMerchantSupportContact } from "../../utils/merchantSupport.server";
+import { fetchBuilderBoxOptions } from "../builder/builder-catalog.server";
+import { findBuilderBoxByVariantId } from "../builder/builder-box-selection";
 import type { PaymentUpdateUnavailableReason } from "../../constants/subscriptionPaymentRecovery";
 import { getDeliveryCutoffStatus, projectActiveScheduledDeliveryDate } from "../../utils/deliveryDate";
 import {
@@ -36,12 +32,18 @@ import { dedupeSubscriptionSelectionsByContract } from "../../services/subscript
 import { derivePortalResumeUi } from "./portal-resume.server";
 import { getCollectionProducts, toPortalMeals } from "./portal-catalog.server";
 import {
+  getPortalObjectiveLabel,
+  getPortalV2BoxTitle,
+  toPortalV2BoxProducts,
+} from "./portal-boxes";
+import {
   extractOrderPrice,
   extractOrderStatusUrl,
   getSelectedMeals,
   isPortalForecastEligible,
 } from "./portal-formatters";
 import type {
+  PortalBoxProduct,
   PortalForecastCycle,
   PortalHistoryOrder,
   PortalMeal,
@@ -181,18 +183,17 @@ export const loadPortalData = async ({
 }): Promise<PortalData | null> => {
   const settings = await prisma.appSettings.findUnique({ where: { shop } });
 
-  if (!settings?.mealCollectionId || !settings.boxCollectionId) {
+  if (!settings?.mealCollectionId) {
     return null;
   }
 
   const { admin } = await unauthenticated.admin(shop);
-  const [mealProducts, boxCatalog] = await Promise.all([
+  const [mealProducts, catalog] = await Promise.all([
     getCollectionProducts(admin, settings.mealCollectionId),
-    fetchBoxCatalogProducts(admin, settings.boxCollectionId),
+    fetchBuilderBoxOptions(admin),
   ]);
   const meals = toPortalMeals(mealProducts);
-  const trustedBoxes = toTrustedBoxProducts(boxCatalog);
-  const boxes = toPortalBoxProducts(boxCatalog);
+  const boxes = toPortalV2BoxProducts(catalog);
 
   const manageableRecords = await prisma.subscriptionMealSelection.findMany({
     orderBy: { createdAt: "desc" },
@@ -277,15 +278,26 @@ export const loadPortalData = async ({
           reconciled,
           recoveryRecord,
         );
-        const currentBox = resolveCurrentBoxProduct(trustedBoxes, {
-          boxProductShopifyId: reconciled.boxProductShopifyId,
-          boxTitle: reconciled.boxTitle,
-          mealsCount: reconciled.mealsCount,
-        });
+        let currentVariantId: string | null = null;
+
+        if (reconciled.subscriptionContractId) {
+          currentVariantId = await fetchSubscriptionContractCurrentVariantId(
+            admin,
+            reconciled.subscriptionContractId,
+          );
+        }
+
+        if (!currentVariantId) {
+          currentVariantId = reconciled.boxVariantShopifyId?.trim() || null;
+        }
+
+        const currentBox = findBuilderBoxByVariantId(catalog, currentVariantId);
+        const objective = currentBox?.objective ?? null;
         const boxSubscriptionPrice =
-          reconciled.boxSubscriptionPrice ??
-          currentBox?.subscriptionPrice ??
-          null;
+          currentBox?.price ?? reconciled.boxSubscriptionPrice ?? null;
+        const boxTitle = currentBox
+          ? getPortalV2BoxTitle(currentBox.mealCount)
+          : reconciled.boxTitle;
 
         let forecastCycles: PortalForecastCycle[] = [];
 
@@ -303,7 +315,7 @@ export const loadPortalData = async ({
             forecastCycles = buildForecastCycles({
               billingPolicy,
               boxSubscriptionPrice,
-              boxTitle: reconciled.boxTitle,
+              boxTitle,
               mealsCount: reconciled.mealsCount as number,
               nextBillingDate: reconciled.nextBillingDate,
             });
@@ -344,13 +356,14 @@ export const loadPortalData = async ({
               isPassed: cutoff.isPassed,
             };
           })(),
-          boxProductShopifyId:
-            reconciled.boxProductShopifyId ?? currentBox?.id ?? null,
           boxSubscriptionPrice,
-          boxTitle: reconciled.boxTitle,
+          boxTitle,
+          currentVariantId: currentBox?.variantId ?? currentVariantId,
           forecastCycles,
           id: reconciled.id,
           mealsCount: reconciled.mealsCount as number,
+          objective,
+          objectiveLabel: getPortalObjectiveLabel(objective),
           nextBillingDate: reconciled.nextBillingDate?.toISOString() ?? null,
           nextScheduledDeliveryDate:
             effectiveNextScheduledDeliveryDate ?? null,

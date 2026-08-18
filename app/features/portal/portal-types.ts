@@ -1,7 +1,18 @@
 import type { PaymentUpdateUnavailableReason } from "../../constants/subscriptionPaymentRecovery";
+import type { SubscriptionObjective } from "../../constants/subscriptionObjective";
 import type { PortalSubscriptionState } from "../../constants/subscriptionStatus";
 
 export type { PortalSubscriptionState };
+
+export type PortalBoxProduct = {
+  imageAlt: string;
+  imageUrl: string | null;
+  mealCount: number;
+  objective: SubscriptionObjective;
+  price: string;
+  title: string;
+  variantId: string;
+};
 
 export type PortalMeal = {
   id: string;
@@ -57,12 +68,14 @@ export type PortalSelection = {
   modificationBlocked: boolean;
   modificationBlockedReason: string | null;
   deliveryCutoff: PortalDeliveryCutoffStatus;
-  boxProductShopifyId: string | null;
   boxSubscriptionPrice: string | null;
   boxTitle: string | null;
+  currentVariantId: string | null;
   forecastCycles: PortalForecastCycle[];
   id: string;
   mealsCount: number;
+  objective: SubscriptionObjective | null;
+  objectiveLabel: string | null;
   nextBillingDate: string | null;
   /** ISO date `YYYY-MM-DD` — prochaine livraison planifiée. */
   nextScheduledDeliveryDate: string | null;

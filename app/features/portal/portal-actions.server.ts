@@ -20,18 +20,22 @@ import {
   resolvePaymentUpdateEligibility,
   sendPaymentUpdateEmailForSelection,
 } from "../../services/subscriptionPaymentRecovery.server";
-import { updateSubscriptionContractBoxViaDraft } from "../../services/subscriptionContractBoxChange.server";
+import {
+  fetchSubscriptionContractCurrentVariantId,
+  updateSubscriptionContractBoxViaDraft,
+} from "../../services/subscriptionContractBoxChange.server";
 import {
   getPortalModificationBlockMessage,
   getPortalModificationBlockReason,
   type PortalModificationActionKind,
 } from "../../services/subscriptionModificationBlock.server";
 import {
-  fetchTrustedBoxCatalog,
-  resolveCurrentBoxProduct,
-  resolveTrustedBoxProduct,
-} from "../../services/subscriptionBoxCatalog.server";
+  filterBuilderBoxesByObjective,
+  findBuilderBoxByVariantId,
+} from "../builder/builder-box-selection";
+import { fetchBuilderBoxOptions } from "../builder/builder-catalog.server";
 import { getCollectionProducts, toPortalMeals } from "./portal-catalog.server";
+import { getPortalV2BoxTitle, isPortalV2MealCount } from "./portal-boxes";
 import {
   getCustomerIdFromRequest,
   getShopFromRequest,
@@ -995,7 +999,7 @@ const handleChangeSubscriptionBoxAction = async ({
   selectionId,
   shop,
 }: PortalActionContext) => {
-    const boxProductId = String(formData.get("boxProductId") ?? "").trim();
+    const productVariantId = String(formData.get("productVariantId") ?? "").trim();
     const selectedMealsRaw = String(formData.get("selectedMeals") ?? "");
     const parsedQuantities = parseMealQuantities(selectedMealsRaw);
 
@@ -1003,7 +1007,7 @@ const handleChangeSubscriptionBoxAction = async ({
       return renderMessage(parsedQuantities.error);
     }
 
-    if (!boxProductId) {
+    if (!productVariantId) {
       return renderMessage("Veuillez sélectionner une box.");
     }
 
@@ -1032,7 +1036,7 @@ const handleChangeSubscriptionBoxAction = async ({
 
     const settings = await prisma.appSettings.findUnique({ where: { shop } });
 
-    if (!settings?.mealCollectionId || !settings.boxCollectionId) {
+    if (!settings?.mealCollectionId) {
       return renderMessage("Configuration incomplète.");
     }
 
@@ -1050,20 +1054,38 @@ const handleChangeSubscriptionBoxAction = async ({
       return blockedResponse;
     }
 
-    const [trustedBoxes, mealProducts] = await Promise.all([
-      fetchTrustedBoxCatalog(admin, settings.boxCollectionId),
+    const [catalog, mealProducts] = await Promise.all([
+      fetchBuilderBoxOptions(admin),
       getCollectionProducts(admin, settings.mealCollectionId),
     ]);
-    const trustedBox = resolveTrustedBoxProduct(trustedBoxes, boxProductId);
+    const currentVariantId =
+      (await fetchSubscriptionContractCurrentVariantId(
+        admin,
+        selection.subscriptionContractId,
+      )) ?? selection.boxVariantShopifyId;
+    const currentBox = findBuilderBoxByVariantId(catalog, currentVariantId);
 
-    if (!trustedBox) {
+    if (!currentBox) {
+      return renderMessage(
+        "Impossible de changer de box : l’objectif actuel n’a pas pu être déterminé.",
+      );
+    }
+
+    const allowedBoxes = filterBuilderBoxesByObjective(
+      catalog,
+      currentBox.objective,
+    );
+    const selectedBox = findBuilderBoxByVariantId(allowedBoxes, productVariantId);
+
+    if (
+      !selectedBox ||
+      selectedBox.objective !== currentBox.objective ||
+      !isPortalV2MealCount(selectedBox.mealCount)
+    ) {
       return renderMessage("La box sélectionnée n’est pas disponible.");
     }
 
-    const currentBox = resolveCurrentBoxProduct(trustedBoxes, selection);
-    const isSameBox =
-      currentBox?.id === trustedBox.id &&
-      selection.mealsCount === trustedBox.mealCount;
+    const isSameBox = currentBox.variantId === selectedBox.variantId;
 
     if (isSameBox) {
       const portalData = await loadPortalData({ customerShopifyId, shop });
@@ -1082,7 +1104,7 @@ const handleChangeSubscriptionBoxAction = async ({
     const meals = toPortalMeals(mealProducts);
     const validation = validateMealSelection({
       meals,
-      mealsCount: trustedBox.mealCount,
+      mealsCount: selectedBox.mealCount,
       quantities: parsedQuantities.quantities,
     });
 
@@ -1092,18 +1114,22 @@ const handleChangeSubscriptionBoxAction = async ({
 
     await updateSubscriptionContractBoxViaDraft({
       admin,
-      box: trustedBox,
+      box: {
+        price: selectedBox.price,
+        sellingPlanId: selectedBox.sellingPlanId,
+        variantId: selectedBox.variantId,
+      },
       subscriptionContractId: selection.subscriptionContractId,
     });
 
     await prisma.subscriptionMealSelection.update({
       data: {
-        boxProductShopifyId: trustedBox.id,
-        boxSellingPlanShopifyId: trustedBox.sellingPlanId,
-        boxSubscriptionPrice: trustedBox.subscriptionPrice,
-        boxTitle: trustedBox.title,
-        boxVariantShopifyId: trustedBox.variantId,
-        mealsCount: trustedBox.mealCount,
+        boxProductShopifyId: selectedBox.productId,
+        boxSellingPlanShopifyId: selectedBox.sellingPlanId,
+        boxSubscriptionPrice: selectedBox.price,
+        boxTitle: getPortalV2BoxTitle(selectedBox.mealCount),
+        boxVariantShopifyId: selectedBox.variantId,
+        mealsCount: selectedBox.mealCount,
         selectedMeals: validation.titles as Prisma.InputJsonValue,
       },
       where: { id: selection.id },

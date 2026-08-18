@@ -1,7 +1,6 @@
 import { getGraphqlUserErrors } from "../utils/graphql";
 import { toSubscriptionContractGid } from "../utils/shopifyIds.server";
 import type { ShopifyAdminGraphql } from "./subscriptionBillingWorker.server";
-import type { TrustedBoxProduct } from "./subscriptionBoxCatalog.server";
 import {
   getSubscriptionModificationBlockMessage,
   getSubscriptionModificationBlockReason,
@@ -133,7 +132,13 @@ export const getSubscriptionBoxChangeBlockMessage = (
   reason: BoxChangeBlockReason,
 ) => getSubscriptionModificationBlockMessage(reason);
 
-const fetchPrimarySubscriptionLine = async (
+export type SubscriptionContractBoxChangeInput = {
+  price: string;
+  sellingPlanId: string;
+  variantId: string;
+};
+
+const readSubscriptionContractPrimaryLine = async (
   admin: ShopifyAdminGraphql,
   subscriptionContractId: string,
 ) => {
@@ -154,21 +159,51 @@ const fetchPrimarySubscriptionLine = async (
   }
 
   const contract = json.data?.subscriptionContract;
+  const line = contract?.lines?.nodes?.[0];
 
-  if (!contract?.id) {
+  return {
+    contractId: contract?.id ?? null,
+    lineId: line?.id ?? null,
+    nextBillingDate: contract?.nextBillingDate ?? null,
+    variantId: line?.variantId?.trim() || null,
+  };
+};
+
+/** Read-only — current Shopify contract variant. Does not draft or commit. */
+export const fetchSubscriptionContractCurrentVariantId = async (
+  admin: ShopifyAdminGraphql,
+  subscriptionContractId: string,
+): Promise<string | null> => {
+  const line = await readSubscriptionContractPrimaryLine(
+    admin,
+    subscriptionContractId,
+  );
+
+  return line.variantId;
+};
+
+const fetchPrimarySubscriptionLine = async (
+  admin: ShopifyAdminGraphql,
+  subscriptionContractId: string,
+) => {
+  const line = await readSubscriptionContractPrimaryLine(
+    admin,
+    subscriptionContractId,
+  );
+
+  if (!line.contractId) {
     throw new Error("Contrat d’abonnement Shopify introuvable.");
   }
 
-  const line = contract.lines?.nodes?.[0];
-
-  if (!line?.id) {
+  if (!line.lineId) {
     throw new Error("Aucune ligne d’abonnement trouvée sur le contrat Shopify.");
   }
 
   return {
-    contractId: contract.id,
-    lineId: line.id,
-    nextBillingDate: contract.nextBillingDate ?? null,
+    contractId: line.contractId,
+    lineId: line.lineId,
+    nextBillingDate: line.nextBillingDate,
+    variantId: line.variantId,
   };
 };
 
@@ -178,7 +213,7 @@ export const updateSubscriptionContractBoxViaDraft = async ({
   subscriptionContractId,
 }: {
   admin: ShopifyAdminGraphql;
-  box: TrustedBoxProduct;
+  box: SubscriptionContractBoxChangeInput;
   subscriptionContractId: string;
 }) => {
   const contract = await fetchPrimarySubscriptionLine(
@@ -220,7 +255,7 @@ export const updateSubscriptionContractBoxViaDraft = async ({
       variables: {
         draftId,
         input: {
-          currentPrice: box.subscriptionPrice,
+          currentPrice: box.price,
           productVariantId: box.variantId,
           quantity: 1,
           sellingPlanId: box.sellingPlanId,
