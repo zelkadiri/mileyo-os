@@ -3,11 +3,15 @@ import {
   BOX_V2_MEAL_COUNTS,
   type BoxV2MealCount,
 } from "../../constants/subscriptionBoxCatalogV2";
+import { isTerminalPortalDisplayStatus } from "../../constants/subscriptionStatus";
 import {
   SUBSCRIPTION_OBJECTIVE_OPTION_LABEL,
   type SubscriptionObjective,
 } from "../../constants/subscriptionObjective";
-import { filterBuilderBoxesByObjective } from "../builder/builder-box-selection";
+import {
+  filterBuilderBoxesByObjective,
+  findBuilderBoxByVariantId,
+} from "../builder/builder-box-selection";
 import type { BuilderBoxOption } from "../builder/builder-types";
 import type { PortalBoxProduct } from "./portal-types";
 
@@ -61,3 +65,24 @@ export const getPortalPickerBoxesForObjective = (
   objective: SubscriptionObjective | null | undefined,
 ): PortalBoxProduct[] =>
   toPortalV2BoxProducts(filterBuilderBoxesByObjective(boxes, objective));
+
+/** Next-box listing uses the live contract variant against the loaded V2 catalog. */
+export const shouldIncludeInPortalNextBox = ({
+  catalog,
+  currentVariantId,
+  status,
+}: {
+  catalog: readonly BuilderBoxOption[];
+  currentVariantId: string | null | undefined;
+  status: string;
+}): boolean => {
+  if (isTerminalPortalDisplayStatus(status)) {
+    return false;
+  }
+
+  if (catalog.length === 0) {
+    return true;
+  }
+
+  return findBuilderBoxByVariantId(catalog, currentVariantId) !== null;
+};

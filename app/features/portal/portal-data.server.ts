@@ -25,6 +25,7 @@ import type { PaymentUpdateUnavailableReason } from "../../constants/subscriptio
 import { getDeliveryCutoffStatus, projectActiveScheduledDeliveryDate } from "../../utils/deliveryDate";
 import {
   formatMealSelectionStatusLabel,
+  isTerminalPortalDisplayStatus,
   TERMINAL_PORTAL_DISPLAY_STATUSES,
 } from "../../constants/subscriptionStatus";
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
@@ -37,6 +38,7 @@ import {
 import {
   getPortalObjectiveLabel,
   getPortalV2BoxTitle,
+  shouldIncludeInPortalNextBox,
   toPortalV2BoxProducts,
 } from "./portal-boxes";
 import {
@@ -241,7 +243,7 @@ export const loadPortalData = async ({
 
   const merchantSupport = getMerchantSupportContact();
 
-  const selections: PortalSelection[] = await Promise.all(
+  const mappedManageable = await Promise.all(
     visibleManageable
       .filter((record) => typeof record.mealsCount === "number" && record.mealsCount > 0)
       .map(async (record) => {
@@ -249,6 +251,34 @@ export const loadPortalData = async ({
           admin,
           record,
         );
+
+        if (isTerminalPortalDisplayStatus(reconciled.status)) {
+          return { selection: null, terminalRecord: reconciled };
+        }
+
+        let currentVariantId: string | null = null;
+
+        if (reconciled.subscriptionContractId) {
+          currentVariantId = await fetchSubscriptionContractCurrentVariantId(
+            admin,
+            reconciled.subscriptionContractId,
+          );
+        }
+
+        if (!currentVariantId) {
+          currentVariantId = reconciled.boxVariantShopifyId?.trim() || null;
+        }
+
+        if (
+          !shouldIncludeInPortalNextBox({
+            catalog,
+            currentVariantId,
+            status: reconciled.status,
+          })
+        ) {
+          return { selection: null, terminalRecord: null };
+        }
+
         const portalState = derivePortalSubscriptionState(reconciled);
         const recoveryRecord =
           portalState === "resume_processing"
@@ -281,19 +311,6 @@ export const loadPortalData = async ({
           reconciled,
           recoveryRecord,
         );
-        let currentVariantId: string | null = null;
-
-        if (reconciled.subscriptionContractId) {
-          currentVariantId = await fetchSubscriptionContractCurrentVariantId(
-            admin,
-            reconciled.subscriptionContractId,
-          );
-        }
-
-        if (!currentVariantId) {
-          currentVariantId = reconciled.boxVariantShopifyId?.trim() || null;
-        }
-
         const currentBox = findBuilderBoxByVariantId(catalog, currentVariantId);
         const objective = currentBox?.objective ?? null;
         const boxSubscriptionPrice =
@@ -340,55 +357,69 @@ export const loadPortalData = async ({
         });
 
         return {
-          boxChangeBlocked: modificationBlockReason !== null,
-          boxChangeBlockedReason: modificationBlockReason
-            ? getPortalModificationBlockMessage(modificationBlockReason)
-            : null,
-          modificationBlocked: modificationBlockReason !== null,
-          modificationBlockedReason: modificationBlockReason
-            ? getPortalModificationBlockMessage(modificationBlockReason)
-            : null,
-          deliveryCutoff: (() => {
-            const cutoff = getDeliveryCutoffStatus(
-              effectiveNextScheduledDeliveryDate,
-            );
+          selection: {
+            boxChangeBlocked: modificationBlockReason !== null,
+            boxChangeBlockedReason: modificationBlockReason
+              ? getPortalModificationBlockMessage(modificationBlockReason)
+              : null,
+            modificationBlocked: modificationBlockReason !== null,
+            modificationBlockedReason: modificationBlockReason
+              ? getPortalModificationBlockMessage(modificationBlockReason)
+              : null,
+            deliveryCutoff: (() => {
+              const cutoff = getDeliveryCutoffStatus(
+                effectiveNextScheduledDeliveryDate,
+              );
 
-            return {
-              deadlineLabel: cutoff.deadlineLabel,
-              isKnown: cutoff.isKnown,
-              isPassed: cutoff.isPassed,
-            };
-          })(),
-          boxSubscriptionPrice,
-          boxTitle,
-          currentVariantId: currentBox?.variantId ?? currentVariantId,
-          forecastCycles,
-          id: reconciled.id,
-          mealsCount: reconciled.mealsCount as number,
-          objective,
-          objectiveLabel: getPortalObjectiveLabel(objective),
-          nextBillingDate: reconciled.nextBillingDate?.toISOString() ?? null,
-          nextScheduledDeliveryDate:
-            effectiveNextScheduledDeliveryDate ?? null,
-          portalState,
-          recovery: recoveryRecord
-            ? {
-                failureCount: recoveryRecord.failureCount,
-                isFinalFailed: recoveryRecord.status === "final_failed",
-                nextRetryAt: recoveryRecord.nextRetryAt?.toISOString() ?? null,
-                paymentUpdateAvailable,
-                paymentUpdateUnavailableReason,
-                status: recoveryRecord.status,
-              }
-            : null,
-          resumeBlockedMessage: resumeUi.resumeBlockedMessage,
-          resumeRequiresPayment: resumeUi.resumeRequiresPayment,
-          selectedMeals: getSelectedMeals(reconciled.selectedMeals),
-          shopifyOrderName: reconciled.shopifyOrderName,
-          status: reconciled.status,
+              return {
+                deadlineLabel: cutoff.deadlineLabel,
+                isKnown: cutoff.isKnown,
+                isPassed: cutoff.isPassed,
+              };
+            })(),
+            boxSubscriptionPrice,
+            boxTitle,
+            currentVariantId: currentBox?.variantId ?? currentVariantId,
+            forecastCycles,
+            id: reconciled.id,
+            mealsCount: reconciled.mealsCount as number,
+            objective,
+            objectiveLabel: getPortalObjectiveLabel(objective),
+            nextBillingDate: reconciled.nextBillingDate?.toISOString() ?? null,
+            nextScheduledDeliveryDate:
+              effectiveNextScheduledDeliveryDate ?? null,
+            portalState,
+            recovery: recoveryRecord
+              ? {
+                  failureCount: recoveryRecord.failureCount,
+                  isFinalFailed: recoveryRecord.status === "final_failed",
+                  nextRetryAt: recoveryRecord.nextRetryAt?.toISOString() ?? null,
+                  paymentUpdateAvailable,
+                  paymentUpdateUnavailableReason,
+                  status: recoveryRecord.status,
+                }
+              : null,
+            resumeBlockedMessage: resumeUi.resumeBlockedMessage,
+            resumeRequiresPayment: resumeUi.resumeRequiresPayment,
+            selectedMeals: getSelectedMeals(reconciled.selectedMeals),
+            shopifyOrderName: reconciled.shopifyOrderName,
+            status: reconciled.status,
+          },
+          terminalRecord: null,
         };
       }),
   );
+
+  const selections: PortalSelection[] = mappedManageable.flatMap((mapped) =>
+    mapped.selection ? [mapped.selection] : [],
+  );
+  const extraTerminalRecords = mappedManageable.flatMap((mapped) =>
+    mapped.terminalRecord ? [mapped.terminalRecord] : [],
+  );
+  const visibleTerminalWithReconcile = dedupeSubscriptionSelectionsByContract([
+    ...visibleTerminal,
+    ...extraTerminalRecords,
+  ]);
 
   const historyOrders = await loadPortalHistoryOrders({
     shop,
@@ -416,7 +447,7 @@ export const loadPortalData = async ({
 
   const terminalContractIds = [
     ...new Set(
-      visibleTerminal
+      visibleTerminalWithReconcile
         .map((record) => normalizeShopifyId(record.subscriptionContractId))
         .filter((id): id is string => Boolean(id)),
     ),
@@ -443,7 +474,7 @@ export const loadPortalData = async ({
     }
   }
 
-  const terminalSelections: PortalTerminalSelection[] = visibleTerminal
+  const terminalSelections: PortalTerminalSelection[] = visibleTerminalWithReconcile
     .filter((record) => typeof record.mealsCount === "number" && record.mealsCount > 0)
     .map((record) => {
       const contractId = normalizeShopifyId(record.subscriptionContractId);
