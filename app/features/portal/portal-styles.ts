@@ -278,6 +278,42 @@ body {
   margin-top: 0;
 }
 
+.objective-support {
+  border-top: 1px solid rgba(220, 194, 240, 0.45);
+  margin-top: 16px;
+  padding-top: 16px;
+}
+
+.change-objective-button {
+  background: transparent;
+  border-color: rgba(185, 138, 215, 0.45);
+  box-shadow: none;
+  color: var(--mileyo-purple-dark);
+  margin-top: 0;
+}
+
+.change-objective-button:hover:not(:disabled) {
+  background: rgba(220, 194, 240, 0.12);
+  border-color: var(--mileyo-purple-dark);
+}
+
+.objective-support-panel {
+  margin-top: 12px;
+}
+
+.objective-support-message {
+  color: var(--mileyo-text);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0 0 12px;
+}
+
+.objective-support-contact {
+  margin-top: 0;
+  text-align: center;
+  text-decoration: none;
+}
+
 .success {
   background: rgba(124, 201, 167, 0.16);
   border: 1px solid rgba(124, 201, 167, 0.35);

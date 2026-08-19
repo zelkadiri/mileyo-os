@@ -288,6 +288,13 @@ const renderNextBoxCard = ({
           : ""
       }
       </div>
+      <div class="objective-support">
+        <button class="portal-button secondary change-objective-button" type="button">Changer d'objectif</button>
+        <div class="objective-support-panel hidden">
+          <p class="objective-support-message">Le changement d'objectif nécessite l'aide de notre équipe afin d'adapter votre abonnement. Contactez-nous via le chat.</p>
+          <a class="portal-button objective-support-contact" href="${escapeHtml(merchantSupport.href)}">Contacter le support</a>
+        </div>
+      </div>
       ${
         isModificationBlocked && modificationBlockedReason
           ? `<p class="muted modification-blocked">${escapeHtml(modificationBlockedReason)}</p>`

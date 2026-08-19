@@ -202,9 +202,11 @@ const runSuite = () => {
       portalRender.includes("selection.objectiveLabel"),
   );
   ctx.assertFalse(
-    "objectif is not a picker control",
-    portalRender.includes("Changer d'objectif") ||
-      portalClient.includes("Changer d'objectif"),
+    "objectif remains read-only — no objective mutation intent",
+    portalClient.includes("changeSubscriptionObjective") ||
+      portalActions.includes("changeSubscriptionObjective") ||
+      portalActions.includes('intent === "changeObjective"') ||
+      portalActions.includes('intent === "updateObjective"'),
   );
 
   ctx.scenario("D. Identité picker = productVariantId");

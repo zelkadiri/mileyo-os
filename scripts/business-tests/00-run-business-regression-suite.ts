@@ -54,6 +54,7 @@ const BUSINESS_SUITES = [
   "31-subscription-delivery-billing-alignment-cycle.test.ts",
   "32-portal-v2-box-catalog.test.ts",
   "33-portal-v2-meal-catalog.test.ts",
+  "34-portal-change-objective-support.test.ts",
 ];
 
 const LEGACY_SUITES = [

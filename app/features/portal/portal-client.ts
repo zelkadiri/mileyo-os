@@ -163,11 +163,25 @@ export const portalClientScript = `
     });
   }
 
+  function closeObjectiveSupport(selectionId) {
+    var card = document.querySelector('.selection-card[data-selection-id="' + selectionId + '"]');
+    if (!card) return;
+    var panel = card.querySelector(".objective-support-panel");
+    var button = card.querySelector(".change-objective-button");
+    if (panel) {
+      panel.classList.add("hidden");
+    }
+    if (button) {
+      button.classList.remove("hidden");
+    }
+  }
+
   function closeAllFlows(exceptId) {
     Object.keys(editors).forEach(function (selectionId) {
       if (selectionId === exceptId) return;
       closeMealEditor(editors[selectionId]);
       closeBoxChange(selectionId);
+      closeObjectiveSupport(selectionId);
     });
   }
 
@@ -216,6 +230,7 @@ export const portalClientScript = `
       editor.editButton.addEventListener("click", function () {
         closeAllFlows(selectionId);
         closeBoxChange(selectionId);
+        closeObjectiveSupport(selectionId);
         editor.quantities = JSON.parse(JSON.stringify(data.initialQuantities[selectionId] || {}));
         editor.editButton.classList.add("hidden");
         editor.editor.classList.remove("hidden");
@@ -323,6 +338,18 @@ export const portalClientScript = `
           paymentUpdateButton.textContent = "Recevoir un lien sécurisé pour mettre à jour ma carte";
           alert("Impossible d’envoyer l’email pour le moment. Réessayez demain.");
         });
+      });
+    }
+
+    var changeObjectiveButton = card.querySelector(".change-objective-button");
+    var objectiveSupportPanel = card.querySelector(".objective-support-panel");
+    if (changeObjectiveButton && objectiveSupportPanel) {
+      changeObjectiveButton.addEventListener("click", function () {
+        closeAllFlows(selectionId);
+        closeMealEditor(editor);
+        closeBoxChange(selectionId);
+        changeObjectiveButton.classList.add("hidden");
+        objectiveSupportPanel.classList.remove("hidden");
       });
     }
 
@@ -478,6 +505,7 @@ export const portalClientScript = `
       changeBoxButton.addEventListener("click", function () {
         closeAllFlows(selectionId);
         closeMealEditor(editor);
+        closeObjectiveSupport(selectionId);
         boxChangeState.selectedBox = null;
         boxChangeState.quantities = {};
         boxChangeState.requiredMeals = 0;
