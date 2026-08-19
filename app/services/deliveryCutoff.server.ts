@@ -2,6 +2,42 @@ import { isDeliveryCutoffPassed, projectActiveScheduledDeliveryDate } from "../u
 
 export type DeliveryCutoffBlockReason = "cutoff_passed";
 
+/** DEV-only portal cutoff clock. Ignored when NODE_ENV is production. */
+export const CUTOFF_DEV_CLOCK_ENV = "MILEYO_DEV_CUTOFF_NOW";
+
+export const isCutoffDevClockEnabled = () =>
+  process.env.NODE_ENV !== "production";
+
+/**
+ * Instant used by portal cutoff UI and mutation guards.
+ * Production always returns `new Date()`, even if MILEYO_DEV_CUTOFF_NOW is set.
+ */
+export const getCutoffNow = (): Date => {
+  if (!isCutoffDevClockEnabled()) {
+    return new Date();
+  }
+
+  const raw = process.env[CUTOFF_DEV_CLOCK_ENV]?.trim();
+
+  if (!raw) {
+    return new Date();
+  }
+
+  const parsed = new Date(raw);
+
+  if (Number.isNaN(parsed.getTime())) {
+    console.log("[cutoff] ignored invalid MILEYO_DEV_CUTOFF_NOW", { raw });
+    return new Date();
+  }
+
+  console.log("[cutoff] DEV clock override", {
+    iso: parsed.toISOString(),
+    raw,
+  });
+
+  return parsed;
+};
+
 export const DELIVERY_CUTOFF_MODIFICATION_BLOCK_MESSAGE =
   "Cette box est déjà en préparation. Les modifications ne sont plus possibles pour cette livraison.";
 

@@ -57,6 +57,7 @@ const BUSINESS_SUITES = [
   "34-portal-change-objective-support.test.ts",
   "35-portal-legacy-subscription-filter.test.ts",
   "36-subscription-recovery-dev-retry-trigger.test.ts",
+  "37-cutoff-dev-clock.test.ts",
 ];
 
 const LEGACY_SUITES = [

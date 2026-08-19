@@ -22,6 +22,7 @@ import { getMerchantSupportContact } from "../../utils/merchantSupport.server";
 import { fetchBuilderBoxOptions } from "../builder/builder-catalog.server";
 import { findBuilderBoxByVariantId } from "../builder/builder-box-selection";
 import type { PaymentUpdateUnavailableReason } from "../../constants/subscriptionPaymentRecovery";
+import { getCutoffNow } from "../../services/deliveryCutoff.server";
 import { getDeliveryCutoffStatus, projectActiveScheduledDeliveryDate } from "../../utils/deliveryDate";
 import {
   formatMealSelectionStatusLabel,
@@ -301,6 +302,7 @@ export const loadPortalData = async ({
           }
         }
 
+        const cutoffNow = getCutoffNow();
         const effectiveNextScheduledDeliveryDate =
           projectActiveScheduledDeliveryDate({
             nextScheduledDeliveryDate: reconciled.nextScheduledDeliveryDate,
@@ -310,6 +312,7 @@ export const loadPortalData = async ({
         const modificationBlockReason = getPortalModificationBlockReason(
           reconciled,
           recoveryRecord,
+          cutoffNow,
         );
         const currentBox = findBuilderBoxByVariantId(catalog, currentVariantId);
         const objective = currentBox?.objective ?? null;
@@ -369,6 +372,7 @@ export const loadPortalData = async ({
             deliveryCutoff: (() => {
               const cutoff = getDeliveryCutoffStatus(
                 effectiveNextScheduledDeliveryDate,
+                cutoffNow,
               );
 
               return {

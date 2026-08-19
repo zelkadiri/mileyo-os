@@ -24,6 +24,7 @@ import {
   fetchSubscriptionContractCurrentVariantId,
   updateSubscriptionContractBoxViaDraft,
 } from "../../services/subscriptionContractBoxChange.server";
+import { getCutoffNow } from "../../services/deliveryCutoff.server";
 import {
   getPortalModificationBlockMessage,
   getPortalModificationBlockReason,
@@ -263,7 +264,11 @@ const getPortalModificationBlockResponse = async ({
   };
   shop: string;
 }) => {
-  const blockReason = getPortalModificationBlockReason(selection, recoveryRecord);
+  const blockReason = getPortalModificationBlockReason(
+    selection,
+    recoveryRecord,
+    getCutoffNow(),
+  );
 
   if (!blockReason) {
     return null;
