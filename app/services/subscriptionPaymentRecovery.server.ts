@@ -894,7 +894,45 @@ export const closeRecoveryOnSuccessfulOrder = async ({
   });
 };
 
-const isRecoveryDueForNewAttempt = (
+export type ProcessDueRecoveryRetriesOptions = {
+  now?: Date;
+  selectionId?: string;
+};
+
+export const resolveRecoveryWorkerNow = (
+  options?: ProcessDueRecoveryRetriesOptions,
+) => options?.now ?? new Date();
+
+export const buildDueRecoveryRetriesWhere = ({
+  now,
+  selectionId,
+  shop,
+}: {
+  now: Date;
+  selectionId?: string;
+  shop: string;
+}) => ({
+  shop,
+  ...(selectionId ? { subscriptionMealSelectionId: selectionId } : {}),
+  OR: [
+    {
+      status: RECOVERY_STATUS.PROCESSING,
+    },
+    {
+      failureCount: { lt: MAX_RECOVERY_FAILURES },
+      nextRetryAt: { lte: now },
+      status: {
+        in: [
+          RECOVERY_STATUS.RETRY_SCHEDULED,
+          RECOVERY_STATUS.PAYMENT_METHOD_UPDATE_NEEDED,
+          RECOVERY_STATUS.EMAIL_SEND_FAILED,
+        ],
+      },
+    },
+  ],
+});
+
+export const isRecoveryDueForNewAttempt = (
   recovery: {
     nextRetryAt: Date | null;
     status: string;
@@ -1015,6 +1053,7 @@ const recordRecoveryRetryFailureOutcome = async ({
 export const processDueRecoveryRetries = async (
   shop: string,
   admin: ShopifyAdminGraphql,
+  options?: ProcessDueRecoveryRetriesOptions,
 ): Promise<RecoveryWorkerSummary> => {
   const summary: RecoveryWorkerSummary = {
     diagnostics: [],
@@ -1027,29 +1066,15 @@ export const processDueRecoveryRetries = async (
     skipReasons: EMPTY_RECOVERY_SKIP_REASONS(),
   };
 
-  const now = new Date();
+  const now = resolveRecoveryWorkerNow(options);
 
   const recoveries = await db.subscriptionPaymentRecovery.findMany({
     include: { subscriptionMealSelection: true },
-    where: {
+    where: buildDueRecoveryRetriesWhere({
+      now,
+      selectionId: options?.selectionId,
       shop,
-      OR: [
-        {
-          status: RECOVERY_STATUS.PROCESSING,
-        },
-        {
-          failureCount: { lt: MAX_RECOVERY_FAILURES },
-          nextRetryAt: { lte: now },
-          status: {
-            in: [
-              RECOVERY_STATUS.RETRY_SCHEDULED,
-              RECOVERY_STATUS.PAYMENT_METHOD_UPDATE_NEEDED,
-              RECOVERY_STATUS.EMAIL_SEND_FAILED,
-            ],
-          },
-        },
-      ],
-    },
+    }),
   });
 
   for (const recovery of recoveries) {

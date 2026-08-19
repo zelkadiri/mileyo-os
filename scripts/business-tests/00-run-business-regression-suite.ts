@@ -56,6 +56,7 @@ const BUSINESS_SUITES = [
   "33-portal-v2-meal-catalog.test.ts",
   "34-portal-change-objective-support.test.ts",
   "35-portal-legacy-subscription-filter.test.ts",
+  "36-subscription-recovery-dev-retry-trigger.test.ts",
 ];
 
 const LEGACY_SUITES = [

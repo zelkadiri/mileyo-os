@@ -8,9 +8,13 @@ import {
   syncSubscriptionContractState,
 } from "../../services/subscriptionContractSync.server";
 import { triggerSubscriptionBillingAttempt } from "../../services/subscriptionBillingWorker.server";
+import { processDueRecoveryRetries } from "../../services/subscriptionPaymentRecovery.server";
 import { getSelectedMealsFromJson } from "../../utils/mealSelection";
 
-import { isSubscriptionTestActionsEnabled } from "./subscriptions-test.server";
+import {
+  isRecoveryDevRetryEnabled,
+  isSubscriptionTestActionsEnabled,
+} from "./subscriptions-test.server";
 
 const redirectWithBillingError = (message: string) =>
   redirect(
@@ -112,6 +116,49 @@ export const handleSubscriptionsAction = async (request: Request) => {
     } catch {
       return redirectWithBillingError(
         "Impossible de contacter Shopify pour déclencher la facturation.",
+      );
+    }
+  }
+
+  if (intent === "triggerRecoveryRetry") {
+    if (!isRecoveryDevRetryEnabled()) {
+      return redirectWithBillingError(
+        "Déclenchement recovery DEV désactivé en production.",
+      );
+    }
+
+    const simulatedNowRaw = String(formData.get("simulatedNow") ?? "").trim();
+    const simulatedNow = new Date(simulatedNowRaw);
+
+    if (!simulatedNowRaw || Number.isNaN(simulatedNow.getTime())) {
+      return redirectWithBillingError(
+        "Horloge simulée recovery DEV invalide.",
+      );
+    }
+
+    const selection = await db.subscriptionMealSelection.findFirst({
+      where: {
+        id: selectionId,
+        shop,
+      },
+    });
+
+    if (!selection) {
+      return redirectWithBillingError("Abonnement introuvable.");
+    }
+
+    try {
+      const summary = await processDueRecoveryRetries(shop, admin, {
+        now: simulatedNow,
+        selectionId,
+      });
+
+      return redirect(
+        `/app/subscriptions?recoveryRetrySuccess=1&retried=${encodeURIComponent(String(summary.retried))}&processed=${encodeURIComponent(String(summary.processed))}`,
+      );
+    } catch {
+      return redirectWithBillingError(
+        "Impossible d’exécuter le retry recovery DEV.",
       );
     }
   }

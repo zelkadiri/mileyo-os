@@ -49,6 +49,7 @@ export type SubscriptionsPageData = {
   hiddenDuplicateCount: number;
   paymentRecoveries: SubscriptionRecoveryDto[];
   selections: SubscriptionSelectionDto[];
+  showRecoveryDevRetry: boolean;
   showSubscriptionTestActions: boolean;
   statusCounts: SubscriptionStatusCounts;
 };

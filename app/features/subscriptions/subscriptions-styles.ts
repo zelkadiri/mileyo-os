@@ -32,6 +32,17 @@ export const secondaryButtonStyle = {
   padding: "0.65rem 1rem",
 } as const;
 
+export const recoveryDevButtonStyle = {
+  background: "#9a3412",
+  border: 0,
+  borderRadius: "999px",
+  color: "white",
+  cursor: "pointer",
+  font: "inherit",
+  fontWeight: 700,
+  padding: "0.65rem 1rem",
+} as const;
+
 export const bannerStyle = (variant: "error" | "success" | "warning") =>
   ({
     background:

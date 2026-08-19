@@ -6,7 +6,10 @@ import db from "../../db.server";
 import { authenticate } from "../../shopify.server";
 import { dedupeSubscriptionSelectionsByContract } from "../../services/subscriptionMealSelection.server";
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
-import { isSubscriptionTestActionsEnabled } from "./subscriptions-test.server";
+import {
+  isRecoveryDevRetryEnabled,
+  isSubscriptionTestActionsEnabled,
+} from "./subscriptions-test.server";
 import type { SubscriptionsPageData, SubscriptionStatusCounts } from "./subscriptions-types";
 
 export const loadSubscriptionsPageData = async (
@@ -143,6 +146,7 @@ export const loadSubscriptionsPageData = async (
       subscriptionContractId: selection.subscriptionContractId,
       updatedAt: selection.updatedAt,
     })),
+    showRecoveryDevRetry: isRecoveryDevRetryEnabled(),
     showSubscriptionTestActions: isSubscriptionTestActionsEnabled(),
     statusCounts,
   };

@@ -57,6 +57,7 @@ When adding a feature, update this matrix and add the corresponding scenario tes
 | Cycle billing 13K-C1 | First order + renewal nextBillingDate samedi | Alignement encore J-2 | `27-first-order-renewal-cycle-alignment.test.ts` |
 | Cycle billing 13K-C2 | Runner respecte nextBillingDate samedi | Skip/realign J-2 | `28-billing-runner-cycle-gate.test.ts` |
 | Cycle billing 13K-D1 | Recovery retry dimanche/lundi 00:05 | Délai +24h/+48h | `29-subscription-payment-recovery-cycle.test.ts` |
+| Recovery DEV 13L-A | Trigger recovery-only + now simulé + selectionId | Cron/billing normal, retry hors cible | `36-subscription-recovery-dev-retry-trigger.test.ts` |
 | Cycle billing 13K-E2 | Resume portail nextBillingDate samedi | Resume encore J-2 | `30-portal-resume-cycle-billing.test.ts` |
 | Cycle billing 13K-F2 | Backfill reco samedi (BoxOrder / unpaid) | Reco encore J-2 | `31-subscription-delivery-billing-alignment-cycle.test.ts` |
 | Billing schedule | Helpers cutoff → billingReadyAt | Dates billing incorrectes | `dev-delivery-billing-schedule-tests.ts` |

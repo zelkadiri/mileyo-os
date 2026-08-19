@@ -2,10 +2,12 @@ import { Form, useLoaderData, useSearchParams } from "react-router";
 
 import type { loadSubscriptionsPageData } from "./subscriptions-data.server";
 import {
+  DEV_RECOVERY_RETRY_DEFAULT_NOW,
   formatAdminDateTime,
   formatMealSelectionStatusLabel,
   formatRecoveryStatusLabel,
   getSelectedMealsFromJson,
+  recoveryRetryConfirmMessage,
   shopifyBillingConfirmMessage,
 } from "./subscriptions-formatters";
 import {
@@ -14,6 +16,7 @@ import {
   buttonRowStyle,
   listStyle,
   primaryButtonStyle,
+  recoveryDevButtonStyle,
   secondaryButtonStyle,
   statusBadgeStyle,
   terminalCardStyle,
@@ -45,6 +48,7 @@ export default function SubscriptionsPage() {
     hiddenDuplicateCount = 0,
     paymentRecoveries = [],
     selections = [],
+    showRecoveryDevRetry = false,
     showSubscriptionTestActions = false,
     statusCounts = {
       active: 0,
@@ -64,7 +68,10 @@ export default function SubscriptionsPage() {
   const error = searchParams.get("error");
   const billingError = searchParams.get("billingError");
   const billingSuccess = searchParams.get("billingSuccess") === "1";
+  const recoveryRetrySuccess = searchParams.get("recoveryRetrySuccess") === "1";
   const attemptId = searchParams.get("attemptId");
+  const recoveryRetried = searchParams.get("retried");
+  const recoveryProcessed = searchParams.get("processed");
 
   return (
     <s-page heading="Abonnements">
@@ -120,6 +127,50 @@ export default function SubscriptionsPage() {
                       Prochaine tentative :{" "}
                       {formatAdminDateTime(recovery.nextRetryAt)}
                     </s-text>
+                  ) : null}
+                  {showRecoveryDevRetry &&
+                  recovery.status !== "final_failed" ? (
+                    <Form
+                      method="post"
+                      onSubmit={(event) => {
+                        if (!confirm(recoveryRetryConfirmMessage)) {
+                          event.preventDefault();
+                        }
+                      }}
+                    >
+                      <input
+                        name="intent"
+                        type="hidden"
+                        value="triggerRecoveryRetry"
+                      />
+                      <input
+                        name="selectionId"
+                        type="hidden"
+                        value={recovery.selectionId}
+                      />
+                      <s-stack gap="small">
+                        <label>
+                          Horloge simulée ISO (test DEV — retry #1 dimanche
+                          2026-08-22T22:05:00.000Z, retry #2 lundi
+                          2026-08-23T22:05:00.000Z)
+                          <input
+                            defaultValue={DEV_RECOVERY_RETRY_DEFAULT_NOW}
+                            name="simulatedNow"
+                            style={{
+                              display: "block",
+                              font: "inherit",
+                              marginTop: "0.35rem",
+                              padding: "0.4rem 0.5rem",
+                              width: "100%",
+                            }}
+                            type="text"
+                          />
+                        </label>
+                        <button style={recoveryDevButtonStyle} type="submit">
+                          Déclencher retry recovery DEV
+                        </button>
+                      </s-stack>
+                    </Form>
                   ) : null}
                 </s-stack>
               </s-box>
@@ -190,6 +241,17 @@ export default function SubscriptionsPage() {
               {attemptId ? ` (${attemptId})` : ""}. Si le paiement réussit,
               Shopify créera la commande et le webhook ORDERS_CREATE la
               capturera.
+            </p>
+          ) : null}
+          {recoveryRetrySuccess ? (
+            <p style={bannerStyle("success")}>
+              Retry recovery DEV lancé
+              {recoveryRetried != null ? ` (retried=${recoveryRetried}` : ""}
+              {recoveryProcessed != null
+                ? `${recoveryRetried != null ? ", " : " ("}processed=${recoveryProcessed}`
+                : ""}
+              {recoveryRetried != null || recoveryProcessed != null ? ")" : ""}
+              . Observer le webhook failure et la fiche recovery.
             </p>
           ) : null}
           {billingError ? (
