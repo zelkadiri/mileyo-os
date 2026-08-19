@@ -187,6 +187,46 @@ function main() {
     "cutoff_passed",
   );
 
+  const fridaySelection = {
+    ...baseSelection(),
+    nextScheduledDeliveryDate: "2026-08-21" as string | null,
+    preferredDeliveryWeekday: 5,
+  };
+  const fridayMonday20Paris = parisWallClockToInstant({
+    date: requireDate("2026-08-17"),
+    hour: 20,
+    minute: 0,
+  });
+  const fridayTuesdayMidnightParis = parisWallClockToInstant({
+    date: requireDate("2026-08-18"),
+    hour: 0,
+    minute: 0,
+  });
+
+  expectPortalBlock(
+    "Friday delivery meal update allowed before Monday cutoff",
+    getPortalModificationBlockReason(fridaySelection, null, fridayMonday20Paris),
+    null,
+  );
+  expectPortalBlock(
+    "Friday delivery meal update blocked from Tuesday 00:00, not Wednesday",
+    getPortalModificationBlockReason(
+      fridaySelection,
+      null,
+      fridayTuesdayMidnightParis,
+    ),
+    "cutoff_passed",
+  );
+  expectPortalBlock(
+    "Friday delivery box change blocked from Tuesday 00:00",
+    getPortalModificationBlockReason(
+      fridaySelection,
+      null,
+      fridayTuesdayMidnightParis,
+    ),
+    "cutoff_passed",
+  );
+
   expectPortalBlock(
     "pause blocked after cutoff",
     getPortalModificationBlockReason(baseSelection(), null, tuesdayMidnightParis),

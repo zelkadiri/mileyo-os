@@ -1,4 +1,7 @@
 import {
+  SUBSCRIPTION_CYCLE_MEAL_CUTOFF_HOUR,
+  SUBSCRIPTION_CYCLE_MEAL_CUTOFF_MINUTE,
+  SUBSCRIPTION_CYCLE_MEAL_CUTOFF_WEEKDAY,
   SUBSCRIPTION_CYCLE_TIMEZONE,
 } from "../constants/subscriptionCycle";
 import {
@@ -9,8 +12,6 @@ import {
   DEFAULT_DELIVERY_SCHEDULE_CONFIG,
   DELIVERY_BILLING_READY_HOUR,
   DELIVERY_BILLING_READY_MINUTE,
-  DELIVERY_CUTOFF_HOUR,
-  DELIVERY_CUTOFF_MINUTE,
   DELIVERY_CUTOFF_OFFSET_DAYS,
   DELIVERY_RESCHEDULE_REASON,
   DELIVERY_WEEKLY_INTERVAL_DAYS,
@@ -390,15 +391,37 @@ const isCutoffDeadlinePassedOnCalendarDay = (
   const { hour, minute } = getParisTimeParts(instant, timezone);
 
   return (
-    hour > DELIVERY_CUTOFF_HOUR ||
-    (hour === DELIVERY_CUTOFF_HOUR && minute > DELIVERY_CUTOFF_MINUTE)
+    hour > SUBSCRIPTION_CYCLE_MEAL_CUTOFF_HOUR ||
+    (hour === SUBSCRIPTION_CYCLE_MEAL_CUTOFF_HOUR &&
+      minute > SUBSCRIPTION_CYCLE_MEAL_CUTOFF_MINUTE)
   );
 };
 
+/**
+ * Historical billing-ready cutoff date: delivery minus
+ * `DELIVERY_CUTOFF_OFFSET_DAYS` calendar days (J-3).
+ * Do not use for portal meal-selection cutoff.
+ */
 export const getDeliveryCutoffCalendarDate = (
   scheduledDeliveryDate: DeliveryDateString,
 ): DeliveryDateString =>
   addCalendarDays(scheduledDeliveryDate, -DELIVERY_CUTOFF_OFFSET_DAYS);
+
+/**
+ * Monday of the civil week that contains `scheduledDeliveryDate`.
+ * Thursday and Friday of the same week share this cutoff date.
+ */
+export const getMealSelectionCutoffCalendarDate = (
+  scheduledDeliveryDate: DeliveryDateString,
+): DeliveryDateString => {
+  const daysFromCutoffWeekday =
+    (getWeekday(scheduledDeliveryDate) -
+      SUBSCRIPTION_CYCLE_MEAL_CUTOFF_WEEKDAY +
+      7) %
+    7;
+
+  return addCalendarDays(scheduledDeliveryDate, -daysFromCutoffWeekday);
+};
 
 export const formatDeliveryCutoffDeadlineLabel = (
   scheduledDeliveryDate: string | null | undefined,
@@ -410,7 +433,7 @@ export const formatDeliveryCutoffDeadlineLabel = (
     return null;
   }
 
-  const cutoffDate = getDeliveryCutoffCalendarDate(parsed);
+  const cutoffDate = getMealSelectionCutoffCalendarDate(parsed);
   const { day, month, year } = splitDeliveryDate(cutoffDate);
   const utcNoon = new Date(Date.UTC(year, month - 1, day, 12));
   const locale = options?.locale ?? "fr-FR";
@@ -424,7 +447,7 @@ export const formatDeliveryCutoffDeadlineLabel = (
     timeZone: "UTC",
   }).format(utcNoon);
 
-  return `${weekday} ${rest} à ${DELIVERY_CUTOFF_HOUR}h${String(DELIVERY_CUTOFF_MINUTE).padStart(2, "0")}`;
+  return `${weekday} ${rest} à ${SUBSCRIPTION_CYCLE_MEAL_CUTOFF_HOUR}h${String(SUBSCRIPTION_CYCLE_MEAL_CUTOFF_MINUTE).padStart(2, "0")}`;
 };
 
 export const isDeliveryCutoffPassed = (
@@ -449,7 +472,7 @@ export const getDeliveryCutoffStatus = (
     };
   }
 
-  const cutoffDate = getDeliveryCutoffCalendarDate(parsed);
+  const cutoffDate = getMealSelectionCutoffCalendarDate(parsed);
   const todayParis = referenceDateFromInstant(now, config.timezone);
   const deadlineLabel = formatDeliveryCutoffDeadlineLabel(parsed);
   let isPassed = false;
@@ -610,6 +633,7 @@ export const parisWallClockToInstant = ({
   return new Date(lo);
 };
 
+/** J-2 calendar date used by historical billing-ready (cutoff J-3 + 1 day). */
 export const getBillingReadyCalendarDate = (
   deliveryDate: DeliveryDateString,
 ): DeliveryDateString =>

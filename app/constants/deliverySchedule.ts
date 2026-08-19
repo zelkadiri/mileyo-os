@@ -3,12 +3,15 @@ export const DELIVERY_TIMEZONE = "Europe/Paris" as const;
 export const DELIVERY_MIN_OFFSET_DAYS = 3;
 export const DELIVERY_MAX_OFFSET_DAYS = 10;
 
-/** Last calendar day for portal modifications before delivery (J-3 at 23:59 Paris). */
+/**
+ * Historical billing-ready offset: J-3 calendar days before delivery.
+ * Portal meal-selection cutoff uses Monday-of-delivery-week, not this offset.
+ */
 export const DELIVERY_CUTOFF_OFFSET_DAYS = 3;
 export const DELIVERY_CUTOFF_HOUR = 23;
 export const DELIVERY_CUTOFF_MINUTE = 59;
 
-/** Billing may run at 00:05 Paris on J-2 (5 minutes after cutoff at J-3 23:59). */
+/** Billing-ready wall clock: 00:05 Paris on J-2 (cutoff calendar date + 1 day). */
 export const DELIVERY_BILLING_READY_HOUR = 0;
 export const DELIVERY_BILLING_READY_MINUTE = 5;
 export const DELIVERY_BILLING_READY_AFTER_CUTOFF_MINUTES = 5;

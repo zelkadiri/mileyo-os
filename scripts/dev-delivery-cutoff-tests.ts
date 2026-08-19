@@ -7,6 +7,7 @@ import {
   formatDeliveryCutoffDeadlineLabel,
   getDeliveryCutoffCalendarDate,
   getDeliveryCutoffStatus,
+  getMealSelectionCutoffCalendarDate,
   isDeliveryCutoffPassed,
   parseDeliveryDate,
   referenceDateFromInstant,
@@ -229,6 +230,95 @@ function main() {
     "Paris reference date moves to next day at 00:00",
     referenceDateFromInstant(tuesdayMidnightParis, DELIVERY_TIMEZONE),
     requireDate("2026-07-14"),
+  );
+
+  const augustThursday = requireDate("2026-08-20");
+  const augustFriday = requireDate("2026-08-21");
+  const augustMondayCutoff = requireDate("2026-08-17");
+  const augustTuesday = requireDate("2026-08-18");
+
+  assertDate(
+    "Thursday 2026-08-20 meal cutoff is Monday 2026-08-17",
+    getMealSelectionCutoffCalendarDate(augustThursday),
+    augustMondayCutoff,
+  );
+  assertDate(
+    "Friday 2026-08-21 meal cutoff is Monday 2026-08-17, not Tuesday",
+    getMealSelectionCutoffCalendarDate(augustFriday),
+    augustMondayCutoff,
+  );
+  assertDate(
+    "Friday 2026-08-21 billing-ready J-3 cutoff stays Tuesday 2026-08-18",
+    getDeliveryCutoffCalendarDate(augustFriday),
+    augustTuesday,
+  );
+
+  const augustMondayLastMs = new Date(
+    parisWallClockToInstant({
+      date: augustTuesday,
+      hour: 0,
+      minute: 0,
+    }).getTime() - 1,
+  );
+  assertEqual(
+    "Thursday delivery still open at Monday 23:59:59.999 Paris",
+    isDeliveryCutoffPassed(augustThursday, augustMondayLastMs),
+    false,
+  );
+  assertEqual(
+    "Friday delivery still open at Monday 23:59:59.999 Paris",
+    isDeliveryCutoffPassed(augustFriday, augustMondayLastMs),
+    false,
+  );
+
+  const augustTuesdayMidnight = parisWallClockToInstant({
+    date: augustTuesday,
+    hour: 0,
+    minute: 0,
+  });
+  assertEqual(
+    "Thursday delivery closed at Tuesday 00:00 Paris",
+    isDeliveryCutoffPassed(augustThursday, augustTuesdayMidnight),
+    true,
+  );
+  assertEqual(
+    "Friday delivery closed at Tuesday 00:00 Paris, not Wednesday",
+    isDeliveryCutoffPassed(augustFriday, augustTuesdayMidnight),
+    true,
+  );
+
+  assertDate(
+    "Next-week Thursday 2026-08-27 meal cutoff is Monday 2026-08-24",
+    getMealSelectionCutoffCalendarDate(requireDate("2026-08-27")),
+    requireDate("2026-08-24"),
+  );
+  assertDate(
+    "Next-week Friday 2026-08-28 meal cutoff is Monday 2026-08-24",
+    getMealSelectionCutoffCalendarDate(requireDate("2026-08-28")),
+    requireDate("2026-08-24"),
+  );
+
+  const winterThursday = requireDate("2026-01-22");
+  const winterMonday = requireDate("2026-01-19");
+  assertDate(
+    "Winter CET Thursday meal cutoff is Monday of that week",
+    getMealSelectionCutoffCalendarDate(winterThursday),
+    winterMonday,
+  );
+  const winterTuesdayMidnight = parisWallClockToInstant({
+    date: requireDate("2026-01-20"),
+    hour: 0,
+    minute: 0,
+  });
+  assertEqual(
+    "Winter CET Tuesday 00:00 Paris is after cutoff",
+    isDeliveryCutoffPassed(winterThursday, winterTuesdayMidnight),
+    true,
+  );
+  assertEqual(
+    "Summer CEST Tuesday 00:00 Paris is after cutoff",
+    isDeliveryCutoffPassed(deliveryThursday, tuesdayMidnightParis),
+    true,
   );
 
   const failed = checks.filter((check) => !check.ok);

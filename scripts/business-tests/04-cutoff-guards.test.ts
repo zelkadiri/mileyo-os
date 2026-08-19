@@ -148,6 +148,50 @@ const runSuite = () => {
     "cutoff_passed",
   );
 
+  ctx.scenario("Livraison vendredi — cutoff lundi, pas mardi");
+  ctx.given("livraison vendredi 21 août 2026");
+  const fridaySelection = {
+    ...baseSelection(),
+    nextScheduledDeliveryDate: "2026-08-21" as string | null,
+    preferredDeliveryWeekday: 5,
+  };
+  const fridayMondayBeforeCutoff = parisWallClockToInstant({
+    date: requireDate("2026-08-17"),
+    hour: 20,
+    minute: 0,
+  });
+  const fridayTuesdayAfterCutoff = parisWallClockToInstant({
+    date: requireDate("2026-08-18"),
+    hour: 0,
+    minute: 0,
+  });
+  ctx.assertNull(
+    "friday meal change allowed before monday cutoff",
+    getPortalModificationBlockReason(
+      fridaySelection,
+      null,
+      fridayMondayBeforeCutoff,
+    ),
+  );
+  ctx.assertEqual(
+    "friday meal change blocked tuesday 00:00 not wednesday",
+    getPortalModificationBlockReason(
+      fridaySelection,
+      null,
+      fridayTuesdayAfterCutoff,
+    ),
+    "cutoff_passed",
+  );
+  ctx.assertEqual(
+    "friday box change blocked tuesday 00:00",
+    getPortalModificationBlockReason(
+      fridaySelection,
+      null,
+      fridayTuesdayAfterCutoff,
+    ),
+    "cutoff_passed",
+  );
+
   ctx.scenario("Cutoff calculé sur date projetée");
   ctx.given("DB stocke encore jeudi 16 alors qu'on est après le 16");
   const projected = projectActiveScheduledDeliveryDate({

@@ -1,8 +1,11 @@
 /**
- * Future weekly subscription cycle constants (not wired yet).
+ * Weekly subscription cycle constants.
  *
  * Weekday convention matches the rest of the repo / JS Date#getDay:
  * 0 = Sunday, 6 = Saturday.
+ *
+ * Meal cutoff weekday/hour/minute are wired into portal meal-selection cutoff.
+ * Billing Saturday alignment uses the billing weekday constants separately.
  */
 
 export const SUBSCRIPTION_CYCLE_TIMEZONE = "Europe/Paris" as const;
