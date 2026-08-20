@@ -46,6 +46,7 @@ const baseOrder = (
   scheduledDeliveryDate: TARGET_DATE,
   selectedMeals: [],
   shopifyOrderName: "#1001",
+  simulated: false,
   ...overrides,
 });
 
@@ -218,6 +219,45 @@ function main() {
   }
 
   assertEqual("14. Legacy selectedMeals does not throw", legacyThrew, false);
+
+  const simulatedMix = buildPreparationDayDataFromBoxOrders(
+    [
+      baseOrder({
+        id: "real-order",
+        selectedMeals: ["Poulet tikka"],
+        shopifyOrderName: "#4001",
+      }),
+      baseOrder({
+        id: "simulated-order",
+        selectedMeals: ["Poulet tikka", "Boulgour"],
+        shopifyOrderName: "SIM-4002",
+        simulated: true,
+      }),
+    ],
+    TARGET_DATE,
+  );
+
+  assertEqual(
+    "15. Simulated BoxOrder excluded",
+    simulatedMix.orders.some((order) => order.id === "simulated-order"),
+    false,
+  );
+  assertEqual(
+    "15. Real BoxOrder kept",
+    simulatedMix.orders.some((order) => order.id === "real-order"),
+    true,
+  );
+  assertEqual(
+    "15. Kitchen quantities ignore simulated meals",
+    simulatedMix.mealTotals.find((meal) => meal.mealTitle === "Poulet tikka")
+      ?.totalQuantity,
+    1,
+  );
+  assertEqual(
+    "15. Simulated-only meal not counted",
+    simulatedMix.mealTotals.some((meal) => meal.mealTitle === "Boulgour"),
+    false,
+  );
 
   const failed = checks.filter((check) => !check.ok);
 

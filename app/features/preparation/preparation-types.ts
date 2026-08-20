@@ -70,5 +70,7 @@ export type PreparationBoxOrderRecord = {
   scheduledDeliveryDate: string | null;
   deliveryRescheduleReason: string | null;
   isSubscriptionRenewal: boolean;
+  /** Simulated test orders must never appear in kitchen preparation. */
+  simulated: boolean;
   createdAt: Date;
 };

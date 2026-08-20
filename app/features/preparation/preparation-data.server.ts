@@ -7,6 +7,7 @@ import {
   type DeliveryDateString,
 } from "../../utils/deliveryDate";
 import {
+  isKitchenPreparationBoxOrder,
   isSubscriptionPreparationOrder,
   normalizeSelectedMealsForPreparation,
 } from "./preparation-formatters";
@@ -118,7 +119,8 @@ export const buildPreparationDayDataFromBoxOrders = (
   boxOrders: PreparationBoxOrderRecord[],
   scheduledDeliveryDate: DeliveryDateString,
 ): PreparationDayData => {
-  const orders = boxOrders
+  const kitchenBoxOrders = boxOrders.filter(isKitchenPreparationBoxOrder);
+  const orders = kitchenBoxOrders
     .filter((order) => order.scheduledDeliveryDate === scheduledDeliveryDate)
     .map((order) => mapBoxOrderToPreparationOrder(order, scheduledDeliveryDate))
     .sort((left, right) =>
@@ -129,7 +131,7 @@ export const buildPreparationDayDataFromBoxOrders = (
     mealTotals: aggregateMealTotals(orders),
     orders,
     summary: buildPreparationDaySummary({
-      boxOrders,
+      boxOrders: kitchenBoxOrders,
       orders,
       scheduledDeliveryDate,
     }),
@@ -151,6 +153,7 @@ export const getPreparationDayData = async (
     where: {
       scheduledDeliveryDate,
       shop,
+      simulated: false,
     },
   });
 
@@ -167,6 +170,7 @@ export const getUpcomingPreparationDates = async (
     where: {
       scheduledDeliveryDate: { not: null },
       shop,
+      simulated: false,
     },
   });
 

@@ -33,6 +33,7 @@ const baseOrder = (
   scheduledDeliveryDate: TARGET_DATE,
   selectedMeals: [],
   shopifyOrderName: "#1001",
+  simulated: false,
   ...overrides,
 });
 
@@ -112,6 +113,46 @@ const runSuite = () => {
     data.orders.some((order) => order.id === "ignored-no-date"),
     false,
   );
+
+  ctx.scenario("Commandes simulées exclues de la préparation cuisine");
+  ctx.given("1 commande réelle et 1 commande simulée le même jour");
+  const mixedOrders: PreparationBoxOrderRecord[] = [
+    baseOrder({
+      id: "real-order",
+      selectedMeals: ["Poulet tikka", "Saumon"],
+      shopifyOrderName: "#3001",
+    }),
+    baseOrder({
+      id: "simulated-order",
+      selectedMeals: ["Poulet tikka", "Poulet tikka", "Boulgour"],
+      shopifyOrderName: "SIM-3002",
+      simulated: true,
+    }),
+  ];
+  const mixedData = buildPreparationDayDataFromBoxOrders(mixedOrders, TARGET_DATE);
+  ctx.when("on agrège pour la cuisine");
+  ctx.assertEqual(
+    "real BoxOrder appears in preparation",
+    mixedData.orders.some((order) => order.id === "real-order"),
+    true,
+  );
+  ctx.assertEqual(
+    "simulated BoxOrder excluded from preparation",
+    mixedData.orders.some((order) => order.id === "simulated-order"),
+    false,
+  );
+  ctx.assertEqual(
+    "kitchen quantities ignore simulated order",
+    mixedData.mealTotals.find((meal) => meal.mealTitle === "Poulet tikka")
+      ?.totalQuantity,
+    1,
+  );
+  ctx.assertEqual(
+    "simulated-only meals not counted",
+    mixedData.mealTotals.some((meal) => meal.mealTitle === "Boulgour"),
+    false,
+  );
+  ctx.assertEqual("only real order counted", mixedData.summary.totalOrders, 1);
 
   return finishSuite("07-preparation-backoffice", ctx);
 };

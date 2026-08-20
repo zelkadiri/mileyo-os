@@ -77,6 +77,11 @@ export const isSubscriptionPreparationOrder = ({
 }) =>
   isSubscriptionRenewal || Boolean(orderType?.toLowerCase().includes("abonnement"));
 
+/** Kitchen preparation ignores simulated BoxOrders entirely. */
+export const isKitchenPreparationBoxOrder = (order: {
+  simulated: boolean;
+}) => order.simulated !== true;
+
 export const formatSelectedMealsForCsv = (selectedMeals: string[]) =>
   selectedMeals.join(" | ");
 
