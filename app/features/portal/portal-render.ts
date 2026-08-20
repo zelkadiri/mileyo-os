@@ -1,4 +1,5 @@
 import { escapeHtml, scriptJson } from "../../utils/html";
+import { renderMileyoLogoImg } from "../../utils/mileyoLogo";
 import {
   formatFinancialStatus,
   formatFrenchDate,
@@ -522,7 +523,7 @@ export const renderPortal = ({
 <body>
   <main class="portal-shell">
     <section class="portal-card portal-header">
-      <p class="eyebrow">Mileyo</p>
+      ${renderMileyoLogoImg("portal-logo")}
       <h1>Mes box Mileyo</h1>
       <p class="intro">
         Gérez votre prochaine box, consultez vos livraisons à venir et retrouvez l’historique de vos commandes — en toute clarté.
@@ -601,6 +602,24 @@ export const renderPortal = ({
 
     <p class="back-link"><a href="/apps/box-builder">← Retour au composeur de box</a></p>
   </main>
+
+  <div
+    aria-hidden="true"
+    aria-labelledby="meal-nutrition-modal-title"
+    class="meal-nutrition-modal hidden"
+    id="meal-nutrition-modal"
+    role="dialog"
+  >
+    <button aria-label="Fermer" class="meal-nutrition-modal-backdrop" type="button"></button>
+    <div class="meal-nutrition-modal-panel">
+      <div class="meal-nutrition-modal-head">
+        <h2 id="meal-nutrition-modal-title">Informations nutritionnelles</h2>
+        <button aria-label="Fermer" class="meal-nutrition-modal-close" type="button">×</button>
+      </div>
+      <p class="meal-nutrition-modal-meal" id="meal-nutrition-modal-meal"></p>
+      <div class="meal-nutrition-modal-list" id="meal-nutrition-modal-list"></div>
+    </div>
+  </div>
 
   <script>window.__MILEYO_PORTAL__ = ${scriptJson({ boxes, initialQuantities, meals, selections })};</script>
   <script>${portalClientScript}</script>

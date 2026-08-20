@@ -58,6 +58,14 @@ const BUSINESS_SUITES = [
   "35-portal-legacy-subscription-filter.test.ts",
   "36-subscription-recovery-dev-retry-trigger.test.ts",
   "37-cutoff-dev-clock.test.ts",
+  "38-meal-nutrition-format.test.ts",
+  "39-meal-nutrition-import-foundation.test.ts",
+  "40-meal-nutrition-export-template.test.ts",
+  "41-meal-nutrition-import-preview.test.ts",
+  "42-meal-nutrition-import-catalog-preview.test.ts",
+  "43-meal-nutrition-import-apply.test.ts",
+  "44-meal-nutrition-import-partial.test.ts",
+  "45-meal-nutrition-import-metafields-batch.test.ts",
 ];
 
 const LEGACY_SUITES = [

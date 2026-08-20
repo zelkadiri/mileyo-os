@@ -1,8 +1,16 @@
+import { mealNutritionFormatRuntimeScript } from "../../utils/mealNutritionFormat";
+
 export const portalClientScript = `
 (function () {
   var data = window.__MILEYO_PORTAL__;
   var editors = {};
   var boxChangeStates = {};
+
+  ${mealNutritionFormatRuntimeScript}
+
+  var mealNutritionModal = document.getElementById("meal-nutrition-modal");
+  var mealNutritionModalMeal = document.getElementById("meal-nutrition-modal-meal");
+  var mealNutritionModalList = document.getElementById("meal-nutrition-modal-list");
 
   var tabButtons = document.querySelectorAll(".portal-tab");
   var tabPanels = document.querySelectorAll(".portal-tab-panel");
@@ -40,6 +48,121 @@ export const portalClientScript = `
     return meal.variantId || meal.id;
   }
 
+  function closeMealNutritionModal() {
+    if (!mealNutritionModal) return;
+    mealNutritionModal.classList.add("hidden");
+    mealNutritionModal.setAttribute("aria-hidden", "true");
+    mealNutritionModal.removeAttribute("aria-modal");
+    if (mealNutritionModalList) {
+      mealNutritionModalList.innerHTML = "";
+    }
+    if (mealNutritionModalMeal) {
+      mealNutritionModalMeal.textContent = "";
+    }
+  }
+
+  function appendNutritionModalRow(list, label, value) {
+    if (!value) return;
+    var row = document.createElement("div");
+    row.className = "meal-nutrition-modal-row";
+    var term = document.createElement("span");
+    term.className = "meal-nutrition-modal-row-label";
+    term.textContent = label;
+    var definition = document.createElement("span");
+    definition.className = "meal-nutrition-modal-row-value";
+    definition.textContent = value;
+    row.appendChild(term);
+    row.appendChild(definition);
+    list.appendChild(row);
+  }
+
+  function openMealNutritionModal(meal, nutrition) {
+    if (!mealNutritionModal || !mealNutritionModalList || !nutrition || !nutrition.lines.length) {
+      return;
+    }
+
+    mealNutritionModalList.innerHTML = "";
+    appendNutritionModalRow(mealNutritionModalList, "Calories", nutrition.calories);
+    appendNutritionModalRow(mealNutritionModalList, "Protéines", nutrition.proteins);
+    appendNutritionModalRow(mealNutritionModalList, "Glucides", nutrition.carbs);
+    appendNutritionModalRow(mealNutritionModalList, "Lipides", nutrition.fat);
+    appendNutritionModalRow(mealNutritionModalList, "Portion", nutrition.portionGrams);
+
+    if (mealNutritionModalMeal) {
+      mealNutritionModalMeal.textContent = nutrition.portionGrams
+        ? "Par portion (" + nutrition.portionGrams + ")"
+        : "Par portion";
+    }
+
+    mealNutritionModal.classList.remove("hidden");
+    mealNutritionModal.setAttribute("aria-hidden", "false");
+    mealNutritionModal.setAttribute("aria-modal", "true");
+  }
+
+  function appendMealNutritionBadge(parent, meal) {
+    var nutrition = formatMealNutrition({
+      calories: meal.calories,
+      proteins: meal.proteins,
+      carbs: meal.carbs,
+      fat: meal.fat,
+      portionGrams: meal.portionGrams,
+    });
+    if (!nutrition.calories || !nutrition.lines.length) return;
+
+    var badge = document.createElement("button");
+    badge.type = "button";
+    badge.className = "meal-nutrition-badge";
+    badge.setAttribute(
+      "aria-label",
+      "Voir les valeurs nutritionnelles de " + meal.title,
+    );
+
+    var icon = document.createElement("span");
+    icon.className = "meal-nutrition-badge-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML =
+      '<svg viewBox="21 1 142 182" width="18" height="18" focusable="false" aria-hidden="true">' +
+      '<path fill="#FFFFFF" d="M92 3L103 13L110 28L112 61L117 79L122 84L132 84L137 80L140 70L142 70L149 90L149 104L146 115L152 111L154 102L157 103L161 114L159 135L145 158L129 171L107 180L82 181L64 176L47 166L32 149L25 132L23 120L24 102L27 92L34 78L46 62L46 75L51 89L59 96L71 97L71 95L60 85L58 75L62 66L83 47L89 37L93 24L92 4Z"/>' +
+      "</svg>";
+
+    var copy = document.createElement("span");
+    copy.className = "meal-nutrition-badge-copy";
+
+    var calories = document.createElement("span");
+    calories.className = "meal-nutrition-badge-calories";
+    calories.textContent = nutrition.calories;
+
+    var caption = document.createElement("span");
+    caption.className = "meal-nutrition-badge-caption";
+    caption.textContent = "par portion";
+
+    copy.appendChild(calories);
+    copy.appendChild(caption);
+    badge.appendChild(icon);
+    badge.appendChild(copy);
+    badge.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      openMealNutritionModal(meal, nutrition);
+    });
+    parent.appendChild(badge);
+  }
+
+  function appendMealCardMedia(card, meal) {
+    var media = document.createElement("div");
+    media.className = "meal-card-media";
+    if (meal.imageUrl) {
+      var image = document.createElement("img");
+      image.alt = meal.imageAlt;
+      image.src = meal.imageUrl;
+      media.appendChild(image);
+    } else {
+      media.classList.add("meal-card-media--empty");
+    }
+    appendMealNutritionBadge(media, meal);
+    card.appendChild(media);
+  }
+
   function selectedTotal(quantities) {
     return Object.keys(quantities).reduce(function (total, mealId) {
       return total + (quantities[mealId] || 0);
@@ -59,12 +182,7 @@ export const portalClientScript = `
       var card = document.createElement("article");
       card.className = "meal-card";
 
-      if (meal.imageUrl) {
-        var image = document.createElement("img");
-        image.alt = meal.imageAlt;
-        image.src = meal.imageUrl;
-        card.appendChild(image);
-      }
+      appendMealCardMedia(card, meal);
 
       var title = document.createElement("span");
       title.className = "meal-title";
@@ -441,12 +559,7 @@ export const portalClientScript = `
           var mealCard = document.createElement("article");
           mealCard.className = "meal-card";
 
-          if (meal.imageUrl) {
-            var image = document.createElement("img");
-            image.alt = meal.imageAlt;
-            image.src = meal.imageUrl;
-            mealCard.appendChild(image);
-          }
+          appendMealCardMedia(mealCard, meal);
 
           var title = document.createElement("span");
           title.className = "meal-title";
@@ -608,6 +721,25 @@ export const portalClientScript = `
           });
         });
       }
+    }
+  });
+
+  if (mealNutritionModal) {
+    mealNutritionModal.addEventListener("click", function (event) {
+      var target = event.target;
+      if (
+        target &&
+        (target.classList.contains("meal-nutrition-modal-backdrop") ||
+          target.classList.contains("meal-nutrition-modal-close"))
+      ) {
+        closeMealNutritionModal();
+      }
+    });
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      closeMealNutritionModal();
     }
   });
 })();

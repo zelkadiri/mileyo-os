@@ -28,6 +28,16 @@ import {
   formatV2MealCatalogSetupMessage,
   setupV2MealCatalog,
 } from "./settings-meal-catalog-v2.server";
+import {
+  EXPORT_MEAL_NUTRITION_TEMPLATE_INTENT,
+  buildMealNutritionExportActionResult,
+} from "./settings-meal-nutrition-export.server";
+import {
+  APPLY_MEAL_NUTRITION_IMPORT_INTENT,
+  PREVIEW_MEAL_NUTRITION_IMPORT_INTENT,
+  buildMealNutritionImportApplyActionResult,
+  buildMealNutritionImportPreviewActionResult,
+} from "./settings-meal-nutrition-import.server";
 import { createOrUpdateWeeklySellingPlans } from "./settings-selling-plans.server";
 import {
   SETUP_V2_WEEKLY_SELLING_PLANS_INTENT,
@@ -226,6 +236,18 @@ export const handleSettingsAction = async ({
         ok: false,
       };
     }
+  }
+
+  if (intent === EXPORT_MEAL_NUTRITION_TEMPLATE_INTENT) {
+    return buildMealNutritionExportActionResult(admin, shop);
+  }
+
+  if (intent === PREVIEW_MEAL_NUTRITION_IMPORT_INTENT) {
+    return buildMealNutritionImportPreviewActionResult(formData, admin, shop);
+  }
+
+  if (intent === APPLY_MEAL_NUTRITION_IMPORT_INTENT) {
+    return buildMealNutritionImportApplyActionResult(formData, admin, shop);
   }
 
   if (intent === SETUP_V2_WEEKLY_SELLING_PLANS_INTENT) {

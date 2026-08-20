@@ -10,10 +10,15 @@ export type BusinessCheck = {
 
 export const samplePortalMeals = (count: number): PortalMeal[] =>
   Array.from({ length: count }, (_, index) => ({
+    calories: null,
+    carbs: null,
+    fat: null,
     id: `meal-${index + 1}`,
     imageAlt: `Plat ${index + 1}`,
     imageUrl: null,
     objective: SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS,
+    portionGrams: null,
+    proteins: null,
     title: `Plat ${index + 1}`,
     variantId: `meal-${index + 1}`,
     variantTitle: "Perte de poids",

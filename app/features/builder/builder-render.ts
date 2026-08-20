@@ -5,6 +5,7 @@ import { escapeHtml, scriptJson } from "./builder-formatters";
 import { BUILDER_OBJECTIVE_OPTIONS } from "./builder-objective-options";
 import { builderStyles } from "./builder-styles";
 import type { BuilderBoxOption, BuilderDeliveryConfig, BuilderMealOption } from "./builder-types";
+import { renderMileyoLogoImg } from "../../utils/mileyoLogo";
 
 const htmlResponse = (html: string) =>
   new Response(html, {
@@ -23,8 +24,7 @@ export const renderMessage = (message: string, shop?: string) =>
 <body class="tunnel-body">
   <header class="tunnel-header">
     <a class="tunnel-back" href="/">← Retour</a>
-    <!-- Wordmark temporaire : aucun asset logo Mileyo trouvé dans le projet -->
-    <p class="tunnel-wordmark" aria-label="Mileyo">Mileyo</p>
+    ${renderMileyoLogoImg("tunnel-logo")}
   </header>
   <main class="builder-shell">
     <section class="setup-card">
@@ -64,8 +64,7 @@ export const renderBuilder = ({
       <span class="tunnel-back-text tunnel-back-text--email">← Repas</span>
       <span class="tunnel-back-text tunnel-back-text--recap">← Email</span>
     </button>
-    <!-- Wordmark temporaire : aucun asset logo Mileyo trouvé dans le projet -->
-    <p class="tunnel-wordmark" aria-label="Mileyo">Mileyo</p>
+    ${renderMileyoLogoImg("tunnel-logo")}
     <div class="tunnel-progress-block">
       <p class="tunnel-step-label" id="tunnel-step-label">Étape 1 sur 6</p>
       <div aria-hidden="true" class="tunnel-progress">
@@ -169,34 +168,31 @@ export const renderBuilder = ({
     </section>
 
     <section class="builder-step builder-step--meals hidden" id="step-meals">
-      <div class="meals-toolbar-sticky" id="meals-toolbar-sticky">
-        <div class="meals-intro">
-          <h1>Choisissez vos repas</h1>
-          <p class="meals-lead" id="meals-lead">Pour votre box</p>
-        </div>
+      <div class="meals-intro">
+        <h1>Choisissez vos repas</h1>
+        <p class="meals-lead" id="meals-lead">Pour votre box</p>
+      </div>
 
+      <div class="meals-toolbar-sticky" id="meals-toolbar-sticky">
         <div class="meal-filters-panel" id="meal-filters">
           <div class="meal-filters-panel-head">
-            <p class="meal-filters-title">Affinez votre sélection</p>
-            <button class="meal-filters-reset hidden" id="meal-filters-reset" type="button">Réinitialiser</button>
-          </div>
-          <div class="meal-filter-row">
-            <span class="meal-filter-label">J'évite</span>
-            <div class="meal-filter-chips" id="allergen-filters" role="toolbar" aria-label="Allergènes à éviter"></div>
-          </div>
-          <div class="meal-filter-row">
-            <span class="meal-filter-label">Mes envies</span>
-            <div class="meal-filter-chips" id="badge-filters" role="toolbar" aria-label="Envies et badges"></div>
-          </div>
-        </div>
-
-        <div class="meals-progress-strip" id="meals-progress-strip">
-          <div class="meals-progress-copy">
-            <p class="meals-progress-box" id="meals-progress-box">Box 12 repas</p>
-            <p class="meals-progress-count" id="meals-progress-count">0 / 12 repas sélectionnés</p>
-          </div>
-          <div aria-hidden="true" class="meals-progress-bar">
-            <div class="meals-progress-fill" id="meals-progress-fill"></div>
+            <button
+              aria-controls="meal-filters-drawer"
+              aria-expanded="false"
+              aria-haspopup="dialog"
+              aria-label="Filtres"
+              class="meal-filters-toggle"
+              id="meal-filters-toggle"
+              type="button"
+            >
+              <span aria-hidden="true" class="meal-filters-toggle-icon">
+                <svg fill="none" height="16" viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-linecap="round" stroke-width="2.2"/>
+                </svg>
+              </span>
+              <span class="meal-filters-toggle-label">Filtres</span>
+              <span class="meal-filters-toggle-count hidden" id="meal-filters-active-count" aria-hidden="true"></span>
+            </button>
           </div>
         </div>
       </div>
@@ -304,13 +300,7 @@ export const renderBuilder = ({
   </footer>
 
   <footer class="tunnel-footer meals-gauge-footer hidden" id="meals-gauge-footer">
-    <div class="meals-gauge">
-      <p class="meals-gauge-count" id="meals-gauge-count">0 / 12 plats</p>
-      <div aria-hidden="true" class="meals-gauge-bar">
-        <div class="meals-gauge-fill" id="meals-gauge-fill"></div>
-      </div>
-      <button class="meals-gauge-cta" disabled id="add-to-cart" type="button">Encore 12 plats</button>
-    </div>
+    <button class="meals-gauge-cta" disabled id="add-to-cart" type="button">Encore 12 plats</button>
   </footer>
 
   <footer class="tunnel-footer email-footer hidden" id="email-footer">
@@ -320,6 +310,63 @@ export const renderBuilder = ({
   <footer class="tunnel-footer recap-footer hidden" id="recap-footer">
     <button class="tunnel-cta" id="recap-continue" type="button">Passer au paiement</button>
   </footer>
+
+  <div
+    aria-hidden="true"
+    class="meal-filters-drawer hidden"
+    id="meal-filters-drawer"
+  >
+    <button aria-label="Fermer les filtres" class="meal-filters-drawer-backdrop" type="button"></button>
+    <aside
+      aria-labelledby="meal-filters-drawer-title"
+      class="meal-filters-drawer-panel"
+      id="meal-filters-drawer-panel"
+      role="dialog"
+    >
+      <div class="meal-filters-drawer-head">
+        <h2 class="meal-filters-drawer-title" id="meal-filters-drawer-title">Filtres</h2>
+        <button aria-label="Fermer" class="meal-filters-drawer-close" type="button">×</button>
+      </div>
+      <div class="meal-filters-drawer-scroll" id="meal-filters-body">
+        <div class="meal-filter-row">
+          <span class="meal-filter-label">J'évite</span>
+          <div class="meal-filter-options" id="allergen-filters" role="group" aria-label="Allergènes à éviter"></div>
+        </div>
+        <div class="meal-filter-row">
+          <span class="meal-filter-label">Mes envies</span>
+          <div class="meal-filter-options" id="badge-filters" role="group" aria-label="Envies et badges"></div>
+        </div>
+        <button class="meal-filters-reset hidden" id="meal-filters-reset" type="button">Réinitialiser</button>
+      </div>
+      <div class="meal-filters-drawer-footer">
+        <button class="meal-filters-apply" id="meal-filters-apply" type="button">Appliquer</button>
+      </div>
+    </aside>
+  </div>
+
+  <div
+    aria-hidden="true"
+    class="meal-detail-drawer hidden"
+    id="meal-detail-drawer"
+  >
+    <button aria-label="Fermer" class="meal-detail-drawer-backdrop" type="button"></button>
+    <aside
+      aria-labelledby="meal-detail-drawer-title"
+      class="meal-detail-drawer-panel"
+      id="meal-detail-drawer-panel"
+      role="dialog"
+    >
+      <button aria-label="Fermer" class="meal-detail-drawer-close" type="button">×</button>
+      <div class="meal-detail-drawer-scroll">
+        <div class="meal-detail-drawer-media" id="meal-detail-drawer-media"></div>
+        <h2 class="meal-detail-drawer-title" id="meal-detail-drawer-title"></h2>
+        <div class="meal-badges meal-detail-drawer-badges" id="meal-detail-drawer-badges"></div>
+        <p class="meal-detail-drawer-allergens hidden" id="meal-detail-drawer-allergens"></p>
+        <p class="meal-detail-drawer-description hidden" id="meal-detail-drawer-description"></p>
+        <div class="meal-detail-drawer-nutrition" id="meal-detail-drawer-nutrition"></div>
+      </div>
+    </aside>
+  </div>
 
   <script>window.__MILEYO_BOX_BUILDER__ = ${scriptJson({
     boxes,

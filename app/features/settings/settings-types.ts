@@ -118,9 +118,22 @@ export type MetafieldDefinitionMutationResponse = {
   };
 };
 
+import type { MealNutritionImportPreview } from "../../utils/mealNutritionCsv";
+
 export type SettingsActionData = {
+  /** CSV body for meal nutrition template (Blob download client-side). */
+  csv?: string;
+  /** Unique per successful export so the client can re-download identical CSV. */
+  downloadToken?: string;
   errors?: string[];
+  filename?: string;
   message?: string;
+  /** Variants successfully written on Apply. */
+  nutritionImportAppliedCount?: number;
+  /** Raw CSV retained after preview so Apply can revalidate server-side. */
+  nutritionImportCsvText?: string;
+  /** 14C preview (format + catalogue). */
+  nutritionImportPreview?: MealNutritionImportPreview;
   ok: boolean;
 };
 

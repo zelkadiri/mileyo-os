@@ -1,5 +1,15 @@
+import { useEffect, useRef } from "react";
 import { Form, useActionData, useLoaderData } from "react-router";
 
+import { downloadMealNutritionCsv } from "../../utils/mealNutritionExport";
+import {
+  formatMealCaloriesLabel,
+  formatMealCarbsLabel,
+  formatMealFatLabel,
+  formatMealPortionGramsLabel,
+  formatMealProteinsLabel,
+} from "../../utils/mealNutritionFormat";
+import type { MealNutritionMacroSnapshot } from "../../utils/mealNutritionCsv";
 import type { loadSettingsPageData } from "./settings-catalog.server";
 import {
   fieldStyle,
@@ -12,6 +22,19 @@ import {
 import type { SettingsActionData, SettingsBoxProduct, ShopifyProduct } from "./settings-types";
 
 type SettingsPageData = Awaited<ReturnType<typeof loadSettingsPageData>>;
+
+const formatImportMacroOrUnset = (
+  label: string | null,
+  fallbackPrefix: string,
+) => label ?? `${fallbackPrefix}non renseigné`;
+
+const formatImportMacroSnapshotLines = (macros: MealNutritionMacroSnapshot) => [
+  `Calories : ${formatImportMacroOrUnset(formatMealCaloriesLabel(macros.calories), "")}`,
+  `Protéines : ${formatImportMacroOrUnset(formatMealProteinsLabel(macros.proteins), "")}`,
+  `Glucides : ${formatImportMacroOrUnset(formatMealCarbsLabel(macros.carbs), "")}`,
+  `Lipides : ${formatImportMacroOrUnset(formatMealFatLabel(macros.fat), "")}`,
+  `Portion : ${formatImportMacroOrUnset(formatMealPortionGramsLabel(macros.portionGrams), "")}`,
+];
 
 function ProductPreview({
   emptyMessage,
@@ -127,6 +150,19 @@ export default function Settings() {
   const actionData = useActionData<SettingsActionData>();
   const { boxProducts, collections, mealProducts, settings, shop } =
     useLoaderData<SettingsPageData>();
+  const lastNutritionDownloadTokenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!actionData?.ok || !actionData.csv || !actionData.downloadToken) {
+      return;
+    }
+    if (lastNutritionDownloadTokenRef.current === actionData.downloadToken) {
+      return;
+    }
+
+    lastNutritionDownloadTokenRef.current = actionData.downloadToken;
+    downloadMealNutritionCsv(actionData.csv, actionData.filename);
+  }, [actionData]);
 
   return (
     <s-page heading="Réglages">
@@ -347,6 +383,238 @@ export default function Settings() {
           )}
           {actionData?.message ? <s-text>{actionData.message}</s-text> : null}
           {actionData?.errors?.length ? (
+            <s-unordered-list>
+              {actionData.errors.map((error) => (
+                <s-list-item key={error}>{error}</s-list-item>
+              ))}
+            </s-unordered-list>
+          ) : null}
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Export nutrition">
+        <s-stack gap="base">
+          <s-text>
+            Télécharge un CSV pré-rempli (une ligne par variante repas) pour
+            renseigner les macros : calories, protéines, glucides, lipides,
+            portion. Ce fichier servira aussi de format d’import ultérieur.
+          </s-text>
+          <s-text>
+            {settings.mealCollectionTitle ? (
+              <>
+                Collection cible :{" "}
+                <strong>{settings.mealCollectionTitle}</strong> (
+                {settings.mealCollectionHandle})
+              </>
+            ) : (
+              <>Aucune collection de plats n’est configurée.</>
+            )}
+          </s-text>
+          {settings.mealCollectionId ? (
+            <Form method="post">
+              <input
+                type="hidden"
+                name="intent"
+                value="exportMealNutritionTemplate"
+              />
+              <s-button type="submit">Exporter template nutrition</s-button>
+            </Form>
+          ) : (
+            <s-text>
+              Sélectionnez une collection de plats avant d’exporter le template
+              nutrition.
+            </s-text>
+          )}
+          {actionData?.csv !== undefined ||
+          actionData?.message === "Export nutrition impossible." ||
+          actionData?.message ===
+            "Impossible d’exporter le template nutrition." ? (
+            <>
+              {actionData.message ? (
+                <s-text>{actionData.message}</s-text>
+              ) : null}
+              {actionData.errors?.length ? (
+                <s-unordered-list>
+                  {actionData.errors.map((error) => (
+                    <s-list-item key={error}>{error}</s-list-item>
+                  ))}
+                </s-unordered-list>
+              ) : null}
+            </>
+          ) : null}
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Import nutrition">
+        <s-stack gap="base">
+          <s-text>
+            Uploadez le CSV nutrition rempli (même format que l’export),
+            analysez-le, puis appliquez uniquement si la preview est valide.
+          </s-text>
+          <Form encType="multipart/form-data" method="post">
+            <input
+              type="hidden"
+              name="intent"
+              value="previewMealNutritionImport"
+            />
+            <s-stack gap="base">
+              <label style={fieldStyle}>
+                Fichier CSV
+                <input
+                  accept=".csv,text/csv"
+                  name="nutritionCsv"
+                  style={selectStyle}
+                  type="file"
+                />
+              </label>
+              <s-button type="submit">Analyser</s-button>
+            </s-stack>
+          </Form>
+          {actionData?.nutritionImportAppliedCount != null &&
+          actionData.ok ? (
+            <s-stack gap="small">
+              <s-text>
+                <strong>Import terminé</strong>
+              </s-text>
+              <s-text>
+                {actionData.nutritionImportAppliedCount} variante(s) mise(s) à
+                jour.
+              </s-text>
+            </s-stack>
+          ) : null}
+          {actionData?.nutritionImportPreview ? (
+            <s-stack gap="small">
+              {actionData.message ? (
+                <s-text>{actionData.message}</s-text>
+              ) : null}
+              <s-text>
+                Lignes analysées :{" "}
+                <strong>{actionData.nutritionImportPreview.rowCount}</strong>
+              </s-text>
+              <s-text>
+                Modifications prêtes :{" "}
+                <strong>
+                  {actionData.nutritionImportPreview.validRowCount}
+                </strong>
+              </s-text>
+              <s-text>
+                Lignes ignorées :{" "}
+                <strong>
+                  {actionData.nutritionImportPreview.ignoredRowCount}
+                </strong>
+              </s-text>
+              <s-text>
+                Erreurs :{" "}
+                <strong>
+                  {actionData.nutritionImportPreview.issues.length}
+                </strong>
+              </s-text>
+              {actionData.nutritionImportPreview.skippedEmptyRowCount > 0 ? (
+                <s-text>
+                  Lignes vides ignorées :{" "}
+                  {actionData.nutritionImportPreview.skippedEmptyRowCount}
+                </s-text>
+              ) : null}
+              {actionData.nutritionImportPreview.diffs.length > 0 ? (
+                <s-stack gap="small">
+                  <s-text>
+                    <strong>Aperçu des modifications</strong> (max 5)
+                  </s-text>
+                  {actionData.nutritionImportPreview.diffs
+                    .slice(0, 5)
+                    .map((diff) => (
+                      <s-box
+                        key={diff.variantId}
+                        borderRadius="base"
+                        borderWidth="base"
+                        padding="base"
+                      >
+                        <s-stack gap="small">
+                          <s-text>
+                            <strong>{diff.productTitle}</strong>
+                          </s-text>
+                          <s-text>{diff.variantTitle}</s-text>
+                          <s-text>
+                            <strong>Avant</strong>
+                          </s-text>
+                          {formatImportMacroSnapshotLines(diff.before).map(
+                            (line) => (
+                              <s-text key={`before-${diff.variantId}-${line}`}>
+                                {line}
+                              </s-text>
+                            ),
+                          )}
+                          <s-text>
+                            <strong>Après</strong>
+                          </s-text>
+                          {formatImportMacroSnapshotLines(diff.after).map(
+                            (line) => (
+                              <s-text key={`after-${diff.variantId}-${line}`}>
+                                {line}
+                              </s-text>
+                            ),
+                          )}
+                        </s-stack>
+                      </s-box>
+                    ))}
+                </s-stack>
+              ) : null}
+              {actionData.nutritionImportPreview.issues.length > 0 ? (
+                <s-stack gap="small">
+                  <s-text>
+                    <strong>Erreurs détectées</strong>
+                  </s-text>
+                  <s-unordered-list>
+                    {actionData.nutritionImportPreview.issues.map((issue) => (
+                      <s-list-item
+                        key={`${issue.code}-${issue.rowIndex}-${issue.message}`}
+                      >
+                        Ligne{" "}
+                        {issue.rowIndex < 0 ? "—" : issue.rowIndex + 1} :{" "}
+                        <strong>{issue.code}</strong>
+                        {issue.message ? ` — ${issue.message}` : ""}
+                      </s-list-item>
+                    ))}
+                  </s-unordered-list>
+                </s-stack>
+              ) : null}
+              {actionData.nutritionImportPreview.validRowCount > 0 &&
+              actionData.nutritionImportCsvText ? (
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="applyMealNutritionImport"
+                  />
+                  <textarea
+                    defaultValue={actionData.nutritionImportCsvText}
+                    hidden
+                    name="nutritionCsvText"
+                    readOnly
+                  />
+                  <s-stack gap="small">
+                    <s-text>
+                      {actionData.nutritionImportPreview.validRowCount}{" "}
+                      modification(s) prête(s)
+                    </s-text>
+                    <s-button type="submit">
+                      Appliquer les modifications
+                    </s-button>
+                  </s-stack>
+                </Form>
+              ) : null}
+              {actionData.errors?.length &&
+              actionData.nutritionImportPreview.issues.length > 0 ? (
+                <s-unordered-list>
+                  {actionData.errors.map((error) => (
+                    <s-list-item key={error}>{error}</s-list-item>
+                  ))}
+                </s-unordered-list>
+              ) : null}
+            </s-stack>
+          ) : null}
+          {actionData?.errors?.length &&
+          actionData.message?.includes("écriture") ? (
             <s-unordered-list>
               {actionData.errors.map((error) => (
                 <s-list-item key={error}>{error}</s-list-item>

@@ -16,8 +16,8 @@ export const builderStyles = `
   --mileyo-shadow: 0 4px 24px rgba(90, 27, 105, 0.08);
   --mileyo-shadow-soft: 0 2px 12px rgba(90, 27, 105, 0.06);
   --tunnel-footer-height: 108px;
-  --meals-gauge-footer-height: 164px;
-  --meals-toolbar-sticky-top: 72px;
+  --meals-gauge-footer-height: 64px;
+  --meals-toolbar-sticky-top: 8px;
   --formula-step-max-width: 1120px;
   --objective-step-max-width: 880px;
   --delivery-step-max-width: 720px;
@@ -146,17 +146,15 @@ body {
   outline-offset: 2px;
 }
 
-.tunnel-wordmark {
-  color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.28rem;
-  font-style: italic;
-  font-weight: 600;
+.tunnel-logo {
+  display: block;
   grid-column: 2;
   grid-row: 1;
-  letter-spacing: 0.04em;
+  height: 28px;
+  justify-self: center;
   margin: 0;
-  text-align: center;
+  object-fit: contain;
+  width: auto;
 }
 
 .tunnel-progress-block {
@@ -326,12 +324,15 @@ body {
   padding-bottom: calc(var(--meals-gauge-footer-height) + 28px);
   padding-left: var(--meals-step-gutter);
   padding-right: var(--meals-step-gutter);
-  padding-top: 12px;
+  padding-top: 6px;
   width: 100%;
 }
 
 .tunnel-body.is-step-meals .tunnel-header {
-  padding-bottom: 8px;
+  gap: 2px 12px;
+  padding-bottom: 4px;
+  padding-top: 6px;
+  position: static;
 }
 
 .formula-intro,
@@ -341,118 +342,287 @@ body {
   text-align: center;
 }
 
+.tunnel-body.is-step-meals .meals-intro {
+  margin-bottom: 8px;
+}
+
+.tunnel-body.is-step-meals .meals-intro h1 {
+  margin-bottom: 2px;
+}
+
+.tunnel-body.is-step-meals .meals-lead {
+  font-size: 0.92rem;
+  line-height: 1.3;
+}
+
 .meals-toolbar-sticky {
-  background: linear-gradient(180deg, var(--mileyo-cream) 78%, rgba(252, 248, 246, 0));
-  margin: 0 0 14px;
-  padding-bottom: 10px;
+  background: transparent;
+  margin: 0 0 8px;
+  padding: 0;
   position: sticky;
   top: var(--meals-toolbar-sticky-top);
+  width: max-content;
+  max-width: 100%;
   z-index: 12;
 }
 
-.meals-toolbar-sticky .meals-intro {
-  margin-bottom: 12px;
-}
-
 .meal-filters-panel {
-  background: var(--mileyo-white);
-  border: 1px solid rgba(185, 138, 215, 0.22);
-  border-radius: 16px;
-  box-shadow: var(--mileyo-shadow-soft);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
   display: grid;
-  gap: 10px;
-  margin-bottom: 10px;
-  padding: 12px 14px;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  width: max-content;
+  max-width: 100%;
 }
 
 .meal-filters-panel-head {
   align-items: center;
   display: flex;
-  gap: 10px;
-  justify-content: space-between;
+  gap: 8px;
+  justify-content: flex-start;
+  margin: 0;
+  padding: 0;
+  width: max-content;
 }
 
-.meal-filters-title {
+.meal-filters-toggle {
+  align-items: center;
+  appearance: none;
+  background: var(--mileyo-white);
+  border: 1px solid rgba(185, 138, 215, 0.4);
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(42, 11, 51, 0.08);
   color: var(--mileyo-purple-black);
-  font-size: 0.82rem;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 0.78rem;
   font-weight: 700;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 12px 6px 10px;
+}
+
+.meal-filters-toggle.is-open {
+  background: var(--mileyo-white);
+  border-color: var(--mileyo-purple);
+  box-shadow: 0 4px 12px rgba(42, 11, 51, 0.12);
+}
+
+.meal-filters-toggle-icon {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
+}
+
+.meal-filters-toggle-icon svg {
+  display: block;
+  height: 16px;
+  width: 16px;
+}
+
+.meal-filters-toggle-label {
+  line-height: 1;
+}
+
+.meal-filters-toggle-count {
+  align-items: center;
+  background: var(--mileyo-purple-black);
+  border-radius: 999px;
+  color: var(--mileyo-white);
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 800;
+  justify-content: center;
+  min-width: 1.2rem;
+  padding: 1px 5px;
+}
+
+.meal-filters-drawer {
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 84;
+}
+
+.meal-filters-drawer.hidden {
+  display: none;
+}
+
+.meal-filters-drawer-backdrop {
+  appearance: none;
+  background: rgba(42, 11, 51, 0.28);
+  border: 0;
+  cursor: pointer;
+  inset: 0;
+  opacity: 0;
+  padding: 0;
+  position: absolute;
+  transition: opacity 0.28s ease;
+}
+
+.meal-filters-drawer.is-open .meal-filters-drawer-backdrop {
+  opacity: 1;
+}
+
+.meal-filters-drawer-panel {
+  background: var(--mileyo-white);
+  border-radius: 22px 0 0 22px;
+  box-shadow: -12px 0 40px rgba(42, 11, 51, 0.18);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 400px;
+  min-height: 100%;
+  min-width: 0;
+  padding: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: translateX(100%);
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  width: 400px;
+  z-index: 1;
+}
+
+.meal-filters-drawer.is-open .meal-filters-drawer-panel {
+  transform: translateX(0);
+}
+
+.meal-filters-drawer-head {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 14px 14px 10px 22px;
+}
+
+.meal-filters-drawer-title {
+  color: var(--mileyo-purple-black);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.25;
   margin: 0;
 }
 
+.meal-filters-drawer-close {
+  appearance: none;
+  background: rgba(220, 194, 240, 0.32);
+  border: 0;
+  border-radius: 999px;
+  color: var(--mileyo-purple-black);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 1.35rem;
+  height: 36px;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+  width: 36px;
+  z-index: 2;
+}
+
+.meal-filters-drawer-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 22px 18px;
+}
+
+.meal-filters-drawer-footer {
+  background: var(--mileyo-white);
+  border-top: 1px solid rgba(185, 138, 215, 0.18);
+  box-shadow: 0 -6px 18px rgba(42, 11, 51, 0.04);
+  flex: 0 0 auto;
+  padding: 14px 22px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+
+.meal-filters-apply {
+  appearance: none;
+  background: var(--mileyo-purple);
+  border: 0;
+  border-radius: 14px;
+  color: var(--mileyo-white);
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 800;
+  min-height: 48px;
+  padding: 12px 16px;
+  width: 100%;
+}
+
+.meal-filters-apply:hover {
+  background: var(--mileyo-purple-dark);
+}
+
+.tunnel-body.is-step-meals #meals-section.section {
+  margin-top: 0;
+}
+
 .meal-filter-row {
-  align-items: flex-start;
   display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(68px, 76px) minmax(0, 1fr);
+  gap: 10px;
 }
 
 .meal-filter-label {
   color: var(--mileyo-purple-black);
-  font-size: 0.76rem;
+  font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.3;
-  margin: 8px 0 0;
+  margin: 0;
 }
 
-.meals-progress-strip {
-  background: var(--mileyo-white);
-  border: 1px solid rgba(185, 138, 215, 0.18);
-  border-radius: 14px;
-  box-shadow: var(--mileyo-shadow-soft);
+.meal-filter-options {
   display: grid;
-  gap: 8px;
-  padding: 10px 14px;
+  gap: 10px 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.meals-progress-strip.is-complete {
-  border-color: rgba(124, 201, 167, 0.45);
-}
-
-.meals-progress-copy {
-  align-items: baseline;
+.meal-filter-option {
+  align-items: flex-start;
+  background: rgba(252, 248, 246, 0.9);
+  border: 1px solid rgba(185, 138, 215, 0.22);
+  border-radius: 14px;
+  color: var(--mileyo-text);
+  cursor: pointer;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  justify-content: space-between;
-}
-
-.meals-progress-box {
-  color: var(--mileyo-purple-black);
   font-size: 0.82rem;
-  font-weight: 800;
-  margin: 0;
-}
-
-.meals-progress-count {
-  color: var(--mileyo-muted);
-  font-size: 0.78rem;
   font-weight: 600;
-  margin: 0;
+  gap: 8px;
+  line-height: 1.3;
+  min-height: 44px;
+  padding: 11px 12px;
 }
 
-.meals-progress-bar {
-  background: rgba(185, 138, 215, 0.22);
-  border-radius: 999px;
-  height: 8px;
-  overflow: hidden;
-  width: 100%;
-}
-
-.meals-progress-fill {
-  background: linear-gradient(90deg, var(--mileyo-purple), var(--mileyo-purple-dark));
-  border-radius: inherit;
-  height: 100%;
-  transition: width 0.24s ease;
-  width: 0;
-}
-
-.meals-progress-strip.is-complete .meals-progress-fill {
-  background: linear-gradient(90deg, var(--mileyo-green), #5fbf98);
-}
-
-.meals-progress-strip.is-complete .meals-progress-count {
+.meal-filter-option.is-active {
+  background: rgba(185, 138, 215, 0.16);
+  border-color: rgba(185, 138, 215, 0.55);
   color: var(--mileyo-purple-black);
-  font-weight: 700;
+}
+
+.meal-filter-option input {
+  accent-color: var(--mileyo-purple-dark);
+  flex: 0 0 auto;
+  height: 16px;
+  margin: 1px 0 0;
+  width: 16px;
 }
 
 .formula-lead {
@@ -1343,8 +1513,25 @@ body {
 #meal-grid .product-card img {
   aspect-ratio: 4 / 3;
   border-radius: 14px;
+  display: block;
   object-fit: cover;
   width: 100%;
+}
+
+.meal-card-media {
+  isolation: isolate;
+  position: relative;
+  width: 100%;
+}
+
+.meal-card-media--empty {
+  aspect-ratio: 4 / 3;
+  background: linear-gradient(
+    135deg,
+    rgba(220, 194, 240, 0.28) 0%,
+    rgba(239, 196, 214, 0.22) 100%
+  );
+  border-radius: 14px;
 }
 
 .meal-card-content {
@@ -1368,13 +1555,275 @@ body {
   text-align: center;
 }
 
-.meal-kcal {
-  color: var(--mileyo-text);
-  font-size: 0.84rem;
+.meal-nutrition-badge {
+  align-items: center;
+  backdrop-filter: blur(10px);
+  background: rgba(28, 12, 36, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  bottom: 9px;
+  box-shadow: 0 7px 16px rgba(28, 12, 36, 0.26);
+  color: var(--mileyo-white);
+  display: inline-flex;
+  flex-direction: row;
+  gap: 7px;
+  left: 9px;
+  max-width: calc(100% - 18px);
+  padding: 6px 10px 6px 8px;
+  pointer-events: none;
+  position: absolute;
+  text-align: left;
+  z-index: 2;
+}
+
+.meal-nutrition-badge-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+
+.meal-nutrition-badge-icon svg {
+  display: block;
+  height: 18px;
+  width: 18px;
+}
+
+.meal-nutrition-badge-copy {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.meal-nutrition-badge-calories {
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.meal-nutrition-badge-caption {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.meal-card-media--interactive {
+  cursor: pointer;
+}
+
+.meal-card-media--interactive:focus-visible {
+  outline: 2px solid var(--mileyo-purple);
+  outline-offset: 2px;
+}
+
+.meal-detail-drawer {
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 85;
+}
+
+.meal-detail-drawer.hidden {
+  display: none;
+}
+
+.meal-detail-drawer-backdrop {
+  appearance: none;
+  background: rgba(42, 11, 51, 0.28);
+  border: 0;
+  cursor: pointer;
+  inset: 0;
+  opacity: 0;
+  padding: 0;
+  position: absolute;
+  transition: opacity 0.28s ease;
+}
+
+.meal-detail-drawer.is-open .meal-detail-drawer-backdrop {
+  opacity: 1;
+}
+
+.meal-detail-drawer-panel {
+  background: var(--mileyo-white);
+  border-radius: 22px 0 0 22px;
+  box-shadow: -12px 0 40px rgba(42, 11, 51, 0.18);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 450px;
+  min-height: 100%;
+  min-width: 0;
+  padding: 0;
+  position: absolute;
+  right: 0;
+  top: 0;
+  transform: translateX(100%);
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+  width: clamp(360px, 25vw, 450px);
+  z-index: 1;
+}
+
+.meal-detail-drawer.is-open .meal-detail-drawer-panel {
+  transform: translateX(0);
+}
+
+.meal-detail-drawer-close {
+  appearance: none;
+  background: rgba(220, 194, 240, 0.32);
+  border: 0;
+  border-radius: 999px;
+  color: var(--mileyo-purple-black);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 1.35rem;
+  height: 36px;
+  line-height: 1;
+  margin: 14px 14px 0 auto;
+  padding: 0;
+  width: 36px;
+  z-index: 2;
+}
+
+.meal-detail-drawer-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 22px calc(28px + env(safe-area-inset-bottom, 0px));
+}
+
+.meal-detail-drawer-media {
+  aspect-ratio: 1 / 1;
+  background: linear-gradient(
+    135deg,
+    rgba(220, 194, 240, 0.28) 0%,
+    rgba(239, 196, 214, 0.22) 100%
+  );
+  border-radius: 18px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.meal-detail-drawer-media img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.meal-detail-drawer-title {
+  color: var(--mileyo-purple-black);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.35rem;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.25;
   margin: 0;
-  text-align: center;
+}
+
+.meal-detail-drawer-badges {
+  justify-content: flex-start;
+}
+
+.meal-detail-drawer-allergens {
+  color: var(--mileyo-muted);
+  font-size: 0.86rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.meal-detail-drawer-description {
+  color: var(--mileyo-text);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.meal-detail-drawer-nutrition {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.meal-detail-drawer-nutrition-heading {
+  color: var(--mileyo-purple-black);
+  font-size: 0.92rem;
+  font-weight: 800;
+  margin: 4px 0 2px;
+}
+
+.meal-detail-drawer-nutrition-row {
+  align-items: center;
+  background: rgba(246, 240, 248, 0.92);
+  border-radius: 14px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.meal-detail-drawer-nutrition-label {
+  align-items: center;
+  color: var(--mileyo-muted);
+  display: inline-flex;
+  font-size: 0.88rem;
+  font-weight: 600;
+  gap: 10px;
+}
+
+.meal-detail-drawer-nutrition-icon {
+  align-items: center;
+  color: var(--mileyo-purple-black);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 20px;
+  justify-content: center;
+  line-height: 0;
+  width: 20px;
+}
+
+.meal-detail-drawer-nutrition-icon svg {
+  display: block;
+  height: 18px;
+  width: 18px;
+}
+
+.meal-detail-drawer-nutrition-icon--calories {
+  color: #e45a2b;
+}
+
+.meal-detail-drawer-nutrition-icon--proteins {
+  color: #3d9b6e;
+}
+
+.meal-detail-drawer-nutrition-icon--carbs {
+  color: #d4a017;
+}
+
+.meal-detail-drawer-nutrition-icon--fat {
+  color: #e07a3a;
+}
+
+.meal-detail-drawer-nutrition-icon--portion {
+  color: #5b7fd6;
+}
+
+.meal-detail-drawer-nutrition-value {
+  color: var(--mileyo-purple-black);
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: right;
 }
 
 .meal-badges {
@@ -1475,87 +1924,6 @@ body {
   text-align: center;
 }
 
-.meal-filter-chips {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 2px 0 4px;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.meal-filter-chips::-webkit-scrollbar {
-  display: none;
-}
-
-.filter-chip {
-  background: var(--mileyo-white);
-  border: 1.5px solid rgba(185, 138, 215, 0.24);
-  border-radius: 999px;
-  color: var(--mileyo-text);
-  flex: 0 0 auto;
-  font-size: 0.78rem;
-  font-weight: 600;
-  min-height: 38px;
-  padding: 8px 14px;
-  white-space: nowrap;
-}
-
-.filter-chip--allergen.active {
-  background: #f5ddd5;
-  border-color: #e8b8a8;
-  color: #6b3a2e;
-}
-
-.filter-chip--badge.active {
-  border-color: transparent;
-}
-
-.filter-chip--badge-poulet.active {
-  background: #f8e8d4;
-  color: #7a4a12;
-}
-
-.filter-chip--badge-boeuf.active {
-  background: #edd9cf;
-  color: #5c3a2e;
-}
-
-.filter-chip--badge-poisson.active {
-  background: #d9e8f5;
-  color: #2f4f6d;
-}
-
-.filter-chip--badge-vegetarien.active {
-  background: #d9f0e3;
-  color: #2f6b4f;
-}
-
-.filter-chip--badge-epice.active {
-  background: #f5ddd0;
-  color: #8b4528;
-}
-
-.filter-chip--badge-doux.active {
-  background: #ebe0f5;
-  color: #5a3f7a;
-}
-
-.filter-chip--badge-leger.active {
-  background: #d9f2eb;
-  color: #2d6b5a;
-}
-
-.filter-chip--badge-gourmand.active {
-  background: #f5ecd4;
-  color: #7a5c1e;
-}
-
-.filter-chip--badge-equilibre.active {
-  background: #ebe2f8;
-  color: #5a3f7a;
-}
-
 .meal-filters-reset,
 .meals-empty-reset {
   appearance: none;
@@ -1568,8 +1936,10 @@ body {
   font-size: 0.76rem;
   font-weight: 700;
   padding: 4px 2px;
+  text-align: left;
   text-decoration: underline;
   text-underline-offset: 3px;
+  width: fit-content;
 }
 
 .meals-empty {
@@ -1588,75 +1958,53 @@ body {
   margin: 0 0 12px;
 }
 
-.meals-gauge-footer {
-  background: linear-gradient(180deg, rgba(252, 248, 246, 0) 0%, var(--mileyo-cream) 24%);
-  border-top: 1px solid rgba(185, 138, 215, 0.12);
+.tunnel-footer.meals-gauge-footer {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  display: flex;
+  justify-content: center;
+  left: 0;
+  max-width: none;
+  padding: 0 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  right: 0;
+  width: auto;
 }
 
-.meals-gauge {
-  box-sizing: border-box;
-  display: grid;
-  gap: 8px;
-  margin: 0 auto;
-  max-width: var(--meals-step-max-width);
-  padding-left: var(--meals-step-gutter);
-  padding-right: var(--meals-step-gutter);
-  width: 100%;
-}
-
-.meals-gauge-count {
-  color: var(--mileyo-purple-black);
-  font-size: 0.88rem;
-  font-weight: 800;
-  margin: 0;
-  text-align: center;
-}
-
-.meals-gauge-bar {
-  background: rgba(185, 138, 215, 0.28);
+.tunnel-footer.meals-gauge-footer .meals-gauge-cta {
+  background: var(--mileyo-purple-black);
+  border: 0;
   border-radius: 999px;
-  height: 8px;
-  overflow: hidden;
-  width: 100%;
-}
-
-.meals-gauge-fill {
-  background: linear-gradient(90deg, var(--mileyo-purple), var(--mileyo-purple-dark));
-  border-radius: 999px;
-  height: 100%;
-  transition: width 0.24s ease;
-  width: 0;
-}
-
-.meals-gauge-footer.is-complete .meals-gauge-fill {
-  background: linear-gradient(90deg, var(--mileyo-green), #5fbf98);
-}
-
-.meals-gauge-cta {
-  background: #efe4f7;
-  border: 1.5px solid rgba(90, 27, 105, 0.28);
-  box-shadow: 0 2px 10px rgba(90, 27, 105, 0.1);
-  color: var(--mileyo-purple-black);
-  font-size: 1rem;
+  box-shadow: 0 6px 18px rgba(42, 11, 51, 0.22);
+  color: var(--mileyo-white);
+  font-size: 0.84rem;
   font-weight: 800;
   letter-spacing: 0.01em;
-  padding: 15px 20px;
-  width: 100%;
+  max-width: 250px;
+  min-height: 40px;
+  padding: 10px 18px;
+  pointer-events: auto;
+  width: min(100%, 250px);
 }
 
-.meals-gauge-cta:disabled {
+.tunnel-footer.meals-gauge-footer .meals-gauge-cta:disabled {
+  background: var(--mileyo-purple-black);
+  border: 0;
+  box-shadow: 0 6px 18px rgba(42, 11, 51, 0.22);
+  color: var(--mileyo-white);
   cursor: not-allowed;
+  opacity: 0.88;
+}
+
+.tunnel-footer.meals-gauge-footer.is-complete .meals-gauge-cta:not(:disabled) {
+  background: var(--mileyo-purple-black);
+  box-shadow: 0 8px 20px rgba(90, 27, 105, 0.3);
+  color: var(--mileyo-white);
   opacity: 1;
 }
 
-.meals-gauge-footer.is-complete .meals-gauge-cta:not(:disabled) {
-  background: var(--mileyo-purple-black);
-  border-color: transparent;
-  box-shadow: 0 6px 22px rgba(90, 27, 105, 0.34);
-  color: var(--mileyo-white);
-}
-
-.meals-gauge-cta:not(:disabled):hover {
+.tunnel-footer.meals-gauge-footer .meals-gauge-cta:not(:disabled):hover {
   background: var(--mileyo-purple-dark-black);
 }
 
@@ -1876,8 +2224,8 @@ button:disabled {
 
 @media (max-width: 639px) {
   :root {
-    --meals-gauge-footer-height: 178px;
-    --meals-toolbar-sticky-top: 54px;
+    --meals-gauge-footer-height: 72px;
+    --meals-toolbar-sticky-top: 6px;
   }
 
   .tunnel-header {
@@ -1886,7 +2234,9 @@ button:disabled {
   }
 
   .tunnel-body.is-step-meals .tunnel-header {
-    padding-bottom: 5px;
+    gap: 1px 8px;
+    padding-bottom: 3px;
+    padding-top: 4px;
   }
 
   .tunnel-back {
@@ -1901,8 +2251,8 @@ button:disabled {
     display: inline;
   }
 
-  .tunnel-wordmark {
-    font-size: 1.1rem;
+  .tunnel-logo {
+    height: 24px;
   }
 
   .tunnel-step-label {
@@ -1920,115 +2270,167 @@ button:disabled {
 
   .tunnel-body.is-step-meals .builder-shell {
     padding-bottom: calc(var(--meals-gauge-footer-height) + 40px);
-    padding-top: 10px;
+    padding-top: 4px;
+  }
+
+  .tunnel-body.is-step-meals .meals-intro {
+    margin-bottom: 6px;
   }
 
   .meals-toolbar-sticky {
-    margin-bottom: 8px;
-    padding-bottom: 4px;
+    margin-bottom: 6px;
+    padding: 0;
     top: var(--meals-toolbar-sticky-top);
-  }
-
-  .meals-toolbar-sticky .meals-intro {
-    margin-bottom: 8px;
   }
 
   .meals-intro h1 {
     font-size: 1.14rem;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .meals-lead {
     font-size: 0.84rem;
   }
 
-  .meal-filters-panel {
-    gap: 5px;
-    margin-bottom: 6px;
-    padding: 9px 11px;
-  }
-
   .meal-filters-panel-head {
-    gap: 8px;
+    gap: 6px;
   }
 
-  .meal-filters-title {
-    font-size: 0.76rem;
+  .meal-filters-toggle {
+    font-size: 0.74rem;
+    min-height: 32px;
+    padding: 5px 10px 5px 8px;
+  }
+
+  .meal-filters-drawer-panel {
+    border-radius: 0;
+    box-shadow: none;
+    height: 100%;
+    height: 100dvh;
+    left: 0;
+    max-width: none;
+    min-height: 100%;
+    min-height: 100dvh;
+    right: 0;
+    width: 100%;
+    width: 100vw;
+  }
+
+  .meal-filters-drawer-head {
+    padding: 14px 14px 8px 20px;
+  }
+
+  .meal-filters-drawer-scroll {
+    gap: 16px;
+    padding: 6px 20px 16px;
+  }
+
+  .meal-filters-drawer-footer {
+    padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px));
   }
 
   .meal-filter-row {
-    gap: 3px;
+    gap: 8px;
   }
 
   .meal-filter-label {
-    font-size: 0.72rem;
-    margin-top: 0;
+    font-size: 0.74rem;
   }
 
-  .meal-filter-chips {
-    gap: 6px;
-    padding-bottom: 2px;
+  .meal-filter-options {
+    gap: 8px 10px;
   }
 
-  .filter-chip {
-    font-size: 0.72rem;
-    min-height: 32px;
-    padding: 6px 10px;
-  }
-
-  .meals-progress-strip {
-    gap: 6px;
-    padding: 8px 11px;
-  }
-
-  .meals-progress-box {
+  .meal-filter-option {
     font-size: 0.78rem;
-  }
-
-  .meals-progress-count {
-    font-size: 0.72rem;
+    min-height: 44px;
+    padding: 10px 11px;
   }
 
   #meal-grid.meal-grid {
-    gap: 12px;
+    gap: 10px;
   }
 
   .product-card.meal-card {
-    padding: 14px;
+    gap: 8px;
+    padding: 10px;
   }
 
   .meal-title {
-    font-size: 0.9rem;
-    min-height: calc(2 * 1.25 * 0.9em);
+    font-size: 0.88rem;
+    min-height: calc(2 * 1.25 * 0.88em);
   }
 
-  .meals-gauge-footer {
-    background: linear-gradient(180deg, rgba(252, 248, 246, 0.94) 0%, var(--mileyo-cream) 40%);
-    box-shadow: 0 -10px 28px rgba(90, 27, 105, 0.1);
-    padding-top: 8px;
+  .meal-nutrition-badge {
+    border-radius: 11px;
+    bottom: 7px;
+    left: 7px;
+    max-width: calc(100% - 14px);
+    padding: 5px 9px 5px 7px;
   }
 
-  .meals-gauge {
-    background: var(--mileyo-white);
-    border: 1px solid rgba(185, 138, 215, 0.18);
-    border-bottom: 0;
-    border-radius: 16px 16px 0 0;
-    gap: 6px;
-    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  .meal-nutrition-badge-icon svg {
+    height: 16px;
+    width: 16px;
   }
 
-  .meals-gauge-count {
-    font-size: 0.84rem;
-    line-height: 1.2;
+  .meal-nutrition-badge-calories {
+    font-size: 0.76rem;
   }
 
-  .meals-gauge-bar {
-    height: 7px;
+  .meal-nutrition-badge-caption {
+    font-size: 0.58rem;
   }
 
-  .meals-gauge-cta {
-    font-size: 0.96rem;
-    padding: 14px 16px;
+  .meal-card .quantity-row button {
+    height: 40px;
+    min-width: 40px;
+    width: 40px;
+  }
+
+  .meal-detail-drawer-panel {
+    border-radius: 0;
+    box-shadow: none;
+    height: 100%;
+    height: 100dvh;
+    left: 0;
+    max-width: none;
+    min-height: 100%;
+    min-height: 100dvh;
+    right: 0;
+    width: 100%;
+    width: 100vw;
+  }
+
+  .meal-detail-drawer-close {
+    margin: calc(10px + env(safe-area-inset-top, 0px)) 12px 0 auto;
+  }
+
+  .meal-detail-drawer-scroll {
+    gap: 12px;
+    padding: 4px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .meal-detail-drawer-title {
+    font-size: 1.18rem;
+  }
+
+  .meal-detail-drawer-media {
+    border-radius: 14px;
+  }
+
+  .tunnel-footer.meals-gauge-footer {
+    background: transparent;
+    box-shadow: none;
+    padding: 0 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .tunnel-footer.meals-gauge-footer .meals-gauge-cta {
+    font-size: 0.8rem;
+    max-width: 240px;
+    min-height: 38px;
+    padding: 9px 14px;
+    width: min(100%, 240px);
   }
 }
 
@@ -2132,9 +2534,9 @@ button:disabled {
     padding-top: 14px;
   }
 
-  .meals-gauge-footer {
-    padding-left: 0;
-    padding-right: 0;
+  .tunnel-footer.meals-gauge-footer {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 }
 
@@ -2144,7 +2546,8 @@ button:disabled {
   }
 
   .tunnel-body.is-step-meals .tunnel-header {
-    padding-bottom: 10px;
+    padding-bottom: 4px;
+    padding-top: 8px;
   }
 
   .tunnel-progress-block {
@@ -2197,7 +2600,7 @@ button:disabled {
     --meals-step-gutter: 32px;
     padding-left: var(--meals-step-gutter);
     padding-right: var(--meals-step-gutter);
-    padding-top: 16px;
+    padding-top: 8px;
   }
 
   #meal-grid.meal-grid {
@@ -2205,13 +2608,17 @@ button:disabled {
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   }
 
-  .meal-filter-chips {
-    flex-wrap: wrap;
-    overflow-x: visible;
+  .meal-filters-drawer .meal-filter-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .meal-filters-drawer .meal-filter-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
   }
 
   .meals-toolbar-sticky {
-    top: 78px;
+    top: var(--meals-toolbar-sticky-top);
   }
 
   .meals-intro h1 {
@@ -2405,16 +2812,19 @@ button:disabled {
     padding: 15px 24px;
   }
 
-  .meals-gauge-footer {
+  .tunnel-footer.meals-gauge-footer {
+    background: transparent;
     display: flex;
     justify-content: center;
-    padding: 14px 0 calc(14px + env(safe-area-inset-bottom, 0px));
+    padding: 0 24px calc(14px + env(safe-area-inset-bottom, 0px));
   }
 
-  .meals-gauge-cta {
-    font-size: 1.02rem;
-    max-width: none;
-    padding: 15px 24px;
+  .tunnel-footer.meals-gauge-footer .meals-gauge-cta {
+    font-size: 0.84rem;
+    max-width: 250px;
+    min-height: 40px;
+    padding: 10px 18px;
+    width: min(100%, 250px);
   }
 }
 

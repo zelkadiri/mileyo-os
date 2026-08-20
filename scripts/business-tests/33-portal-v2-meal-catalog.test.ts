@@ -59,7 +59,16 @@ const runSuite = () => {
   const portalCatalog = readSource("app/features/portal/portal-catalog.server.ts");
   const portalRender = readSource("app/features/portal/portal-render.ts");
   const portalFormatters = readSource("app/features/portal/portal-formatters.ts");
+  const portalStyles = readSource("app/features/portal/portal-styles.ts");
   const catalog = buildCatalog();
+  const renderMealGridSource = portalClient.slice(
+    portalClient.indexOf("function renderMealGrid"),
+    portalClient.indexOf("function updateEditor"),
+  );
+  const renderBoxChangeMealGridSource = portalClient.slice(
+    portalClient.indexOf("function renderBoxChangeMealGrid"),
+    portalClient.indexOf("function updateSelectedBoxLabels"),
+  );
 
   ctx.scenario("A. Portail branché sur le catalogue plats V2");
   ctx.assertTrue(
@@ -213,6 +222,193 @@ const runSuite = () => {
     portalFormatters.includes("meal.objective !== objective") &&
       portalActions.includes("objective: currentBox.objective") &&
       portalActions.includes("objective,"),
+  );
+
+  ctx.scenario("E. Mapper conserve les macros nutritionnelles");
+  const mappedCatalog = toPortalMealsFromBuilder(catalog);
+  ctx.assertTrue(
+    "filled macros are copied to PortalMeal",
+    mappedCatalog.length === catalog.length &&
+      mappedCatalog.every((meal, index) => {
+        const source = catalog[index];
+        return (
+          source != null &&
+          meal.calories === source.calories &&
+          meal.proteins === source.proteins &&
+          meal.carbs === source.carbs &&
+          meal.fat === source.fat &&
+          meal.portionGrams === source.portionGrams &&
+          meal.id === meal.variantId
+        );
+      }),
+  );
+  ctx.assertEqual(
+    "filled calories preserved",
+    mappedCatalog[0]?.calories,
+    400,
+  );
+  ctx.assertEqual(
+    "filled proteins preserved",
+    mappedCatalog[0]?.proteins,
+    30,
+  );
+  ctx.assertEqual(
+    "filled carbs preserved",
+    mappedCatalog[0]?.carbs,
+    40,
+  );
+  ctx.assertEqual("filled fat preserved", mappedCatalog[0]?.fat, 10);
+  ctx.assertEqual(
+    "filled portionGrams preserved",
+    mappedCatalog[0]?.portionGrams,
+    350,
+  );
+
+  const distinctMacros = buildMeal(
+    "Dahl lentilles",
+    SUBSCRIPTION_OBJECTIVE.BALANCED,
+    "bal-macros",
+  );
+  distinctMacros.calories = 512;
+  distinctMacros.proteins = 28.5;
+  distinctMacros.carbs = 61;
+  distinctMacros.fat = 14;
+  distinctMacros.portionGrams = 420;
+  const [mappedDistinct] = toPortalMealsFromBuilder([distinctMacros]);
+  ctx.assertEqual(
+    "distinct calories copied",
+    mappedDistinct?.calories,
+    512,
+  );
+  ctx.assertEqual(
+    "distinct proteins copied",
+    mappedDistinct?.proteins,
+    28.5,
+  );
+  ctx.assertEqual("distinct carbs copied", mappedDistinct?.carbs, 61);
+  ctx.assertEqual("distinct fat copied", mappedDistinct?.fat, 14);
+  ctx.assertEqual(
+    "distinct portionGrams copied",
+    mappedDistinct?.portionGrams,
+    420,
+  );
+  ctx.assertEqual(
+    "distinct identity stays variantId",
+    mappedDistinct?.id,
+    distinctMacros.variantId,
+  );
+
+  const nullMacros = buildMeal(
+    "Sans macros",
+    SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS,
+    "wl-null",
+  );
+  nullMacros.calories = null;
+  nullMacros.proteins = null;
+  nullMacros.carbs = null;
+  nullMacros.fat = null;
+  nullMacros.portionGrams = null;
+  const [mappedNull] = toPortalMealsFromBuilder([nullMacros]);
+  ctx.assertTrue(
+    "null macros stay null on PortalMeal",
+    mappedNull?.calories === null &&
+      mappedNull?.proteins === null &&
+      mappedNull?.carbs === null &&
+      mappedNull?.fat === null &&
+      mappedNull?.portionGrams === null,
+  );
+
+  ctx.scenario("F. Affichage nutrition cartes repas");
+  ctx.assertTrue(
+    "runtime formatter présent dans portal client",
+    portalClient.includes('from "../../utils/mealNutritionFormat"') &&
+      portalClient.includes("mealNutritionFormatRuntimeScript") &&
+      portalClient.includes("${mealNutritionFormatRuntimeScript}"),
+  );
+  ctx.assertTrue(
+    "helper interne utilise formatMealNutrition",
+    portalClient.includes("function appendMealNutritionBadge") &&
+      portalClient.includes("function openMealNutritionModal") &&
+      portalClient.includes("formatMealNutrition({") &&
+      portalClient.includes("calories: meal.calories") &&
+      portalClient.includes("proteins: meal.proteins") &&
+      portalClient.includes("carbs: meal.carbs") &&
+      portalClient.includes("fat: meal.fat") &&
+      portalClient.includes("portionGrams: meal.portionGrams") &&
+      portalClient.includes("nutrition.lines.length") &&
+      portalClient.includes("nutrition.calories"),
+  );
+  ctx.assertTrue(
+    "renderMealGrid utilise formatMealNutrition via le helper",
+    renderMealGridSource.includes("appendMealCardMedia(card, meal)"),
+  );
+  ctx.assertTrue(
+    "renderBoxChangeMealGrid utilise formatMealNutrition via le helper",
+    renderBoxChangeMealGridSource.includes(
+      "appendMealCardMedia(mealCard, meal)",
+    ),
+  );
+  ctx.assertTrue(
+    "media nutrition avant titre dans renderMealGrid",
+    /appendMealCardMedia\(card, meal\)[\s\S]*title\.textContent = meal\.title[\s\S]*variant\.textContent = meal\.variantTitle/.test(
+      renderMealGridSource,
+    ),
+  );
+  ctx.assertTrue(
+    "media nutrition avant titre dans renderBoxChangeMealGrid",
+    /appendMealCardMedia\(mealCard, meal\)[\s\S]*title\.textContent = meal\.title[\s\S]*variant\.textContent = meal\.variantTitle/.test(
+      renderBoxChangeMealGridSource,
+    ),
+  );
+  ctx.assertTrue(
+    "modal nutrition présente",
+    portalRender.includes('id="meal-nutrition-modal"') &&
+      portalRender.includes("Informations nutritionnelles") &&
+      portalClient.includes('className = "meal-nutrition-badge"') &&
+      portalClient.includes('className = "meal-card-media"') &&
+      portalStyles.includes(".meal-nutrition-modal") &&
+      portalStyles.includes(".meal-nutrition-badge") &&
+      portalStyles.includes(".meal-card-media"),
+  );
+  ctx.assertFalse(
+    "pas de bouton i legacy",
+    portalClient.includes('className = "meal-nutrition-info"') ||
+      portalClient.includes("function appendMealNutritionInfoButton") ||
+      portalStyles.includes(".meal-nutrition-info"),
+  );
+  ctx.assertFalse(
+    "pas de nutrition inline permanente sur les cartes",
+    portalClient.includes('className = "meal-nutrition"'),
+  );
+  ctx.assertFalse(
+    "aucune concaténation kcal manuelle",
+    portalClient.includes('meal.calories + " kcal"'),
+  );
+  ctx.assertFalse(
+    "aucune concaténation protéines manuelle",
+    portalClient.includes('meal.proteins + " g') ||
+      portalClient.includes('" g protéines"'),
+  );
+  ctx.assertFalse(
+    "aucune concaténation glucides / lipides manuelle",
+    portalClient.includes('meal.carbs + " g') ||
+      portalClient.includes('meal.fat + " g') ||
+      portalClient.includes('" g glucides"') ||
+      portalClient.includes('" g lipides"'),
+  );
+  ctx.assertFalse(
+    "aucune concaténation portion manuelle",
+    portalClient.includes('meal.portionGrams + " g"'),
+  );
+  ctx.assertTrue(
+    "identité picker inchangée",
+    portalClient.includes("function mealKey(meal)") &&
+      portalClient.includes("meal.variantId || meal.id"),
+  );
+  ctx.assertTrue(
+    "filtre objectif inchangé",
+    portalClient.includes("function mealsForSelection(selection)") &&
+      portalClient.includes("meal.objective === selection.objective"),
   );
 
   return finishSuite("33-portal-v2-meal-catalog", ctx);

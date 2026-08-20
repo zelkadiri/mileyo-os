@@ -11,10 +11,15 @@ export const toPortalMealsFromBuilder = (
   meals: readonly BuilderMealOption[],
 ): PortalMeal[] =>
   meals.map((meal) => ({
+    calories: meal.calories,
+    carbs: meal.carbs,
+    fat: meal.fat,
     id: meal.variantId,
     imageAlt: meal.imageAlt,
     imageUrl: meal.imageUrl,
     objective: meal.objective,
+    portionGrams: meal.portionGrams,
+    proteins: meal.proteins,
     title: meal.title,
     variantId: meal.variantId,
     variantTitle: SUBSCRIPTION_OBJECTIVE_OPTION_LABEL[meal.objective],

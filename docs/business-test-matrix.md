@@ -65,6 +65,13 @@ When adding a feature, update this matrix and add the corresponding scenario tes
 | Billing runner | Cycle gate cron (nextBillingDate) | Realign samedi → mardi | `dev-billing-runner-delivery-readiness-tests.ts` |
 | Delivery dates | Fenêtre J+3..J+10, report paiement tardif | Mauvaise 1ère livraison | `dev-delivery-date-tests.ts` |
 | Cutoff utils | Calcul cutoff Paris | Cutoff décalé | `dev-delivery-cutoff-tests.ts` |
+| Nutrition import 14A | Validation macros + mapping metafieldsSet variante | Valeurs invalides / mauvais owner PRODUCT | `39-meal-nutrition-import-foundation.test.ts` |
+| Nutrition export 14B | Template CSV Settings via Form POST + Blob (embedded-safe) | href hors auth / mauvais headers / invente macros | `40-meal-nutrition-export-template.test.ts` |
+| Nutrition import 14C-A | Preview CSV Settings (parse + validate, zéro écriture) | Apply prématuré / headers / doublons | `41-meal-nutrition-import-preview.test.ts` |
+| Nutrition import 14C-B1 | Preview métier catalogue (variant/objective + diff) | variant inconnu / objective faux / écriture | `42-meal-nutrition-import-catalog-preview.test.ts` |
+| Nutrition import 14C-C | Apply CSV → revalidation → metafieldsSet variantes | Apply sans preview / writer bypass | `43-meal-nutrition-import-apply.test.ts` |
+| Nutrition import 14C-D | Import partiel Excel (lignes macros vides ignorées) | Apply bloqué / fausses erreurs template | `44-meal-nutrition-import-partial.test.ts` |
+| Nutrition import 14C-E | metafieldsSet batché ≤25 inputs | Exceeded maximum metafields input limit of 25 | `45-meal-nutrition-import-metafields-batch.test.ts` |
 
 ## Runner
 

@@ -1,4 +1,5 @@
 import { FIRST_BOX_LAUNCH_DISCOUNT_EUR } from "../../constants/firstBoxLaunchDiscount";
+import { mealNutritionFormatRuntimeScript } from "../../utils/mealNutritionFormat";
 import { mealFilterRuntimeScript } from "./builder-filter-runtime";
 import {
   BUILDER_CART_PREPARE_ERROR,
@@ -79,6 +80,11 @@ export const builderClientScript = `
   var allergenFilters = document.getElementById("allergen-filters");
   var badgeFilters = document.getElementById("badge-filters");
   var mealFiltersReset = document.getElementById("meal-filters-reset");
+  var mealFiltersToggle = document.getElementById("meal-filters-toggle");
+  var mealFiltersDrawer = document.getElementById("meal-filters-drawer");
+  var mealFiltersApply = document.getElementById("meal-filters-apply");
+  var mealFiltersActiveCount = document.getElementById("meal-filters-active-count");
+  var mealFiltersCloseTimer = null;
   var mealsEmpty = document.getElementById("meals-empty");
   var mealsEmptyCopy = document.getElementById("meals-empty-copy");
   var mealsEmptyReset = document.getElementById("meals-empty-reset");
@@ -100,17 +106,23 @@ export const builderClientScript = `
   var recapEmail = document.getElementById("recap-email");
   var CAPTURE_LEAD_INTENT = ${JSON.stringify(CAPTURE_CHECKOUT_LEAD_INTENT)};
   var CART_PREPARE_ERROR = ${JSON.stringify(BUILDER_CART_PREPARE_ERROR)};
-  var mealsGaugeCount = document.getElementById("meals-gauge-count");
-  var mealsGaugeFill = document.getElementById("meals-gauge-fill");
-  var mealsProgressBox = document.getElementById("meals-progress-box");
-  var mealsProgressCount = document.getElementById("meals-progress-count");
-  var mealsProgressFill = document.getElementById("meals-progress-fill");
-  var mealsProgressStrip = document.getElementById("meals-progress-strip");
+  var mealDetailDrawer = document.getElementById("meal-detail-drawer");
+  var mealDetailDrawerMedia = document.getElementById("meal-detail-drawer-media");
+  var mealDetailDrawerTitle = document.getElementById("meal-detail-drawer-title");
+  var mealDetailDrawerBadges = document.getElementById("meal-detail-drawer-badges");
+  var mealDetailDrawerAllergens = document.getElementById("meal-detail-drawer-allergens");
+  var mealDetailDrawerDescription = document.getElementById("meal-detail-drawer-description");
+  var mealDetailDrawerNutrition = document.getElementById("meal-detail-drawer-nutrition");
+  var mealDetailDrawerCloseTimer = null;
   var selectedAllergenFilters = [];
   var selectedBadgeFilters = [];
+  var draftAllergenFilters = [];
+  var draftBadgeFilters = [];
+  var mealFiltersOpen = false;
 
   ${mealFilterRuntimeScript}
   ${builderCartRuntimeScript}
+  ${mealNutritionFormatRuntimeScript}
 
   function getDeliveryWindowOptions() {
     if (!data.deliveryConfig || !data.deliveryConfig.deliveryWindowOptions) {
@@ -372,31 +384,127 @@ export const builderClientScript = `
     return getMealsForSelectedObjective().filter(mealMatchesFilter);
   }
 
+  function cloneMealFilterIds(ids) {
+    return ids.slice();
+  }
+
   function hasActiveMealFilters() {
     return selectedAllergenFilters.length > 0 || selectedBadgeFilters.length > 0;
+  }
+
+  function hasDraftMealFilters() {
+    return draftAllergenFilters.length > 0 || draftBadgeFilters.length > 0;
+  }
+
+  function activeMealFilterCount() {
+    return selectedAllergenFilters.length + selectedBadgeFilters.length;
+  }
+
+  function syncMealFiltersDraftFromSelected() {
+    draftAllergenFilters = cloneMealFilterIds(selectedAllergenFilters);
+    draftBadgeFilters = cloneMealFilterIds(selectedBadgeFilters);
+  }
+
+  function setMealFiltersOpen(isOpen) {
+    mealFiltersOpen = Boolean(isOpen);
+    if (!mealFiltersDrawer) {
+      if (mealFiltersToggle) {
+        mealFiltersToggle.setAttribute(
+          "aria-expanded",
+          mealFiltersOpen ? "true" : "false",
+        );
+        mealFiltersToggle.classList.toggle("is-open", mealFiltersOpen);
+      }
+      return;
+    }
+
+    if (mealFiltersToggle) {
+      mealFiltersToggle.setAttribute(
+        "aria-expanded",
+        mealFiltersOpen ? "true" : "false",
+      );
+      mealFiltersToggle.classList.toggle("is-open", mealFiltersOpen);
+    }
+
+    if (mealFiltersOpen) {
+      if (mealFiltersCloseTimer) {
+        window.clearTimeout(mealFiltersCloseTimer);
+        mealFiltersCloseTimer = null;
+      }
+      mealFiltersDrawer.classList.remove("hidden");
+      mealFiltersDrawer.setAttribute("aria-hidden", "false");
+      mealFiltersDrawer.setAttribute("aria-modal", "true");
+      window.requestAnimationFrame(function () {
+        mealFiltersDrawer.classList.add("is-open");
+      });
+      return;
+    }
+
+    mealFiltersDrawer.classList.remove("is-open");
+    mealFiltersDrawer.setAttribute("aria-hidden", "true");
+    mealFiltersDrawer.removeAttribute("aria-modal");
+    if (mealFiltersCloseTimer) {
+      window.clearTimeout(mealFiltersCloseTimer);
+    }
+    mealFiltersCloseTimer = window.setTimeout(function () {
+      mealFiltersDrawer.classList.add("hidden");
+      mealFiltersCloseTimer = null;
+    }, 320);
+  }
+
+  function openMealFiltersDrawer() {
+    syncMealFiltersDraftFromSelected();
+    renderMealFilters();
+    setMealFiltersOpen(true);
+  }
+
+  function discardMealFiltersDrawer() {
+    setMealFiltersOpen(false);
+  }
+
+  function applyMealFilters() {
+    selectedAllergenFilters = cloneMealFilterIds(draftAllergenFilters);
+    selectedBadgeFilters = cloneMealFilterIds(draftBadgeFilters);
+    updateMealFiltersToggleCount();
+    setMealFiltersOpen(false);
+    renderMeals();
+  }
+
+  function updateMealFiltersToggleCount() {
+    if (!mealFiltersActiveCount) return;
+    var count = activeMealFilterCount();
+    mealFiltersActiveCount.textContent = count > 0 ? String(count) : "";
+    mealFiltersActiveCount.classList.toggle("hidden", count === 0);
   }
 
   function resetMealFilters() {
     selectedAllergenFilters = [];
     selectedBadgeFilters = [];
+    draftAllergenFilters = [];
+    draftBadgeFilters = [];
     renderMealFilters();
+    updateMealFiltersToggleCount();
     renderMeals();
   }
 
-  function toggleAllergenFilter(filterId) {
-    var index = selectedAllergenFilters.indexOf(filterId);
-    if (index === -1) selectedAllergenFilters.push(filterId);
-    else selectedAllergenFilters.splice(index, 1);
+  function resetMealFiltersDraft() {
+    draftAllergenFilters = [];
+    draftBadgeFilters = [];
     renderMealFilters();
-    renderMeals();
   }
 
-  function toggleBadgeFilter(filterId) {
-    var index = selectedBadgeFilters.indexOf(filterId);
-    if (index === -1) selectedBadgeFilters.push(filterId);
-    else selectedBadgeFilters.splice(index, 1);
+  function toggleDraftAllergenFilter(filterId) {
+    var index = draftAllergenFilters.indexOf(filterId);
+    if (index === -1) draftAllergenFilters.push(filterId);
+    else draftAllergenFilters.splice(index, 1);
     renderMealFilters();
-    renderMeals();
+  }
+
+  function toggleDraftBadgeFilter(filterId) {
+    var index = draftBadgeFilters.indexOf(filterId);
+    if (index === -1) draftBadgeFilters.push(filterId);
+    else draftBadgeFilters.splice(index, 1);
+    renderMealFilters();
   }
 
   function renderMealFilters() {
@@ -404,37 +512,54 @@ export const builderClientScript = `
 
     allergenFilters.innerHTML = "";
     ALLERGEN_FILTER_OPTIONS.forEach(function (filter) {
-      var chip = document.createElement("button");
-      var isActive = selectedAllergenFilters.indexOf(filter.id) !== -1;
-      chip.className = "filter-chip filter-chip--allergen" + (isActive ? " active" : "");
-      chip.type = "button";
-      chip.textContent = filter.label;
-      chip.setAttribute("aria-pressed", isActive ? "true" : "false");
-      chip.addEventListener("click", function () {
-        toggleAllergenFilter(filter.id);
+      var isActive = draftAllergenFilters.indexOf(filter.id) !== -1;
+      var option = document.createElement("label");
+      option.className =
+        "meal-filter-option" + (isActive ? " is-active" : "");
+
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = isActive;
+      input.setAttribute("data-filter-id", filter.id);
+      input.addEventListener("change", function () {
+        toggleDraftAllergenFilter(filter.id);
       });
-      allergenFilters.appendChild(chip);
+
+      var text = document.createElement("span");
+      text.textContent = filter.label;
+
+      option.appendChild(input);
+      option.appendChild(text);
+      allergenFilters.appendChild(option);
     });
 
     badgeFilters.innerHTML = "";
     BADGE_FILTER_OPTIONS.forEach(function (filter) {
-      var chip = document.createElement("button");
-      var isActive = selectedBadgeFilters.indexOf(filter.id) !== -1;
-      chip.className =
-        "filter-chip filter-chip--badge filter-chip--badge-" +
+      var isActive = draftBadgeFilters.indexOf(filter.id) !== -1;
+      var option = document.createElement("label");
+      option.className =
+        "meal-filter-option meal-filter-option--badge-" +
         filter.id +
-        (isActive ? " active" : "");
-      chip.type = "button";
-      chip.textContent = filter.label;
-      chip.setAttribute("aria-pressed", isActive ? "true" : "false");
-      chip.addEventListener("click", function () {
-        toggleBadgeFilter(filter.id);
+        (isActive ? " is-active" : "");
+
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = isActive;
+      input.setAttribute("data-filter-id", filter.id);
+      input.addEventListener("change", function () {
+        toggleDraftBadgeFilter(filter.id);
       });
-      badgeFilters.appendChild(chip);
+
+      var text = document.createElement("span");
+      text.textContent = filter.label;
+
+      option.appendChild(input);
+      option.appendChild(text);
+      badgeFilters.appendChild(option);
     });
 
     if (mealFiltersReset) {
-      mealFiltersReset.classList.toggle("hidden", !hasActiveMealFilters());
+      mealFiltersReset.classList.toggle("hidden", !hasDraftMealFilters());
     }
   }
 
@@ -650,9 +775,6 @@ export const builderClientScript = `
     if (mealsLead && selectedBox && requiredMeals) {
       mealsLead.textContent = "Pour votre box de " + requiredMeals + " repas";
     }
-    if (mealsProgressBox && selectedBox && requiredMeals) {
-      mealsProgressBox.textContent = "Box " + requiredMeals + " repas";
-    }
   }
 
   function findObjectiveLabel(value) {
@@ -784,6 +906,9 @@ export const builderClientScript = `
     stepFormula.classList.toggle("hidden", step !== "formule");
     stepDelivery.classList.toggle("hidden", step !== "livraison");
     stepMeals.classList.toggle("hidden", step !== "repas");
+    if (step !== "repas" && mealFiltersOpen) {
+      discardMealFiltersDrawer();
+    }
     var stepEmail = document.getElementById("step-email");
     if (stepEmail) {
       stepEmail.classList.toggle("hidden", step !== "email");
@@ -817,7 +942,9 @@ export const builderClientScript = `
     } else if (step === "recap") {
       renderRecap();
     } else {
+      syncMealFiltersDraftFromSelected();
       renderMealFilters();
+      updateMealFiltersToggleCount();
       if (!mealsRendered) {
         renderMeals();
         mealsRendered = true;
@@ -1045,39 +1172,25 @@ export const builderClientScript = `
   function updateSummary() {
     var total = selectedTotal();
     var remaining = Math.max(0, requiredMeals - total);
-    var progress = requiredMeals > 0 ? (total / requiredMeals) * 100 : 0;
     selectedCount.textContent = total + " / " + requiredMeals + " plats sélectionnés";
-
-    if (mealsGaugeCount) {
-      mealsGaugeCount.textContent = total + " / " + requiredMeals + " repas";
-    }
-    if (mealsProgressCount) {
-      mealsProgressCount.textContent = total + " / " + requiredMeals + " repas sélectionnés";
-    }
-    if (mealsGaugeFill) {
-      mealsGaugeFill.style.width = Math.min(100, progress) + "%";
-    }
-    if (mealsProgressFill) {
-      mealsProgressFill.style.width = Math.min(100, progress) + "%";
-    }
 
     var subscriptionUnavailable = selectedBox && !selectedBox.sellingPlanId;
     var isComplete = isMealsSelectionComplete();
     addToCart.disabled = !isComplete;
 
     if (addToCart.textContent !== "Ajout en cours...") {
-      if (!isComplete) {
-        addToCart.textContent = "Encore " + remaining + " plat" + (remaining > 1 ? "s" : "");
-      } else {
+      if (isComplete) {
         addToCart.textContent = "Continuer";
+      } else if (total === 0) {
+        addToCart.textContent =
+          "Encore " + remaining + " plat" + (remaining > 1 ? "s" : "");
+      } else {
+        addToCart.textContent = total + " / " + requiredMeals + " repas";
       }
     }
 
     if (mealsGaugeFooter) {
       mealsGaugeFooter.classList.toggle("is-complete", isComplete);
-    }
-    if (mealsProgressStrip) {
-      mealsProgressStrip.classList.toggle("is-complete", isComplete);
     }
 
     if (subscriptionUnavailable) {
@@ -1085,6 +1198,270 @@ export const builderClientScript = `
     } else if (errorMessage.textContent === "Abonnement bientôt disponible pour cette box.") {
       setError("");
     }
+  }
+
+  function getMealNutritionIcon(kind) {
+    if (kind === "calories") {
+      return (
+        '<svg viewBox="21 1 142 182" width="18" height="18" fill="currentColor" focusable="false" aria-hidden="true">' +
+        '<path d="M92 3L103 13L110 28L112 61L117 79L122 84L132 84L137 80L140 70L142 70L149 90L149 104L146 115L152 111L154 102L157 103L161 114L159 135L145 158L129 171L107 180L82 181L64 176L47 166L32 149L25 132L23 120L24 102L27 92L34 78L46 62L46 75L51 89L59 96L71 97L71 95L60 85L58 75L62 66L83 47L89 37L93 24L92 4Z"/>' +
+        "</svg>"
+      );
+    }
+    if (kind === "proteins") {
+      return (
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" focusable="false" aria-hidden="true">' +
+        '<path d="M7 10c0-2.2 1.8-4 4-4h2c2.2 0 4 1.8 4 4v2c0 3.3-2.7 6-6 6h0c-3.3 0-6-2.7-6-6v-1" stroke-linecap="round"/>' +
+        '<path d="M9 8.5V6.8M15 8.5V6.8" stroke-linecap="round"/>' +
+        "</svg>"
+      );
+    }
+    if (kind === "carbs") {
+      return (
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" focusable="false" aria-hidden="true">' +
+        '<path d="M12 3c2.5 2.2 4 5.1 4 8.2 0 3.4-1.8 5.8-4 7.8-2.2-2-4-4.4-4-7.8C8 8.1 9.5 5.2 12 3z" stroke-linejoin="round"/>' +
+        '<path d="M12 11v8" stroke-linecap="round"/>' +
+        "</svg>"
+      );
+    }
+    if (kind === "fat") {
+      return (
+        '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" focusable="false" aria-hidden="true">' +
+        '<path d="M12 3.2c2.8 3.2 6.2 6.8 6.2 10.4A6.2 6.2 0 0 1 12 20a6.2 6.2 0 0 1-6.2-6.4C5.8 10 9.2 6.4 12 3.2z"/>' +
+        "</svg>"
+      );
+    }
+    return (
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" focusable="false" aria-hidden="true">' +
+      '<path d="M5 18h14M7 18l1.2-8h7.6L17 18M9.5 10l.7-4h3.6l.7 4" stroke-linecap="round" stroke-linejoin="round"/>' +
+      "</svg>"
+    );
+  }
+
+  function appendMealDetailNutritionRow(list, kind, label, value) {
+    if (!value) return;
+    var row = document.createElement("div");
+    row.className = "meal-detail-drawer-nutrition-row";
+
+    var term = document.createElement("span");
+    term.className = "meal-detail-drawer-nutrition-label";
+    term.innerHTML =
+      '<span class="meal-detail-drawer-nutrition-icon meal-detail-drawer-nutrition-icon--' +
+      kind +
+      '" aria-hidden="true">' +
+      getMealNutritionIcon(kind) +
+      "</span>" +
+      "<span>" +
+      label +
+      "</span>";
+
+    var definition = document.createElement("span");
+    definition.className = "meal-detail-drawer-nutrition-value";
+    definition.textContent = value;
+
+    row.appendChild(term);
+    row.appendChild(definition);
+    list.appendChild(row);
+  }
+
+  function closeMealDetailDrawer() {
+    if (!mealDetailDrawer || mealDetailDrawer.classList.contains("hidden")) return;
+    mealDetailDrawer.classList.remove("is-open");
+    mealDetailDrawer.setAttribute("aria-hidden", "true");
+    mealDetailDrawer.removeAttribute("aria-modal");
+    if (mealDetailDrawerCloseTimer) {
+      window.clearTimeout(mealDetailDrawerCloseTimer);
+    }
+    mealDetailDrawerCloseTimer = window.setTimeout(function () {
+      mealDetailDrawer.classList.add("hidden");
+      mealDetailDrawerCloseTimer = null;
+    }, 320);
+  }
+
+  function openMealDetailDrawer(meal) {
+    if (!mealDetailDrawer || !mealDetailDrawerTitle) return;
+
+    if (mealFiltersOpen) {
+      discardMealFiltersDrawer();
+    }
+
+    if (mealDetailDrawerCloseTimer) {
+      window.clearTimeout(mealDetailDrawerCloseTimer);
+      mealDetailDrawerCloseTimer = null;
+    }
+
+    if (mealDetailDrawerMedia) {
+      mealDetailDrawerMedia.innerHTML = "";
+      if (meal.imageUrl) {
+        var image = document.createElement("img");
+        image.alt = meal.imageAlt || meal.title;
+        image.src = meal.imageUrl;
+        mealDetailDrawerMedia.appendChild(image);
+      }
+    }
+
+    mealDetailDrawerTitle.textContent = meal.title;
+
+    if (mealDetailDrawerBadges) {
+      mealDetailDrawerBadges.innerHTML = "";
+      if (meal.badges && meal.badges.length) {
+        meal.badges.forEach(function (badgeText) {
+          var badge = document.createElement("span");
+          badge.className = "meal-badge meal-badge--" + getBadgeColorSlug(badgeText);
+          badge.textContent = badgeText;
+          mealDetailDrawerBadges.appendChild(badge);
+        });
+        mealDetailDrawerBadges.classList.remove("hidden");
+      } else {
+        mealDetailDrawerBadges.classList.add("hidden");
+      }
+    }
+
+    if (mealDetailDrawerAllergens) {
+      if (meal.allergenes && meal.allergenes.length) {
+        mealDetailDrawerAllergens.textContent =
+          "Contient : " +
+          meal.allergenes.map(function (entry) {
+            return formatAllergenDisplay(entry);
+          }).join(", ");
+        mealDetailDrawerAllergens.classList.remove("hidden");
+      } else {
+        mealDetailDrawerAllergens.textContent = "";
+        mealDetailDrawerAllergens.classList.add("hidden");
+      }
+    }
+
+    if (mealDetailDrawerDescription) {
+      if (meal.ingredients && meal.ingredients.length) {
+        mealDetailDrawerDescription.textContent = meal.ingredients.join(", ");
+        mealDetailDrawerDescription.classList.remove("hidden");
+      } else {
+        mealDetailDrawerDescription.textContent = "";
+        mealDetailDrawerDescription.classList.add("hidden");
+      }
+    }
+
+    if (mealDetailDrawerNutrition) {
+      mealDetailDrawerNutrition.innerHTML = "";
+      var nutrition = formatMealNutrition({
+        calories: meal.calories,
+        proteins: meal.proteins,
+        carbs: meal.carbs,
+        fat: meal.fat,
+        portionGrams: meal.portionGrams,
+      });
+      if (nutrition.lines.length) {
+        var heading = document.createElement("p");
+        heading.className = "meal-detail-drawer-nutrition-heading";
+        heading.textContent = nutrition.portionGrams
+          ? "Informations nutritionnelles · Par portion (" + nutrition.portionGrams + ")"
+          : "Informations nutritionnelles";
+        mealDetailDrawerNutrition.appendChild(heading);
+        appendMealDetailNutritionRow(
+          mealDetailDrawerNutrition,
+          "calories",
+          "Calories",
+          nutrition.calories,
+        );
+        appendMealDetailNutritionRow(
+          mealDetailDrawerNutrition,
+          "proteins",
+          "Protéines",
+          nutrition.proteins,
+        );
+        appendMealDetailNutritionRow(
+          mealDetailDrawerNutrition,
+          "carbs",
+          "Glucides",
+          nutrition.carbs,
+        );
+        appendMealDetailNutritionRow(
+          mealDetailDrawerNutrition,
+          "fat",
+          "Lipides",
+          nutrition.fat,
+        );
+        appendMealDetailNutritionRow(
+          mealDetailDrawerNutrition,
+          "portion",
+          "Portion",
+          nutrition.portionGrams,
+        );
+      }
+    }
+
+    mealDetailDrawer.classList.remove("hidden");
+    mealDetailDrawer.setAttribute("aria-hidden", "false");
+    mealDetailDrawer.setAttribute("aria-modal", "true");
+    window.requestAnimationFrame(function () {
+      mealDetailDrawer.classList.add("is-open");
+    });
+  }
+
+  function appendMealNutritionBadge(parent, meal) {
+    var nutrition = formatMealNutrition({
+      calories: meal.calories,
+      proteins: meal.proteins,
+      carbs: meal.carbs,
+      fat: meal.fat,
+      portionGrams: meal.portionGrams,
+    });
+    if (!nutrition.calories || !nutrition.lines.length) return;
+
+    var badge = document.createElement("span");
+    badge.className = "meal-nutrition-badge";
+    badge.setAttribute("aria-hidden", "true");
+
+    var icon = document.createElement("span");
+    icon.className = "meal-nutrition-badge-icon";
+    icon.innerHTML =
+      '<svg viewBox="21 1 142 182" width="18" height="18" focusable="false" aria-hidden="true">' +
+      '<path fill="#FFFFFF" d="M92 3L103 13L110 28L112 61L117 79L122 84L132 84L137 80L140 70L142 70L149 90L149 104L146 115L152 111L154 102L157 103L161 114L159 135L145 158L129 171L107 180L82 181L64 176L47 166L32 149L25 132L23 120L24 102L27 92L34 78L46 62L46 75L51 89L59 96L71 97L71 95L60 85L58 75L62 66L83 47L89 37L93 24L92 4Z"/>' +
+      "</svg>";
+
+    var copy = document.createElement("span");
+    copy.className = "meal-nutrition-badge-copy";
+
+    var calories = document.createElement("span");
+    calories.className = "meal-nutrition-badge-calories";
+    calories.textContent = nutrition.calories;
+
+    var caption = document.createElement("span");
+    caption.className = "meal-nutrition-badge-caption";
+    caption.textContent = "par portion";
+
+    copy.appendChild(calories);
+    copy.appendChild(caption);
+    badge.appendChild(icon);
+    badge.appendChild(copy);
+    parent.appendChild(badge);
+  }
+
+  function appendMealCardMedia(card, meal) {
+    var media = document.createElement("div");
+    media.className = "meal-card-media meal-card-media--interactive";
+    media.setAttribute("role", "button");
+    media.setAttribute("tabindex", "0");
+    media.setAttribute("aria-label", "Voir le détail de " + meal.title);
+    if (meal.imageUrl) {
+      var image = document.createElement("img");
+      image.alt = meal.imageAlt;
+      image.src = meal.imageUrl;
+      media.appendChild(image);
+    } else {
+      media.classList.add("meal-card-media--empty");
+    }
+    appendMealNutritionBadge(media, meal);
+    media.addEventListener("click", function () {
+      openMealDetailDrawer(meal);
+    });
+    media.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (event.target !== media) return;
+      event.preventDefault();
+      openMealDetailDrawer(meal);
+    });
+    card.appendChild(media);
   }
 
   function renderMeals() {
@@ -1121,12 +1498,7 @@ export const builderClientScript = `
       var card = document.createElement("article");
       card.className = "product-card meal-card";
 
-      if (meal.imageUrl) {
-        var image = document.createElement("img");
-        image.alt = meal.imageAlt;
-        image.src = meal.imageUrl;
-        card.appendChild(image);
-      }
+      appendMealCardMedia(card, meal);
 
       var content = document.createElement("div");
       content.className = "meal-card-content";
@@ -1135,13 +1507,6 @@ export const builderClientScript = `
       title.className = "meal-title";
       title.textContent = meal.title;
       content.appendChild(title);
-
-      if (meal.calories !== null && meal.calories !== undefined && meal.calories > 0) {
-        var calories = document.createElement("p");
-        calories.className = "meal-kcal";
-        calories.textContent = meal.calories + " kcal";
-        content.appendChild(calories);
-      }
 
       if (meal.badges && meal.badges.length) {
         var badges = document.createElement("div");
@@ -1532,12 +1897,62 @@ export const builderClientScript = `
   }
 
   if (mealFiltersReset) {
-    mealFiltersReset.addEventListener("click", resetMealFilters);
+    mealFiltersReset.addEventListener("click", resetMealFiltersDraft);
+  }
+
+  if (mealFiltersToggle) {
+    mealFiltersToggle.addEventListener("click", function () {
+      if (mealFiltersOpen) {
+        discardMealFiltersDrawer();
+        return;
+      }
+      openMealFiltersDrawer();
+    });
+  }
+
+  if (mealFiltersApply) {
+    mealFiltersApply.addEventListener("click", applyMealFilters);
+  }
+
+  if (mealFiltersDrawer) {
+    mealFiltersDrawer.addEventListener("click", function (event) {
+      var target = event.target;
+      if (
+        target &&
+        (target.classList.contains("meal-filters-drawer-backdrop") ||
+          target.classList.contains("meal-filters-drawer-close"))
+      ) {
+        discardMealFiltersDrawer();
+      }
+    });
   }
 
   if (mealsEmptyReset) {
     mealsEmptyReset.addEventListener("click", resetMealFilters);
   }
+
+  if (mealDetailDrawer) {
+    mealDetailDrawer.addEventListener("click", function (event) {
+      var target = event.target;
+      if (
+        target &&
+        (target.classList.contains("meal-detail-drawer-backdrop") ||
+          target.classList.contains("meal-detail-drawer-close"))
+      ) {
+        closeMealDetailDrawer();
+      }
+    });
+  }
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      if (mealFiltersOpen) {
+        discardMealFiltersDrawer();
+        return;
+      }
+      closeMealDetailDrawer();
+    }
+  });
 
   if (boxRailViewport) {
     boxRailViewport.addEventListener("scroll", updateBoxRailNav, { passive: true });

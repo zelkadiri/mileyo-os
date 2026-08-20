@@ -538,13 +538,110 @@ const runSuite = () => {
       /export type BuilderMealOption = \{[^}]*\bprice\b/.test(types),
   );
   ctx.assertTrue(
-    "calories display requires non-null positive",
-    client.includes("meal.calories !== null") &&
-      client.includes("meal.calories > 0"),
+    "nutrition display uses formatMealNutrition",
+    client.includes("formatMealNutrition({") &&
+      client.includes("proteins: meal.proteins") &&
+      client.includes("carbs: meal.carbs") &&
+      client.includes("fat: meal.fat") &&
+      client.includes("portionGrams: meal.portionGrams"),
+  );
+  ctx.assertTrue(
+    "calorie badge stays on cards as quick info only",
+    client.includes("function appendMealNutritionBadge") &&
+      client.includes('className = "meal-nutrition-badge"') &&
+      client.includes("nutrition.calories") &&
+      client.includes('caption.textContent = "par portion"') &&
+      !client.includes("function openMealNutritionModal") &&
+      !render.includes('id="meal-nutrition-modal"'),
+  );
+  ctx.assertTrue(
+    "full nutrition details live only in meal drawer",
+    client.includes("function openMealDetailDrawer") &&
+      client.includes("appendMealDetailNutritionRow(") &&
+      client.includes("mealDetailDrawerNutrition") &&
+      client.includes('"Calories"') &&
+      render.includes('id="meal-detail-drawer-nutrition"') &&
+      !client.includes("appendNutritionModalRow"),
+  );
+  ctx.assertFalse(
+    "no legacy info button on meal cards",
+    client.includes('className = "meal-nutrition-info"') ||
+      client.includes("function appendMealNutritionInfoButton"),
+  );
+  ctx.assertFalse(
+    "no permanent inline nutrition block on meal cards",
+    client.includes('className = "meal-nutrition"'),
+  );
+  ctx.assertFalse(
+    "no invented kcal concatenation in client",
+    client.includes('meal.calories + " kcal"'),
   );
   ctx.assertFalse(
     "no product-level calories fallback in client",
     client.includes("productCalories") || client.includes("custom.calories"),
+  );
+  ctx.assertTrue(
+    "filters open in a lateral drawer by default closed",
+    render.includes('id="meal-filters-toggle"') &&
+      render.includes('aria-label="Filtres"') &&
+      render.includes('id="meal-filters-drawer"') &&
+      render.includes('class="meal-filters-drawer hidden"') &&
+      render.includes('id="meal-filters-apply"') &&
+      client.includes("function setMealFiltersOpen") &&
+      client.includes("function openMealFiltersDrawer") &&
+      client.includes("function discardMealFiltersDrawer") &&
+      client.includes("function applyMealFilters"),
+  );
+  ctx.assertTrue(
+    "filters use draft state until apply",
+    client.includes("draftAllergenFilters") &&
+      client.includes("draftBadgeFilters") &&
+      client.includes("syncMealFiltersDraftFromSelected") &&
+      client.includes("toggleDraftAllergenFilter") &&
+      client.includes("toggleDraftBadgeFilter") &&
+      client.includes("applyMealFilters") &&
+      !client.includes("toggleAllergenFilter(filter.id)") &&
+      !client.includes("toggleBadgeFilter(filter.id)"),
+  );
+  ctx.assertTrue(
+    "filters render as checkboxes",
+    client.includes('input.type = "checkbox"') &&
+      client.includes('"meal-filter-option"') &&
+      render.includes('class="meal-filter-options"') &&
+      !client.includes("filter-chip"),
+  );
+  ctx.assertTrue(
+    "meals footer is a single floating CTA",
+    render.includes('id="add-to-cart"') &&
+      render.includes("meals-gauge-cta") &&
+      render.includes('id="meals-gauge-footer"') &&
+      !render.includes('id="meals-gauge-count"') &&
+      !render.includes("meals-gauge-bar") &&
+      !render.includes("meals-progress-strip") &&
+      !render.includes("meals-progress-count"),
+  );
+  ctx.assertTrue(
+    "meals CTA label switches by selection state",
+    client.includes('addToCart.textContent = "Continuer"') &&
+      client.includes('"Encore " + remaining') &&
+      client.includes('total + " / " + requiredMeals + " repas"') &&
+      client.includes("total === 0"),
+  );
+  ctx.assertTrue(
+    "meal detail drawer opens from meal image",
+    render.includes('id="meal-detail-drawer"') &&
+      client.includes("function openMealDetailDrawer") &&
+      client.includes("function closeMealDetailDrawer") &&
+      client.includes("meal-card-media--interactive") &&
+      client.includes("openMealDetailDrawer(meal)"),
+  );
+  ctx.assertTrue(
+    "meal detail drawer reuses catalog meal fields",
+    client.includes("meal.ingredients") &&
+      client.includes("meal.allergenes") &&
+      client.includes("meal.badges") &&
+      client.includes("appendMealDetailNutritionRow(") &&
+      render.includes('id="meal-detail-drawer-nutrition"'),
   );
   ctx.assertTrue(
     "empty objective copy present",
