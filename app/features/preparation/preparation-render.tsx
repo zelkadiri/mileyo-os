@@ -1,4 +1,4 @@
-import { Form, useLoaderData } from "react-router";
+import { Form, Link, useLoaderData } from "react-router";
 
 import {
   formatDeliveryDateLabel,
@@ -80,12 +80,12 @@ export default function PreparationPage() {
             {upcomingDates.length > 0 ? (
               <div style={chipRowStyle}>
                 {upcomingDates.map((entry) => (
-                  <a
-                    href={`/app/preparation?date=${encodeURIComponent(entry.scheduledDeliveryDate)}`}
+                  <Link
                     key={entry.scheduledDeliveryDate}
                     style={chipLinkStyle(
                       selectedDate === entry.scheduledDeliveryDate,
                     )}
+                    to={`/app/preparation?date=${encodeURIComponent(entry.scheduledDeliveryDate)}`}
                   >
                     {formatDeliveryDateLabel(entry.scheduledDeliveryDate, {
                       short: true,
@@ -103,7 +103,7 @@ export default function PreparationPage() {
                         )}
                       />
                     ) : null}
-                  </a>
+                  </Link>
                 ))}
               </div>
             ) : (
