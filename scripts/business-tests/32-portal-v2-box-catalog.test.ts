@@ -197,8 +197,8 @@ const runSuite = () => {
     "Box 16 repas",
   );
   ctx.assertTrue(
-    "key info grid renders Objectif",
-    portalRender.includes('key-info-label">Objectif') &&
+    "subscription formula renders objective label",
+    portalRender.includes("subscription-plan-objective") &&
       portalRender.includes("selection.objectiveLabel"),
   );
   ctx.assertFalse(

@@ -242,7 +242,7 @@ export const loadPortalData = async ({
     });
   }
 
-  const merchantSupport = getMerchantSupportContact();
+  const merchantSupport = await getMerchantSupportContact(shop);
 
   const mappedManageable = await Promise.all(
     visibleManageable

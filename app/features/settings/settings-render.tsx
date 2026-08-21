@@ -17,6 +17,7 @@ import {
   productGridStyle,
   productImageStyle,
   selectStyle,
+  textInputStyle,
   warningBadgeStyle,
 } from "./settings-styles";
 import type { SettingsActionData, SettingsBoxProduct, ShopifyProduct } from "./settings-types";
@@ -263,6 +264,42 @@ export default function Settings() {
           ) : (
             <s-text>Aucune collection de plats n’est configurée.</s-text>
           )}
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Support client">
+        <s-stack gap="base">
+          <Form method="post">
+            <input type="hidden" name="intent" value="saveSupportChatUrl" />
+            <s-stack gap="base">
+              <label style={fieldStyle}>
+                URL du chat diététicien
+                <input
+                  defaultValue={settings.supportChatUrl ?? ""}
+                  name="supportChatUrl"
+                  placeholder="https://..."
+                  style={textInputStyle}
+                  type="text"
+                />
+              </label>
+              <s-text>
+                Crisp, Intercom, WhatsApp Business ou autre outil externe.
+              </s-text>
+              <s-button type="submit">Enregistrer l’URL du chat</s-button>
+            </s-stack>
+          </Form>
+          {actionData?.message?.toLowerCase().includes("chat") ? (
+            <>
+              <s-text>{actionData.message}</s-text>
+              {actionData.errors?.length ? (
+                <s-unordered-list>
+                  {actionData.errors.map((error) => (
+                    <s-list-item key={error}>{error}</s-list-item>
+                  ))}
+                </s-unordered-list>
+              ) : null}
+            </>
+          ) : null}
         </s-stack>
       </s-section>
 

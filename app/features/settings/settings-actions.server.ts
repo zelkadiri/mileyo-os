@@ -1,4 +1,5 @@
 import prisma from "../../db.server";
+import { isAllowedSupportChatUrl } from "../../utils/merchantSupport.server";
 import {
   parseBoxMealCountFormEntries,
   saveBoxMealCountMetafields,
@@ -269,6 +270,38 @@ export const handleSettingsAction = async ({
         ok: false,
       };
     }
+  }
+
+  if (intent === "saveSupportChatUrl") {
+    const rawUrl = getFormString(formData, "supportChatUrl").trim();
+
+    if (rawUrl && !isAllowedSupportChatUrl(rawUrl)) {
+      return {
+        errors: [
+          "URL invalide. Utilisez https://, http:// ou mailto: uniquement.",
+        ],
+        message: "Impossible d’enregistrer l’URL du chat.",
+        ok: false,
+      };
+    }
+
+    const supportChatUrl = rawUrl || null;
+
+    await prisma.appSettings.upsert({
+      create: {
+        shop,
+        supportChatUrl,
+      },
+      update: { supportChatUrl },
+      where: { shop },
+    });
+
+    return {
+      message: supportChatUrl
+        ? "URL du chat diététicien enregistrée."
+        : "URL du chat diététicien effacée.",
+      ok: true,
+    };
   }
 
   const boxCollectionId = getFormString(formData, "boxCollectionId");

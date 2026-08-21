@@ -61,6 +61,10 @@ const runSuite = () => {
   const portalFormatters = readSource("app/features/portal/portal-formatters.ts");
   const portalStyles = readSource("app/features/portal/portal-styles.ts");
   const catalog = buildCatalog();
+  const createPortalMealCardSource = portalClient.slice(
+    portalClient.indexOf("function createPortalMealCard"),
+    portalClient.indexOf("function selectedTotal"),
+  );
   const renderMealGridSource = portalClient.slice(
     portalClient.indexOf("function renderMealGrid"),
     portalClient.indexOf("function updateEditor"),
@@ -369,26 +373,40 @@ const runSuite = () => {
       portalClient.includes("nutrition.calories"),
   );
   ctx.assertTrue(
-    "renderMealGrid utilise formatMealNutrition via le helper",
-    renderMealGridSource.includes("appendMealCardMedia(card, meal)"),
+    "carte repas factorisée pour editor et box-change",
+    portalClient.includes("function createPortalMealCard") &&
+      portalClient.includes("function appendMealCardContent") &&
+      renderMealGridSource.includes("createPortalMealCard(") &&
+      renderBoxChangeMealGridSource.includes("createPortalMealCard("),
   );
   ctx.assertTrue(
-    "renderBoxChangeMealGrid utilise formatMealNutrition via le helper",
-    renderBoxChangeMealGridSource.includes(
-      "appendMealCardMedia(mealCard, meal)",
-    ),
+    "structure premium media → content → quantity",
+    createPortalMealCardSource.includes("appendMealCardMedia(card, meal)") &&
+      createPortalMealCardSource.includes("appendMealCardContent(card, meal)") &&
+      createPortalMealCardSource.includes('className = "meal-quantity"') &&
+      createPortalMealCardSource.includes('className = "quantity-row"') &&
+      portalClient.includes('className = "meal-card-content"') &&
+      portalClient.includes('className = "meal-badges"') &&
+      portalClient.includes('className = "meal-allergenes"') &&
+      portalClient.includes('title.className = "meal-title"'),
   );
   ctx.assertTrue(
-    "media nutrition avant titre dans renderMealGrid",
-    /appendMealCardMedia\(card, meal\)[\s\S]*title\.textContent = meal\.title[\s\S]*variant\.textContent = meal\.variantTitle/.test(
-      renderMealGridSource,
-    ),
+    "badges et allergènes branchés sur PortalMeal",
+    portalClient.includes("meal.badges") &&
+      portalClient.includes("meal.allergenes") &&
+      portalClient.includes("getBadgeColorSlug") &&
+      portalClient.includes("formatAllergenDisplay") &&
+      portalClient.includes("mealFilterRuntimeScript"),
   );
   ctx.assertTrue(
-    "media nutrition avant titre dans renderBoxChangeMealGrid",
-    /appendMealCardMedia\(mealCard, meal\)[\s\S]*title\.textContent = meal\.title[\s\S]*variant\.textContent = meal\.variantTitle/.test(
-      renderBoxChangeMealGridSource,
-    ),
+    "état sélectionné dérivé de la quantité",
+    createPortalMealCardSource.includes('quantityValue > 0 ? " is-selected"'),
+  );
+  ctx.assertFalse(
+    "variantTitle n’est plus un élément principal de carte",
+    createPortalMealCardSource.includes("variantTitle") ||
+      renderMealGridSource.includes("variantTitle") ||
+      renderBoxChangeMealGridSource.includes("variantTitle"),
   );
   ctx.assertTrue(
     "modal nutrition présente",

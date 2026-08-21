@@ -66,6 +66,8 @@ const BUSINESS_SUITES = [
   "43-meal-nutrition-import-apply.test.ts",
   "44-meal-nutrition-import-partial.test.ts",
   "45-meal-nutrition-import-metafields-batch.test.ts",
+  "46-portal-dietitian-chat-support.test.ts",
+  "47-portal-meal-filters.test.ts",
 ];
 
 const LEGACY_SUITES = [

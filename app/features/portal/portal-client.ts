@@ -1,3 +1,4 @@
+import { mealFilterRuntimeScript } from "../builder/builder-filter-runtime";
 import { mealNutritionFormatRuntimeScript } from "../../utils/mealNutritionFormat";
 
 export const portalClientScript = `
@@ -5,13 +6,41 @@ export const portalClientScript = `
   var data = window.__MILEYO_PORTAL__;
   var editors = {};
   var boxChangeStates = {};
+  var pendingQuantityPulseMealId = null;
+  var selectedAllergenFilters = [];
+  var selectedBadgeFilters = [];
+  var draftAllergenFilters = [];
+  var draftBadgeFilters = [];
+  var mealFiltersOpen = false;
+  var mealFiltersCloseTimer = null;
 
   ${mealNutritionFormatRuntimeScript}
+  ${mealFilterRuntimeScript}
 
   var mealNutritionModal = document.getElementById("meal-nutrition-modal");
   var mealNutritionModalMeal = document.getElementById("meal-nutrition-modal-meal");
   var mealNutritionModalList = document.getElementById("meal-nutrition-modal-list");
 
+  var mealDetailOverlay = document.getElementById("meal-detail-overlay");
+  var mealDetailMedia = document.getElementById("meal-detail-media");
+  var mealDetailTitle = document.getElementById("meal-detail-title");
+  var mealDetailBadges = document.getElementById("meal-detail-badges");
+  var mealDetailAllergens = document.getElementById("meal-detail-allergens");
+  var mealDetailAllergensCopy = document.getElementById("meal-detail-allergens-copy");
+  var mealDetailNutrition = document.getElementById("meal-detail-nutrition");
+  var mealDetailIngredients = document.getElementById("meal-detail-ingredients");
+  var mealDetailIngredientsCopy = document.getElementById("meal-detail-ingredients-copy");
+  var mealDetailClose = mealDetailOverlay
+    ? mealDetailOverlay.querySelector(".meal-detail-close")
+    : null;
+  var mealDetailCloseTimer = null;
+  var mealDetailLastFocus = null;
+
+  var mealFiltersDrawer = document.getElementById("portal-meal-filters-drawer");
+  var mealFiltersApply = document.getElementById("portal-meal-filters-apply");
+  var mealFiltersReset = document.getElementById("portal-meal-filters-reset");
+  var allergenFilters = document.getElementById("portal-allergen-filters");
+  var badgeFilters = document.getElementById("portal-badge-filters");
   var tabButtons = document.querySelectorAll(".portal-tab");
   var tabPanels = document.querySelectorAll(".portal-tab-panel");
 
@@ -42,6 +71,208 @@ export const portalClientScript = `
     return data.meals.filter(function (meal) {
       return meal.objective === selection.objective;
     });
+  }
+
+  function visibleMealsForSelection(selection) {
+    return mealsForSelection(selection).filter(mealMatchesFilter);
+  }
+
+  function cloneMealFilterIds(ids) {
+    return ids.slice();
+  }
+
+  function hasActiveMealFilters() {
+    return selectedAllergenFilters.length > 0 || selectedBadgeFilters.length > 0;
+  }
+
+  function hasDraftMealFilters() {
+    return draftAllergenFilters.length > 0 || draftBadgeFilters.length > 0;
+  }
+
+  function activeMealFilterCount() {
+    return selectedAllergenFilters.length + selectedBadgeFilters.length;
+  }
+
+  function syncMealFiltersDraftFromSelected() {
+    draftAllergenFilters = cloneMealFilterIds(selectedAllergenFilters);
+    draftBadgeFilters = cloneMealFilterIds(selectedBadgeFilters);
+  }
+
+  function updateMealFiltersToggleCount() {
+    var count = activeMealFilterCount();
+    Object.keys(editors).forEach(function (selectionId) {
+      var editor = editors[selectionId];
+      if (!editor || !editor.filtersActiveCount) return;
+      editor.filtersActiveCount.textContent = count > 0 ? String(count) : "";
+      editor.filtersActiveCount.classList.toggle("hidden", count === 0);
+    });
+  }
+
+  function setMealFiltersOpen(isOpen) {
+    mealFiltersOpen = Boolean(isOpen);
+    Object.keys(editors).forEach(function (selectionId) {
+      var editor = editors[selectionId];
+      if (!editor || !editor.filtersToggle) return;
+      editor.filtersToggle.setAttribute(
+        "aria-expanded",
+        mealFiltersOpen ? "true" : "false",
+      );
+      editor.filtersToggle.classList.toggle("is-open", mealFiltersOpen);
+    });
+
+    if (!mealFiltersDrawer) return;
+
+    if (mealFiltersOpen) {
+      if (mealFiltersCloseTimer) {
+        window.clearTimeout(mealFiltersCloseTimer);
+        mealFiltersCloseTimer = null;
+      }
+      mealFiltersDrawer.classList.remove("hidden");
+      mealFiltersDrawer.setAttribute("aria-hidden", "false");
+      mealFiltersDrawer.setAttribute("aria-modal", "true");
+      window.requestAnimationFrame(function () {
+        mealFiltersDrawer.classList.add("is-open");
+      });
+      return;
+    }
+
+    mealFiltersDrawer.classList.remove("is-open");
+    mealFiltersDrawer.setAttribute("aria-hidden", "true");
+    mealFiltersDrawer.removeAttribute("aria-modal");
+    if (mealFiltersCloseTimer) {
+      window.clearTimeout(mealFiltersCloseTimer);
+    }
+    mealFiltersCloseTimer = window.setTimeout(function () {
+      mealFiltersDrawer.classList.add("hidden");
+      mealFiltersCloseTimer = null;
+    }, 320);
+  }
+
+  function renderMealFilters() {
+    if (!allergenFilters || !badgeFilters) return;
+
+    allergenFilters.innerHTML = "";
+    ALLERGEN_FILTER_OPTIONS.forEach(function (filter) {
+      var isActive = draftAllergenFilters.indexOf(filter.id) !== -1;
+      var option = document.createElement("label");
+      option.className =
+        "meal-filter-option" + (isActive ? " is-active" : "");
+
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = isActive;
+      input.setAttribute("data-filter-id", filter.id);
+      input.addEventListener("change", function () {
+        toggleDraftAllergenFilter(filter.id);
+      });
+
+      var text = document.createElement("span");
+      text.textContent = filter.label;
+
+      option.appendChild(input);
+      option.appendChild(text);
+      allergenFilters.appendChild(option);
+    });
+
+    badgeFilters.innerHTML = "";
+    BADGE_FILTER_OPTIONS.forEach(function (filter) {
+      var isActive = draftBadgeFilters.indexOf(filter.id) !== -1;
+      var option = document.createElement("label");
+      option.className =
+        "meal-filter-option meal-filter-option--badge-" +
+        filter.id +
+        (isActive ? " is-active" : "");
+
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = isActive;
+      input.setAttribute("data-filter-id", filter.id);
+      input.addEventListener("change", function () {
+        toggleDraftBadgeFilter(filter.id);
+      });
+
+      var text = document.createElement("span");
+      text.textContent = filter.label;
+
+      option.appendChild(input);
+      option.appendChild(text);
+      badgeFilters.appendChild(option);
+    });
+
+    if (mealFiltersReset) {
+      mealFiltersReset.classList.toggle("hidden", !hasDraftMealFilters());
+    }
+  }
+
+  function toggleDraftAllergenFilter(filterId) {
+    var index = draftAllergenFilters.indexOf(filterId);
+    if (index === -1) draftAllergenFilters.push(filterId);
+    else draftAllergenFilters.splice(index, 1);
+    renderMealFilters();
+  }
+
+  function toggleDraftBadgeFilter(filterId) {
+    var index = draftBadgeFilters.indexOf(filterId);
+    if (index === -1) draftBadgeFilters.push(filterId);
+    else draftBadgeFilters.splice(index, 1);
+    renderMealFilters();
+  }
+
+  function openMealFiltersDrawer() {
+    closeMealDetail();
+    closeMealNutritionModal();
+    syncMealFiltersDraftFromSelected();
+    renderMealFilters();
+    setMealFiltersOpen(true);
+  }
+
+  function discardMealFiltersDrawer() {
+    setMealFiltersOpen(false);
+  }
+
+  function refreshOpenMealEditors() {
+    Object.keys(editors).forEach(function (selectionId) {
+      var editor = editors[selectionId];
+      if (!editor || !editor.editor || editor.editor.classList.contains("hidden")) {
+        return;
+      }
+      updateEditor(editor);
+    });
+  }
+
+  function applyMealFilters() {
+    selectedAllergenFilters = cloneMealFilterIds(draftAllergenFilters);
+    selectedBadgeFilters = cloneMealFilterIds(draftBadgeFilters);
+    updateMealFiltersToggleCount();
+    setMealFiltersOpen(false);
+    refreshOpenMealEditors();
+  }
+
+  function resetMealFiltersDraft() {
+    draftAllergenFilters = [];
+    draftBadgeFilters = [];
+    renderMealFilters();
+  }
+
+  function resetMealFilters() {
+    selectedAllergenFilters = [];
+    selectedBadgeFilters = [];
+    draftAllergenFilters = [];
+    draftBadgeFilters = [];
+    renderMealFilters();
+    updateMealFiltersToggleCount();
+    refreshOpenMealEditors();
+  }
+
+  function clearMealFiltersOnEditorClose() {
+    selectedAllergenFilters = [];
+    selectedBadgeFilters = [];
+    draftAllergenFilters = [];
+    draftBadgeFilters = [];
+    if (mealFiltersOpen) {
+      setMealFiltersOpen(false);
+    }
+    updateMealFiltersToggleCount();
   }
 
   function mealKey(meal) {
@@ -81,6 +312,8 @@ export const portalClientScript = `
       return;
     }
 
+    closeMealDetail();
+
     mealNutritionModalList.innerHTML = "";
     appendNutritionModalRow(mealNutritionModalList, "Calories", nutrition.calories);
     appendNutritionModalRow(mealNutritionModalList, "Protéines", nutrition.proteins);
@@ -97,6 +330,210 @@ export const portalClientScript = `
     mealNutritionModal.classList.remove("hidden");
     mealNutritionModal.setAttribute("aria-hidden", "false");
     mealNutritionModal.setAttribute("aria-modal", "true");
+  }
+
+  function findPortalMeal(mealId) {
+    if (!data.meals || !mealId) return null;
+    for (var i = 0; i < data.meals.length; i += 1) {
+      if (mealKey(data.meals[i]) === mealId) {
+        return data.meals[i];
+      }
+    }
+    return null;
+  }
+
+  function splitMealDetailNutritionDisplay(formatted) {
+    if (!formatted) return null;
+    var kcalMatch = String(formatted).match(/^([\d\s\u00a0\u202f,.]+)\s*kcal$/i);
+    if (kcalMatch) {
+      return { unit: "kcal", value: kcalMatch[1].trim() };
+    }
+    var macroMatch = String(formatted).match(
+      /^([\d\s\u00a0\u202f,.]+)\s*g\s+(.+)$/i,
+    );
+    if (macroMatch) {
+      return {
+        unit: macroMatch[2].trim(),
+        value: macroMatch[1].trim() + "g",
+      };
+    }
+    var gramsMatch = String(formatted).match(/^([\d\s\u00a0\u202f,.]+)\s*g$/i);
+    if (gramsMatch) {
+      return { unit: "portion", value: gramsMatch[1].trim() + "g" };
+    }
+    return { unit: "", value: String(formatted) };
+  }
+
+  function appendMealDetailNutritionCard(list, formatted) {
+    var parts = splitMealDetailNutritionDisplay(formatted);
+    if (!parts) return;
+    var card = document.createElement("div");
+    card.className = "meal-detail-nutrition-card";
+    var value = document.createElement("span");
+    value.className = "meal-detail-nutrition-value";
+    value.textContent = parts.value;
+    var unit = document.createElement("span");
+    unit.className = "meal-detail-nutrition-unit";
+    unit.textContent = parts.unit;
+    card.appendChild(value);
+    if (parts.unit) {
+      card.appendChild(unit);
+    }
+    list.appendChild(card);
+  }
+
+  function closeMealDetail() {
+    if (!mealDetailOverlay || mealDetailOverlay.classList.contains("hidden")) return;
+    mealDetailOverlay.classList.remove("is-open");
+    mealDetailOverlay.setAttribute("aria-hidden", "true");
+    mealDetailOverlay.removeAttribute("aria-modal");
+    if (mealDetailCloseTimer) {
+      window.clearTimeout(mealDetailCloseTimer);
+    }
+    mealDetailCloseTimer = window.setTimeout(function () {
+      mealDetailOverlay.classList.add("hidden");
+      mealDetailCloseTimer = null;
+      if (mealDetailLastFocus && typeof mealDetailLastFocus.focus === "function") {
+        mealDetailLastFocus.focus();
+      }
+      mealDetailLastFocus = null;
+    }, 280);
+  }
+
+  function openMealDetail(mealId) {
+    var meal = findPortalMeal(mealId);
+    if (!meal || !mealDetailOverlay || !mealDetailTitle) return;
+
+    closeMealNutritionModal();
+
+    if (mealDetailCloseTimer) {
+      window.clearTimeout(mealDetailCloseTimer);
+      mealDetailCloseTimer = null;
+    }
+
+    mealDetailLastFocus = document.activeElement;
+
+    if (mealDetailMedia) {
+      mealDetailMedia.innerHTML = "";
+      if (meal.imageUrl) {
+        var image = document.createElement("img");
+        image.alt = meal.imageAlt || meal.title;
+        image.src = meal.imageUrl;
+        mealDetailMedia.appendChild(image);
+        mealDetailMedia.classList.remove("meal-detail-media--empty");
+      } else {
+        mealDetailMedia.classList.add("meal-detail-media--empty");
+      }
+    }
+
+    mealDetailTitle.textContent = meal.title;
+
+    if (mealDetailBadges) {
+      mealDetailBadges.innerHTML = "";
+      if (meal.badges && meal.badges.length) {
+        meal.badges.forEach(function (badgeText) {
+          var badge = document.createElement("span");
+          badge.className = "meal-badge meal-badge--" + getBadgeColorSlug(badgeText);
+          badge.textContent = badgeText;
+          mealDetailBadges.appendChild(badge);
+        });
+        mealDetailBadges.classList.remove("hidden");
+      } else {
+        mealDetailBadges.classList.add("hidden");
+      }
+    }
+
+    if (mealDetailAllergens) {
+      if (meal.allergenes && meal.allergenes.length) {
+        if (mealDetailAllergensCopy) {
+          mealDetailAllergensCopy.textContent = meal.allergenes
+            .map(function (entry) {
+              return formatAllergenDisplay(entry);
+            })
+            .join(" · ");
+        }
+        mealDetailAllergens.classList.remove("hidden");
+      } else {
+        if (mealDetailAllergensCopy) {
+          mealDetailAllergensCopy.textContent = "";
+        }
+        mealDetailAllergens.classList.add("hidden");
+      }
+    }
+
+    if (mealDetailNutrition) {
+      mealDetailNutrition.innerHTML = "";
+      var nutrition = formatMealNutrition({
+        calories: meal.calories,
+        proteins: meal.proteins,
+        carbs: meal.carbs,
+        fat: meal.fat,
+        portionGrams: meal.portionGrams,
+      });
+      var macroLines = [
+        nutrition.calories,
+        nutrition.proteins,
+        nutrition.carbs,
+        nutrition.fat,
+      ].filter(Boolean);
+      if (macroLines.length || nutrition.portionGrams) {
+        var heading = document.createElement("p");
+        heading.className = "meal-detail-section-heading meal-detail-nutrition-heading";
+        heading.textContent = nutrition.portionGrams
+          ? "Nutrition · Par portion (" + nutrition.portionGrams + ")"
+          : "Nutrition";
+        mealDetailNutrition.appendChild(heading);
+        if (macroLines.length) {
+          var grid = document.createElement("div");
+          grid.className = "meal-detail-nutrition-grid";
+          appendMealDetailNutritionCard(grid, nutrition.calories);
+          appendMealDetailNutritionCard(grid, nutrition.proteins);
+          appendMealDetailNutritionCard(grid, nutrition.carbs);
+          appendMealDetailNutritionCard(grid, nutrition.fat);
+          mealDetailNutrition.appendChild(grid);
+        }
+        mealDetailNutrition.classList.remove("hidden");
+      } else {
+        mealDetailNutrition.classList.add("hidden");
+      }
+    }
+
+    if (mealDetailIngredients && mealDetailIngredientsCopy) {
+      if (meal.ingredients && meal.ingredients.length) {
+        mealDetailIngredientsCopy.textContent = meal.ingredients.join(", ");
+        mealDetailIngredients.classList.remove("hidden");
+      } else {
+        mealDetailIngredientsCopy.textContent = "";
+        mealDetailIngredients.classList.add("hidden");
+      }
+    }
+
+    mealDetailOverlay.classList.remove("hidden");
+    mealDetailOverlay.setAttribute("aria-hidden", "false");
+    mealDetailOverlay.setAttribute("aria-modal", "true");
+    window.requestAnimationFrame(function () {
+      mealDetailOverlay.classList.add("is-open");
+    });
+    if (mealDetailClose && typeof mealDetailClose.focus === "function") {
+      mealDetailClose.focus();
+    }
+  }
+
+  function bindMealDetailOpen(node, meal) {
+    if (!node || !meal) return;
+    var mealId = mealKey(meal);
+    node.setAttribute("role", "button");
+    node.setAttribute("tabindex", "0");
+    node.setAttribute("aria-label", "Voir le détail de " + meal.title);
+    node.addEventListener("click", function () {
+      openMealDetail(mealId);
+    });
+    node.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      if (event.target !== node) return;
+      event.preventDefault();
+      openMealDetail(mealId);
+    });
   }
 
   function appendMealNutritionBadge(parent, meal) {
@@ -151,6 +588,7 @@ export const portalClientScript = `
   function appendMealCardMedia(card, meal) {
     var media = document.createElement("div");
     media.className = "meal-card-media";
+    media.classList.add("meal-card-media--interactive");
     if (meal.imageUrl) {
       var image = document.createElement("img");
       image.alt = meal.imageAlt;
@@ -160,7 +598,103 @@ export const portalClientScript = `
       media.classList.add("meal-card-media--empty");
     }
     appendMealNutritionBadge(media, meal);
+    bindMealDetailOpen(media, meal);
     card.appendChild(media);
+  }
+
+  function appendMealCardContent(card, meal) {
+    var content = document.createElement("div");
+    content.className = "meal-card-content";
+    content.classList.add("meal-card-content--interactive");
+
+    var title = document.createElement("h2");
+    title.className = "meal-title";
+    title.textContent = meal.title;
+    title.setAttribute("title", meal.title);
+    content.appendChild(title);
+
+    if (meal.badges && meal.badges.length) {
+      var badges = document.createElement("div");
+      badges.className = "meal-badges";
+      meal.badges.forEach(function (badgeText) {
+        var badge = document.createElement("span");
+        badge.className = "meal-badge meal-badge--" + getBadgeColorSlug(badgeText);
+        badge.textContent = badgeText;
+        badge.setAttribute("title", badgeText);
+        badges.appendChild(badge);
+      });
+      content.appendChild(badges);
+    }
+
+    if (meal.allergenes && meal.allergenes.length) {
+      var allergens = document.createElement("p");
+      allergens.className = "meal-allergenes";
+      allergens.textContent =
+        "Contient : " +
+        meal.allergenes
+          .map(function (entry) {
+            return formatAllergenDisplay(entry);
+          })
+          .join(", ");
+      allergens.setAttribute("title", allergens.textContent);
+      content.appendChild(allergens);
+    }
+
+    bindMealDetailOpen(content, meal);
+    card.appendChild(content);
+  }
+
+  function createPortalMealCard(meal, quantities, requiredMeals, onQuantityChange) {
+    var mealId = mealKey(meal);
+    quantities[mealId] = quantities[mealId] || 0;
+    var quantityValue = quantities[mealId];
+
+    var card = document.createElement("article");
+    card.className =
+      "meal-card" + (quantityValue > 0 ? " is-selected" : "");
+
+    appendMealCardMedia(card, meal);
+    appendMealCardContent(card, meal);
+
+    var quantityRow = document.createElement("div");
+    quantityRow.className = "quantity-row";
+
+    var minus = document.createElement("button");
+    minus.type = "button";
+    minus.textContent = "-";
+    minus.disabled = quantityValue === 0;
+    minus.setAttribute("aria-label", "Retirer " + meal.title);
+    minus.addEventListener("click", function () {
+      pendingQuantityPulseMealId = mealId;
+      quantities[mealId] = Math.max(0, (quantities[mealId] || 0) - 1);
+      onQuantityChange();
+    });
+
+    var quantity = document.createElement("span");
+    quantity.className = "meal-quantity";
+    if (pendingQuantityPulseMealId === mealId) {
+      quantity.classList.add("is-pulsing");
+      pendingQuantityPulseMealId = null;
+    }
+    quantity.textContent = String(quantities[mealId] || 0);
+
+    var plus = document.createElement("button");
+    plus.type = "button";
+    plus.textContent = "+";
+    plus.disabled = selectedTotal(quantities) >= requiredMeals;
+    plus.setAttribute("aria-label", "Ajouter " + meal.title);
+    plus.addEventListener("click", function () {
+      if (selectedTotal(quantities) >= requiredMeals) return;
+      pendingQuantityPulseMealId = mealId;
+      quantities[mealId] = (quantities[mealId] || 0) + 1;
+      onQuantityChange();
+    });
+
+    quantityRow.appendChild(minus);
+    quantityRow.appendChild(quantity);
+    quantityRow.appendChild(plus);
+    card.appendChild(quantityRow);
+    return card;
   }
 
   function selectedTotal(quantities) {
@@ -174,59 +708,45 @@ export const portalClientScript = `
     var selection = data.selections.find(function (item) {
       return item.id === editor.selectionId;
     });
+    var objectiveMeals = mealsForSelection(selection);
+    var visibleMeals = visibleMealsForSelection(selection);
+    var noObjectiveMeals = objectiveMeals.length === 0;
+    var noVisibleMeals = visibleMeals.length === 0;
+
     editor.mealGrid.innerHTML = "";
-    mealsForSelection(selection).forEach(function (meal) {
-      var mealId = mealKey(meal);
-      editor.quantities[mealId] = editor.quantities[mealId] || 0;
-
-      var card = document.createElement("article");
-      card.className = "meal-card";
-
-      appendMealCardMedia(card, meal);
-
-      var title = document.createElement("span");
-      title.className = "meal-title";
-      title.textContent = meal.title;
-      card.appendChild(title);
-
-      var variant = document.createElement("span");
-      variant.className = "muted";
-      variant.textContent = meal.variantTitle;
-      card.appendChild(variant);
-
-      var quantityRow = document.createElement("div");
-      quantityRow.className = "quantity-row";
-
-      var minus = document.createElement("button");
-      minus.type = "button";
-      minus.textContent = "-";
-      minus.disabled = editor.quantities[mealId] === 0;
-      minus.setAttribute("aria-label", "Retirer " + meal.title);
-      minus.addEventListener("click", function () {
-        editor.quantities[mealId] = Math.max(0, editor.quantities[mealId] - 1);
-        updateEditor(editor);
-      });
-
-      var quantity = document.createElement("span");
-      quantity.textContent = String(editor.quantities[mealId]);
-
-      var plus = document.createElement("button");
-      plus.type = "button";
-      plus.textContent = "+";
-      plus.disabled = selectedTotal(editor.quantities) >= editor.requiredMeals;
-      plus.setAttribute("aria-label", "Ajouter " + meal.title);
-      plus.addEventListener("click", function () {
-        if (selectedTotal(editor.quantities) >= editor.requiredMeals) return;
-        editor.quantities[mealId] += 1;
-        updateEditor(editor);
-      });
-
-      quantityRow.appendChild(minus);
-      quantityRow.appendChild(quantity);
-      quantityRow.appendChild(plus);
-      card.appendChild(quantityRow);
-      editor.mealGrid.appendChild(card);
+    visibleMeals.forEach(function (meal) {
+      editor.mealGrid.appendChild(
+        createPortalMealCard(
+          meal,
+          editor.quantities,
+          editor.requiredMeals,
+          function () {
+            updateEditor(editor);
+          },
+        ),
+      );
     });
+    pendingQuantityPulseMealId = null;
+
+    if (editor.emptyState) {
+      editor.emptyState.classList.toggle("hidden", !noVisibleMeals);
+    }
+    if (editor.emptyStateCopy) {
+      if (noObjectiveMeals) {
+        editor.emptyStateCopy.innerHTML =
+          "Aucun plat n’est disponible pour cet objectif pour le moment.";
+      } else {
+        editor.emptyStateCopy.innerHTML =
+          "Aucun plat ne correspond à ces filtres.<br>Essayez de retirer un allergène ou une envie.";
+      }
+    }
+    if (editor.emptyStateReset) {
+      editor.emptyStateReset.classList.toggle(
+        "hidden",
+        noObjectiveMeals || !hasActiveMealFilters(),
+      );
+    }
+    editor.mealGrid.classList.toggle("hidden", noVisibleMeals);
   }
 
   function updateEditor(editor) {
@@ -284,6 +804,7 @@ export const portalClientScript = `
     }
     setMealEditingState(editor, false);
     setEditorError(editor, "");
+    clearMealFiltersOnEditorClose();
   }
 
   function closeBoxChange(selectionId) {
@@ -340,7 +861,12 @@ export const portalClientScript = `
       card: card,
       editButton: card.querySelector(".edit-button"),
       editor: card.querySelector(".editor"),
+      emptyState: card.querySelector(".meal-editor-empty"),
+      emptyStateCopy: card.querySelector(".meal-editor-empty-copy"),
+      emptyStateReset: card.querySelector(".meal-editor-empty-reset"),
       errorMessage: card.querySelector(".meal-editor-error"),
+      filtersActiveCount: card.querySelector(".meal-filters-toggle-count"),
+      filtersToggle: card.querySelector(".meal-filters-toggle"),
       isPaused: selection.portalState === "paused",
       isResumeProcessing: selection.portalState === "resume_processing",
       mealGrid: card.querySelector(".meal-editor-grid"),
@@ -361,6 +887,22 @@ export const portalClientScript = `
 
     editors[selectionId] = editor;
 
+    if (editor.filtersToggle) {
+      editor.filtersToggle.addEventListener("click", function () {
+        if (mealFiltersOpen) {
+          discardMealFiltersDrawer();
+          return;
+        }
+        openMealFiltersDrawer();
+      });
+    }
+
+    if (editor.emptyStateReset) {
+      editor.emptyStateReset.addEventListener("click", function () {
+        resetMealFilters();
+      });
+    }
+
     if (editor.isPaused && !selection.resumeBlockedMessage) {
       setMealEditingState(editor, true);
       updateEditor(editor);
@@ -380,6 +922,7 @@ export const portalClientScript = `
         closeAllFlows(selectionId);
         closeBoxChange(selectionId);
         closeObjectiveSupport(selectionId);
+        clearMealFiltersOnEditorClose();
         editor.quantities = JSON.parse(JSON.stringify(data.initialQuantities[selectionId] || {}));
         editor.editButton.classList.add("hidden");
         editor.editor.classList.remove("hidden");
@@ -585,57 +1128,19 @@ export const portalClientScript = `
         if (!boxChangeState.mealGrid) return;
         boxChangeState.mealGrid.innerHTML = "";
         mealsForSelection(selection).forEach(function (meal) {
-          var mealId = mealKey(meal);
-          boxChangeState.quantities[mealId] = boxChangeState.quantities[mealId] || 0;
-
-          var mealCard = document.createElement("article");
-          mealCard.className = "meal-card";
-
-          appendMealCardMedia(mealCard, meal);
-
-          var title = document.createElement("span");
-          title.className = "meal-title";
-          title.textContent = meal.title;
-          mealCard.appendChild(title);
-
-          var variant = document.createElement("span");
-          variant.className = "muted";
-          variant.textContent = meal.variantTitle;
-          mealCard.appendChild(variant);
-
-          var quantityRow = document.createElement("div");
-          quantityRow.className = "quantity-row";
-
-          var minus = document.createElement("button");
-          minus.type = "button";
-          minus.textContent = "-";
-          minus.disabled = boxChangeState.quantities[mealId] === 0;
-          minus.addEventListener("click", function () {
-            boxChangeState.quantities[mealId] = Math.max(0, boxChangeState.quantities[mealId] - 1);
-            renderBoxChangeMealGrid();
-            updateBoxChangeCounts();
-          });
-
-          var quantity = document.createElement("span");
-          quantity.textContent = String(boxChangeState.quantities[mealId]);
-
-          var plus = document.createElement("button");
-          plus.type = "button";
-          plus.textContent = "+";
-          plus.disabled = selectedTotal(boxChangeState.quantities) >= boxChangeState.requiredMeals;
-          plus.addEventListener("click", function () {
-            if (selectedTotal(boxChangeState.quantities) >= boxChangeState.requiredMeals) return;
-            boxChangeState.quantities[mealId] += 1;
-            renderBoxChangeMealGrid();
-            updateBoxChangeCounts();
-          });
-
-          quantityRow.appendChild(minus);
-          quantityRow.appendChild(quantity);
-          quantityRow.appendChild(plus);
-          mealCard.appendChild(quantityRow);
-          boxChangeState.mealGrid.appendChild(mealCard);
+          boxChangeState.mealGrid.appendChild(
+            createPortalMealCard(
+              meal,
+              boxChangeState.quantities,
+              boxChangeState.requiredMeals,
+              function () {
+                renderBoxChangeMealGrid();
+                updateBoxChangeCounts();
+              },
+            ),
+          );
         });
+        pendingQuantityPulseMealId = null;
       }
 
       function updateSelectedBoxLabels() {
@@ -769,10 +1274,67 @@ export const portalClientScript = `
     });
   }
 
+  if (mealDetailOverlay) {
+    mealDetailOverlay.addEventListener("click", function (event) {
+      var target = event.target;
+      if (
+        target &&
+        (target.classList.contains("meal-detail-overlay-backdrop") ||
+          target.classList.contains("meal-detail-close"))
+      ) {
+        closeMealDetail();
+      }
+    });
+  }
+
+  if (mealFiltersDrawer) {
+    mealFiltersDrawer.addEventListener("click", function (event) {
+      var target = event.target;
+      if (
+        target &&
+        (target.classList.contains("meal-filters-drawer-backdrop") ||
+          target.classList.contains("meal-filters-drawer-close"))
+      ) {
+        discardMealFiltersDrawer();
+      }
+    });
+  }
+
+  if (mealFiltersApply) {
+    mealFiltersApply.addEventListener("click", function () {
+      applyMealFilters();
+    });
+  }
+
+  if (mealFiltersReset) {
+    mealFiltersReset.addEventListener("click", function () {
+      resetMealFiltersDraft();
+    });
+  }
+
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape") {
+      if (mealFiltersOpen) {
+        discardMealFiltersDrawer();
+        return;
+      }
+      if (mealDetailOverlay && !mealDetailOverlay.classList.contains("hidden")) {
+        closeMealDetail();
+        return;
+      }
       closeMealNutritionModal();
     }
+  });
+
+  document.querySelectorAll("[data-meal-summary]").forEach(function (summary) {
+    var toggle = summary.querySelector(".meal-summary-toggle");
+    if (!toggle) return;
+
+    toggle.addEventListener("click", function () {
+      var expanded = summary.classList.toggle("is-expanded");
+      toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+      toggle.textContent = expanded ? "Réduire" : "Voir tout";
+    });
   });
 })();
 `;

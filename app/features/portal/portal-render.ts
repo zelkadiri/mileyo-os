@@ -43,22 +43,22 @@ const renderRecoveryBlock = (
 
   if (!recovery.paymentUpdateAvailable) {
     return `<div class="recovery-block recovery-block--contact">
-      <h3 class="recovery-title">Votre moyen de paiement n’est plus disponible.</h3>
-      <p class="recovery-message">Votre abonnement est en pause. Contactez-nous afin de mettre à jour votre moyen de paiement et reprendre votre abonnement.</p>
+      <h3 class="recovery-title">Mise à jour du paiement</h3>
+      <p class="recovery-message">Pour reprendre vos livraisons, contactez-nous afin de mettre à jour votre moyen de paiement.</p>
       ${retryLine}
       <a class="portal-button recovery-contact-button" href="${escapeHtml(merchantSupport.href)}">${escapeHtml(merchantSupport.label)}</a>
     </div>`;
   }
 
   const message = recovery.isFinalFailed
-    ? "Votre abonnement est en pause en attendant la mise à jour de votre moyen de paiement."
-    : "Le paiement de votre prochaine box n’a pas pu être effectué.";
+    ? "Mettez à jour votre moyen de paiement pour reprendre vos livraisons."
+    : "Le paiement de votre prochaine box n’a pas abouti.";
 
   return `<div class="recovery-block">
       <p class="recovery-message">${escapeHtml(message)}</p>
       ${retryLine}
       <button class="portal-button secondary payment-update-button" type="button">Recevoir un lien sécurisé pour mettre à jour ma carte</button>
-      <p class="recovery-note muted">Nous vous enverrons un email sécurisé Shopify — aucune carte n’est affichée ici.</p>
+      <p class="recovery-note muted">Nous vous enverrons un email sécurisé — aucune carte n’est affichée ici.</p>
     </div>`;
 };
 
@@ -119,7 +119,7 @@ export const renderPortalSubscriptionStatus = (
 ) => {
   switch (portalState) {
     case "active":
-      return `<span class="status-badge active">Abonnement actif</span>`;
+      return "";
     case "paused":
       return `<span class="status-badge paused">En pause</span>`;
     case "resume_processing":
@@ -127,6 +127,29 @@ export const renderPortalSubscriptionStatus = (
     default:
       return "";
   }
+};
+
+const HERO_MEAL_PREVIEW_LIMIT = 3;
+
+/** Display-only aggregation — does not change persisted selectedMeals. */
+const aggregateSelectedMealTitles = (meals: string[]) => {
+  const order: string[] = [];
+  const counts = new Map<string, number>();
+
+  for (const title of meals) {
+    const existing = counts.get(title);
+    if (existing === undefined) {
+      order.push(title);
+      counts.set(title, 1);
+      continue;
+    }
+    counts.set(title, existing + 1);
+  }
+
+  return order.map((title) => ({
+    quantity: counts.get(title) ?? 1,
+    title,
+  }));
 };
 
 const renderMealChips = (meals: string[], emptyMessage: string) => {
@@ -139,21 +162,80 @@ const renderMealChips = (meals: string[], emptyMessage: string) => {
     .join("")}</ul>`;
 };
 
-const renderDeliveryInfoItem = (selection: PortalSelection) => {
-  const deliveryLabel = formatScheduledDeliveryLabel(
-    selection.nextScheduledDeliveryDate,
-  );
+const findHeroMeal = (title: string, catalog: PortalMeal[]) =>
+  catalog.find((meal) => meal.title === title) ?? null;
 
-  if (deliveryLabel) {
-    return `<div class="key-info-item key-info-item--highlight">
-        <span class="key-info-label">Prochaine livraison</span>
-        <span class="key-info-value">${escapeHtml(deliveryLabel)}</span>
-      </div>`;
+const renderHeroWeekCaption = (mealsCount: number, selectedCount: number) => {
+  if (mealsCount <= 0) {
+    return `<p class="hero-week-caption">Votre sélection</p>`;
   }
 
-  return `<div class="key-info-item key-info-item--highlight">
-      <span class="key-info-label">Prochaine livraison</span>
-      <span class="key-info-value key-info-value--pending">Livraison à confirmer</span>
+  if (selectedCount <= 0) {
+    return `<p class="hero-week-caption">
+      <span class="hero-week-count">${mealsCount} repas</span>
+      <span class="hero-week-caption-copy">à composer pour votre prochaine livraison</span>
+    </p>`;
+  }
+
+  const remaining = Math.max(0, mealsCount - selectedCount);
+  const remainingCopy =
+    remaining > 0
+      ? `<span class="hero-week-caption-copy">· encore ${remaining} à choisir</span>`
+      : `<span class="hero-week-caption-copy">pour cette livraison</span>`;
+
+  return `<p class="hero-week-caption">
+      <span class="hero-week-count">${selectedCount} repas</span>
+      ${remainingCopy}
+    </p>`;
+};
+
+/** Display-only meal preview for the next-box hero (history / terminal keep renderMealChips). */
+const renderSelectedMealsSummary = (
+  meals: string[],
+  emptyMessage: string,
+  mealsCount: number,
+  catalog: PortalMeal[],
+) => {
+  const caption = renderHeroWeekCaption(mealsCount, meals.length);
+
+  if (meals.length === 0) {
+    return `<div class="meal-summary selection-preview selection-preview--empty">
+      <div class="selection-preview-head">${caption}</div>
+      <p class="muted selection-preview-empty">${escapeHtml(emptyMessage)}</p>
+    </div>`;
+  }
+
+  const aggregated = aggregateSelectedMealTitles(meals);
+  const visible = aggregated.slice(0, HERO_MEAL_PREVIEW_LIMIT);
+  const overflowCount = aggregated.length - visible.length;
+
+  const items = visible
+    .map((item) => {
+      const meal = findHeroMeal(item.title, catalog);
+      const media = meal?.imageUrl
+        ? `<img alt="${escapeHtml(meal.imageAlt || item.title)}" src="${escapeHtml(meal.imageUrl)}" />`
+        : `<span class="hero-meal-preview-placeholder" aria-hidden="true"></span>`;
+      const qtyBadge =
+        item.quantity > 1
+          ? `<span class="hero-meal-preview-qty">×${item.quantity}</span>`
+          : "";
+
+      return `<li class="hero-meal-preview-item">
+        <span class="hero-meal-preview-media">${media}${qtyBadge}</span>
+        <span class="hero-meal-preview-title">${escapeHtml(item.title)}</span>
+      </li>`;
+    })
+    .join("");
+
+  const overflowNote =
+    overflowCount > 0
+      ? `<p class="selection-preview-overflow">+ ${overflowCount} autre${overflowCount > 1 ? "s" : ""} plat${overflowCount > 1 ? "s" : ""} dans votre box</p>`
+      : "";
+
+  return `<div class="meal-summary selection-preview">
+      <div class="selection-preview-head">${caption}</div>
+      <ul class="hero-meal-preview">${items}</ul>
+      ${overflowNote}
     </div>`;
 };
 
@@ -180,50 +262,60 @@ const renderDeliveryCutoffNotice = (selection: PortalSelection) => {
     </div>`;
 };
 
-const renderKeyInfoGrid = (selection: PortalSelection) => {
+const renderHeroDelivery = (selection: PortalSelection) => {
+  const deliveryLabel = formatScheduledDeliveryLabel(
+    selection.nextScheduledDeliveryDate,
+  );
+
+  if (deliveryLabel) {
+    return `<div class="hero-delivery">
+        <span class="hero-delivery-label">Livraison</span>
+        <span class="hero-delivery-value">${escapeHtml(deliveryLabel)}</span>
+      </div>`;
+  }
+
+  return `<div class="hero-delivery">
+      <span class="hero-delivery-label">Livraison</span>
+      <span class="hero-delivery-value hero-delivery-value--pending">à confirmer</span>
+    </div>`;
+};
+
+const renderSubscriptionSecondary = (selection: PortalSelection) => {
   const billingValue = selection.nextBillingDate
     ? escapeHtml(formatFrenchDate(selection.nextBillingDate))
-    : `<span class="key-info-value--pending">À confirmer</span>`;
+    : `<span class="subscription-secondary-value--pending">À confirmer</span>`;
 
-  return `<div class="key-info-grid">
-      ${renderDeliveryInfoItem(selection)}
-      <div class="key-info-item">
-        <span class="key-info-label">Prochain prélèvement</span>
-        <span class="key-info-value">${billingValue}</span>
+  return `<div class="subscription-secondary-facts">
+      <div class="subscription-plan-group">
+        <p class="subscription-plan-box">${escapeHtml(selection.boxTitle ?? "Non renseignée")}</p>
+        ${
+          selection.objectiveLabel
+            ? `<p class="subscription-plan-objective">${escapeHtml(selection.objectiveLabel)}</p>`
+            : ""
+        }
       </div>
-      <div class="key-info-item">
-        <span class="key-info-label">Box</span>
-        <span class="key-info-value">${escapeHtml(selection.boxTitle ?? "Non renseignée")}</span>
+      <div class="subscription-billing-group">
+        ${
+          selection.boxSubscriptionPrice
+            ? `<p class="subscription-plan-price">${escapeHtml(formatSubscriptionPrice(selection.boxSubscriptionPrice))}</p>`
+            : ""
+        }
+        <div class="subscription-billing-next">
+          <span class="subscription-secondary-label">Prochain prélèvement</span>
+          <span class="subscription-secondary-value">${billingValue}</span>
+        </div>
       </div>
-      ${
-        selection.objectiveLabel
-          ? `<div class="key-info-item">
-        <span class="key-info-label">Objectif</span>
-        <span class="key-info-value">${escapeHtml(selection.objectiveLabel)}</span>
-      </div>`
-          : ""
-      }
-      <div class="key-info-item">
-        <span class="key-info-label">Nombre de repas</span>
-        <span class="key-info-value">${selection.mealsCount}</span>
-      </div>
-      ${
-        selection.boxSubscriptionPrice
-          ? `<div class="key-info-item">
-        <span class="key-info-label">Prix abonnement</span>
-        <span class="key-info-value">${escapeHtml(formatSubscriptionPrice(selection.boxSubscriptionPrice))}</span>
-      </div>`
-          : ""
-      }
     </div>`;
 };
 
 const renderNextBoxCard = ({
   boxes,
+  meals,
   merchantSupport,
   selection,
 }: {
   boxes: PortalBoxProduct[];
+  meals: PortalMeal[];
   merchantSupport: MerchantSupportContact;
   selection: PortalSelection;
 }) => {
@@ -251,20 +343,148 @@ const renderNextBoxCard = ({
 
   const mealEditorOpenByDefault =
     isPaused && !isResumeProcessing && !isModificationBlocked;
+  const mealsForHero = selection.objective
+    ? meals.filter((meal) => meal.objective === selection.objective)
+    : meals;
 
   return `<section class="portal-card selection-card${mealEditorOpenByDefault ? " is-meal-editing" : ""}" data-selection-id="${escapeHtml(selection.id)}">
-      <div class="card-top">
-        <h2>Ma prochaine box</h2>
-        ${renderPortalSubscriptionStatus(portalState)}
+      <section class="portal-layout">
+      <div class="portal-main-column">
+      <section class="portal-section next-box-section">
+      <div class="next-box-hero">
+        <div class="hero-intro">
+          <div class="hero-header">
+            <p class="hero-kicker">Ma prochaine box</p>
+            ${renderPortalSubscriptionStatus(portalState)}
+          </div>
+          <h2 class="hero-week-title">Votre semaine</h2>
+          ${renderHeroDelivery(selection)}
+        </div>
+        ${renderSelectedMealsSummary(
+          selection.selectedMeals,
+          "Aucun plat sélectionné pour le moment.",
+          selection.mealsCount,
+          mealsForHero,
+        )}
+        ${
+          isActive && !isModificationBlocked
+            ? `<div class="hero-primary-actions">
+          <button class="portal-button edit-button" type="button">Préparer ma semaine</button>
+        </div>`
+            : ""
+        }
+        ${renderDeliveryCutoffNotice(selection)}
       </div>
-      ${renderKeyInfoGrid(selection)}
-      ${renderDeliveryCutoffNotice(selection)}
-      <h3 class="section-heading">Plats sélectionnés</h3>
-      ${renderMealChips(
-        selection.selectedMeals,
-        "Aucun plat sélectionné pour le moment.",
-      )}
-      <p class="editor-notice next-box-notice">Les modifications sont appliquées uniquement à votre prochaine commande.</p>
+      </section>
+      <section class="portal-section meal-preparation-section">
+      <div class="editor${mealEditorOpenByDefault ? " paused-editor" : " hidden"}">
+        <div class="editor-heading">
+          <div class="editor-heading-copy">
+            <h3>Préparer votre prochaine semaine</h3>
+            <div class="meal-week-progress">
+              <div class="meal-week-progress-copy">
+                <p class="meal-week-progress-label">Votre semaine</p>
+                <p class="selected-count meal-editor-count" aria-live="polite">0 / ${selection.mealsCount} repas</p>
+              </div>
+              <div
+                aria-label="Progression de votre semaine"
+                aria-valuemax="${selection.mealsCount}"
+                aria-valuemin="0"
+                aria-valuenow="0"
+                class="meal-week-progress-track"
+                role="progressbar"
+              >
+                <div class="meal-week-progress-fill"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="editor-notice">Vos choix s’appliquent à la prochaine livraison.</p>
+        ${
+          isPaused && !resumeRequiresPayment
+            ? `<p class="editor-notice paused-notice">Préparez votre semaine, puis reprenez. Aucun prélèvement immédiat.</p>`
+            : ""
+        }
+        ${
+          isPaused && resumeRequiresPayment
+            ? `<p class="editor-notice paused-notice">Préparez votre semaine, puis reprenez. Le paiement n’a lieu qu’après confirmation.</p>`
+            : ""
+        }
+        ${
+          selection.resumeBlockedMessage
+            ? `<p class="error portal-error">${escapeHtml(selection.resumeBlockedMessage)}</p>`
+            : `<p class="error meal-editor-error hidden"></p>`
+        }
+        <div class="meal-filters-panel meal-editor-filters">
+          <div class="meal-filters-panel-head">
+            <button
+              aria-controls="portal-meal-filters-drawer"
+              aria-expanded="false"
+              aria-haspopup="dialog"
+              aria-label="Filtres"
+              class="meal-filters-toggle"
+              type="button"
+            >
+              <span aria-hidden="true" class="meal-filters-toggle-icon">
+                <svg fill="currentColor" height="14" viewBox="0 0 24 24" width="14" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M3 5a1 1 0 0 1 1-1h16a1 1 0 0 1 .8 1.6L15 12.5V19a1 1 0 0 1-1.45.89l-4-2A1 1 0 0 1 9 17v-4.5L3.2 5.6A1 1 0 0 1 3 5z"/>
+                </svg>
+              </span>
+              <span class="meal-filters-toggle-label">Filtres</span>
+              <span aria-hidden="true" class="meal-filters-toggle-count hidden"></span>
+            </button>
+          </div>
+        </div>
+        <div class="meals-empty meal-editor-empty hidden">
+          <p class="meal-editor-empty-copy">Aucun plat ne correspond à ces filtres.<br>Essayez de retirer un allergène ou une envie.</p>
+          <button class="meals-empty-reset meal-editor-empty-reset" type="button">Réinitialiser les filtres</button>
+        </div>
+        <div class="meal-grid meal-editor-grid"></div>
+        ${
+          isPaused && !selection.resumeBlockedMessage && !isModificationBlocked
+            ? `<p class="resume-note">${escapeHtml(resumeNote)}</p>`
+            : ""
+        }
+        ${
+          isResumeProcessing
+            ? `<button class="portal-button secondary" disabled type="button">Paiement en cours de confirmation</button>`
+            : ""
+        }
+        ${
+          isActive
+            ? `<div class="meal-editor-actions">
+          <button class="portal-button secondary cancel-button" type="button">Annuler</button>
+          <button class="portal-button save-button" disabled type="button">Valider ma semaine</button>
+        </div>`
+            : ""
+        }
+        ${
+          isPaused && !isModificationBlocked
+            ? `<div class="meal-editor-actions">
+          ${
+            !selection.resumeBlockedMessage
+              ? `<button class="portal-button resume-button" disabled type="button">${escapeHtml(resumeButtonLabel)}</button>`
+              : ""
+          }
+          <button class="portal-button secondary save-button" disabled type="button">Valider ma semaine</button>
+        </div>`
+            : ""
+        }
+      </div>
+      </section>
+      </div>
+      <aside class="portal-side-column">
+      <section class="portal-section subscription-section">
+      <div class="subscription-secondary">
+        <p class="subscription-secondary-title">Votre formule</p>
+        ${renderSubscriptionSecondary(selection)}
+      </div>
+      </section>
+      ${
+        selection.recovery ||
+        isResumeProcessing ||
+        (isModificationBlocked && modificationBlockedReason)
+          ? `<section class="portal-section recovery-section">
       ${
         selection.recovery
           ? renderRecoveryBlock(selection.recovery, merchantSupport)
@@ -272,38 +492,58 @@ const renderNextBoxCard = ({
       }
       ${
         isResumeProcessing
-          ? `<p class="processing-notice">Votre paiement est en cours de confirmation. Ne relancez pas la demande.</p>`
+          ? `<p class="processing-notice">La confirmation est en cours. Pas besoin de relancer.</p>`
           : ""
       }
-      <div class="card-actions">
-      ${
-        isActive && !isModificationBlocked
-          ? `<button class="portal-button secondary edit-button" type="button">Préparer ma semaine</button>`
-          : ""
-      }
-      ${
-        canChangeBox
-          ? `<button class="portal-button secondary change-box-button" type="button">Changer de box</button>`
-          : ""
-      }
-      ${
-        isActive && !isModificationBlocked
-          ? `<button class="portal-button secondary pause-button" type="button">Mettre mon abonnement en pause</button>`
-          : ""
-      }
-      </div>
-      <div class="objective-support">
-        <button class="portal-button secondary change-objective-button" type="button">Changer d'objectif</button>
-        <div class="objective-support-panel hidden">
-          <p class="objective-support-message">Le changement d'objectif nécessite l'aide de notre équipe afin d'adapter votre abonnement. Contactez-nous via le chat.</p>
-          <a class="portal-button objective-support-contact" href="${escapeHtml(merchantSupport.href)}">Contacter le support</a>
-        </div>
-      </div>
       ${
         isModificationBlocked && modificationBlockedReason
           ? `<p class="muted modification-blocked">${escapeHtml(modificationBlockedReason)}</p>`
           : ""
       }
+      </section>`
+          : ""
+      }
+      <section class="portal-section manage-section">
+      <div class="subscription-manage">
+        <p class="subscription-manage-title">Paramètres</p>
+        <div class="settings-menu">
+        ${
+          canChangeBox
+            ? `<button class="settings-row change-box-button" type="button">
+          <span class="settings-row-copy">
+            <span class="settings-row-label">Changer de box</span>
+            <span class="settings-row-hint">Adapter le nombre de repas</span>
+          </span>
+          <span class="settings-row-chevron" aria-hidden="true"></span>
+        </button>`
+            : ""
+        }
+        ${
+          isActive && !isModificationBlocked
+            ? `<button class="settings-row pause-button" type="button">
+          <span class="settings-row-copy">
+            <span class="settings-row-label">Mettre mon abonnement en pause</span>
+            <span class="settings-row-hint">Suspendre les prochaines livraisons</span>
+          </span>
+          <span class="settings-row-chevron" aria-hidden="true"></span>
+        </button>`
+            : ""
+        }
+        <div class="objective-support">
+          <button class="settings-row change-objective-button" type="button">
+            <span class="settings-row-copy">
+              <span class="settings-row-label">Changer d'objectif</span>
+              <span class="settings-row-hint">Avec l’aide de notre équipe</span>
+            </span>
+            <span class="settings-row-chevron" aria-hidden="true"></span>
+          </button>
+          <div class="objective-support-panel hidden">
+            <p class="objective-support-message">Le changement d'objectif nécessite l'aide de notre équipe afin d'adapter votre abonnement. Contactez-nous via le chat.</p>
+            <a class="portal-button objective-support-contact" href="${escapeHtml(merchantSupport.href)}">Contacter le support</a>
+          </div>
+        </div>
+        </div>
+      </div>
       <div class="box-change-editor hidden">
         <div class="box-change-step" data-step="1">
           <h3>Choisir une nouvelle box</h3>
@@ -328,77 +568,24 @@ const renderNextBoxCard = ({
           }
         </div>
       </div>
-      <div class="editor${mealEditorOpenByDefault ? " paused-editor" : " hidden"}">
-        <div class="editor-heading">
-          <div class="editor-heading-copy">
-            <h3>Préparer votre prochaine semaine</h3>
-            <div class="meal-week-progress">
-              <div class="meal-week-progress-copy">
-                <p class="meal-week-progress-label">Votre semaine</p>
-                <p class="selected-count meal-editor-count" aria-live="polite">0 / ${selection.mealsCount} repas</p>
-              </div>
-              <div
-                aria-label="Progression de votre semaine"
-                aria-valuemax="${selection.mealsCount}"
-                aria-valuemin="0"
-                aria-valuenow="0"
-                class="meal-week-progress-track"
-                role="progressbar"
-              >
-                <div class="meal-week-progress-fill"></div>
-              </div>
-            </div>
-          </div>
-          ${
-            isActive
-              ? `<button class="portal-button save-button" disabled type="button">Valider ma semaine</button>`
-              : ""
-          }
+      </section>
+      <section class="portal-section dietitian-section">
+        <div class="dietitian-card">
+          <p class="dietitian-title">Votre diététicienne</p>
+          <p class="dietitian-lead">Une question sur vos repas ?</p>
+          <p class="dietitian-copy">Discutez avec votre diététicienne</p>
+          <a
+            class="portal-button secondary dietitian-chat-button"
+            href="${escapeHtml(merchantSupport.href)}"
+            rel="noopener noreferrer"
+            target="_blank"
+          >
+            Ouvrir le chat
+          </a>
         </div>
-        <p class="editor-notice">Les modifications de plats seront appliquées uniquement à votre prochaine commande.</p>
-        ${
-          isResumeProcessing
-            ? `<p class="editor-notice processing-inline">Votre paiement est en cours de confirmation. Ne relancez pas la demande.</p>`
-            : ""
-        }
-        ${
-          isPaused && !resumeRequiresPayment
-            ? `<p class="editor-notice paused-notice">Préparez votre prochaine semaine avant de reprendre votre abonnement. Aucun prélèvement immédiat ne sera effectué.</p>`
-            : ""
-        }
-        ${
-          isPaused && resumeRequiresPayment
-            ? `<p class="editor-notice paused-notice">Préparez votre prochaine semaine avant de reprendre votre abonnement. Vous serez débité uniquement après confirmation.</p>`
-            : ""
-        }
-        ${
-          selection.resumeBlockedMessage
-            ? `<p class="error portal-error">${escapeHtml(selection.resumeBlockedMessage)}</p>`
-            : `<p class="error meal-editor-error hidden"></p>`
-        }
-        <div class="meal-grid meal-editor-grid"></div>
-        ${
-          isPaused && !selection.resumeBlockedMessage && !isModificationBlocked
-            ? `<button class="portal-button resume-button" disabled type="button">${escapeHtml(resumeButtonLabel)}</button>
-        <p class="resume-note">${escapeHtml(resumeNote)}</p>`
-            : ""
-        }
-        ${
-          isResumeProcessing
-            ? `<button class="portal-button secondary" disabled type="button">Paiement en cours de confirmation</button>`
-            : ""
-        }
-        ${
-          isActive
-            ? `<button class="portal-button secondary cancel-button" type="button">Annuler</button>`
-            : ""
-        }
-        ${
-          isPaused && !isModificationBlocked
-            ? `<button class="portal-button secondary save-button" disabled type="button">Valider ma semaine</button>`
-            : ""
-        }
-      </div>
+      </section>
+      </aside>
+      </section>
     </section>`;
 };
 
@@ -530,57 +717,53 @@ export const renderPortal = ({
   const hasTerminal = terminalSelections.length > 0;
   const hasAnySubscription = hasManageable || hasTerminal;
 
+  const headerFlash = [
+    processingMessage
+      ? `<p class="processing-notice">${escapeHtml(processingMessage)}</p>`
+      : "",
+    successMessage
+      ? `<p class="success">${escapeHtml(successMessage)}</p>`
+      : "",
+    errorMessage
+      ? `<p class="error portal-error">${escapeHtml(errorMessage)}</p>`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("");
+
   return htmlResponse(`<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mes box Mileyo</title>
+  <title>Mileyo</title>
   <style>${portalStyles}</style>
 </head>
 <body>
   <main class="portal-shell">
-    <section class="portal-card portal-header">
+    <header class="portal-header">
       ${renderMileyoLogoImg("portal-logo")}
-      <h1>Mes box Mileyo</h1>
-      <p class="intro">
-        Gérez votre prochaine box, consultez vos livraisons à venir et retrouvez l’historique de vos commandes — en toute clarté.
-      </p>
-      ${
-        processingMessage
-          ? `<p class="processing-notice">${escapeHtml(processingMessage)}</p>`
-          : ""
-      }
-      ${
-        successMessage
-          ? `<p class="success">${escapeHtml(successMessage)}</p>`
-          : ""
-      }
-      ${
-        errorMessage
-          ? `<p class="error portal-error">${escapeHtml(errorMessage)}</p>`
-          : ""
-      }
-    </section>
+      ${headerFlash ? `<div class="portal-header-flash">${headerFlash}</div>` : ""}
+    </header>
 
     ${
       !hasAnySubscription
         ? `<section class="portal-card"><p>Aucun abonnement trouvé pour ton compte.</p></section>`
         : `<nav aria-label="Sections du portail" class="portal-tabs" role="tablist">
-      <button aria-selected="true" class="portal-tab active" data-tab="next" role="tab" type="button">Ma prochaine box</button>
+      <button aria-selected="true" class="portal-tab active" data-tab="next" role="tab" type="button">Ma box</button>
       <button aria-selected="false" class="portal-tab" data-tab="upcoming" role="tab" type="button">À venir</button>
       <button aria-selected="false" class="portal-tab" data-tab="history" role="tab" type="button">Historique</button>
-      ${hasTerminal ? `<button aria-selected="false" class="portal-tab" data-tab="ended" role="tab" type="button">Abonnements terminés</button>` : ""}
+      ${hasTerminal ? `<button aria-selected="false" class="portal-tab" data-tab="ended" role="tab" type="button">Terminés</button>` : ""}
     </nav>
     <div class="portal-tab-panel" data-tab-panel="next" role="tabpanel">
       ${
         hasManageable
           ? selections
               .map((selection) =>
-                renderNextBoxCard({ boxes, merchantSupport, selection }),
+                renderNextBoxCard({ boxes, meals, merchantSupport, selection }),
               )
               .join("")
-          : `<section class="portal-card"><p class="muted">Aucun abonnement actif ou en pause. Consultez l’onglet Abonnements terminés si votre abonnement a pris fin.</p></section>`
+          : `<section class="portal-card"><p class="muted">Aucun abonnement actif ou en pause. Consultez l’onglet Terminés si votre abonnement a pris fin.</p></section>`
       }
     </div>
     <div class="portal-tab-panel hidden" data-tab-panel="upcoming" role="tabpanel">
@@ -623,6 +806,39 @@ export const renderPortal = ({
 
   <div
     aria-hidden="true"
+    class="meal-filters-drawer hidden"
+    id="portal-meal-filters-drawer"
+  >
+    <button aria-label="Fermer les filtres" class="meal-filters-drawer-backdrop" type="button"></button>
+    <aside
+      aria-labelledby="portal-meal-filters-drawer-title"
+      class="meal-filters-drawer-panel"
+      id="portal-meal-filters-drawer-panel"
+      role="dialog"
+    >
+      <div class="meal-filters-drawer-head">
+        <h2 class="meal-filters-drawer-title" id="portal-meal-filters-drawer-title">Filtrer les plats</h2>
+        <button aria-label="Fermer" class="meal-filters-drawer-close" type="button">×</button>
+      </div>
+      <div class="meal-filters-drawer-scroll" id="portal-meal-filters-body">
+        <div class="meal-filter-row">
+          <span class="meal-filter-label">Mes envies</span>
+          <div class="meal-filter-options" id="portal-badge-filters" role="group" aria-label="Envies et badges"></div>
+        </div>
+        <div class="meal-filter-row">
+          <span class="meal-filter-label">J'évite</span>
+          <div class="meal-filter-options" id="portal-allergen-filters" role="group" aria-label="Allergènes à éviter"></div>
+        </div>
+        <button class="meal-filters-reset hidden" id="portal-meal-filters-reset" type="button">Réinitialiser</button>
+      </div>
+      <div class="meal-filters-drawer-footer">
+        <button class="meal-filters-apply" id="portal-meal-filters-apply" type="button">Appliquer</button>
+      </div>
+    </aside>
+  </div>
+
+  <div
+    aria-hidden="true"
     aria-labelledby="meal-nutrition-modal-title"
     class="meal-nutrition-modal hidden"
     id="meal-nutrition-modal"
@@ -637,6 +853,40 @@ export const renderPortal = ({
       <p class="meal-nutrition-modal-meal" id="meal-nutrition-modal-meal"></p>
       <div class="meal-nutrition-modal-list" id="meal-nutrition-modal-list"></div>
     </div>
+  </div>
+
+  <div
+    aria-hidden="true"
+    class="meal-detail-overlay hidden"
+    id="meal-detail-overlay"
+  >
+    <button aria-label="Fermer" class="meal-detail-overlay-backdrop" type="button"></button>
+    <aside
+      aria-labelledby="meal-detail-title"
+      class="meal-detail-drawer"
+      id="meal-detail-drawer"
+      role="dialog"
+    >
+      <div aria-hidden="true" class="meal-detail-handle">
+        <span class="meal-detail-handle-bar"></span>
+      </div>
+      <button aria-label="Fermer" class="meal-detail-close" type="button">×</button>
+      <div class="meal-detail-scroll">
+        <div class="meal-detail-media" id="meal-detail-media"></div>
+        <h2 class="meal-detail-title" id="meal-detail-title"></h2>
+        <div class="meal-badges meal-detail-badges hidden" id="meal-detail-badges"></div>
+        <div class="meal-detail-nutrition hidden" id="meal-detail-nutrition"></div>
+        <div class="meal-detail-allergens hidden" id="meal-detail-allergens">
+          <p class="meal-detail-section-heading">Allergènes</p>
+          <p class="meal-detail-allergens-lead">Contient :</p>
+          <p class="meal-detail-allergens-copy" id="meal-detail-allergens-copy"></p>
+        </div>
+        <div class="meal-detail-ingredients hidden" id="meal-detail-ingredients">
+          <p class="meal-detail-section-heading meal-detail-ingredients-heading">Ingrédients</p>
+          <p class="meal-detail-ingredients-copy" id="meal-detail-ingredients-copy"></p>
+        </div>
+      </div>
+    </aside>
   </div>
 
   <script>window.__MILEYO_PORTAL__ = ${scriptJson({ boxes, initialQuantities, meals, selections })};</script>

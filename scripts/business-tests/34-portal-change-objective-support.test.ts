@@ -111,12 +111,13 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "portail continue d'utiliser getMerchantSupportContact",
-    portalData.includes("getMerchantSupportContact()"),
+    portalData.includes("getMerchantSupportContact(shop)"),
   );
   ctx.assertTrue(
-    "helper support inchangé — URL configurable",
+    "helper support — URL configurable (AppSettings + env + fallback)",
     merchantSupportHelper.includes("MILEYO_SUPPORT_CONTACT_URL") &&
-      merchantSupportHelper.includes("mailto:contact@mileyo.fr"),
+      merchantSupportHelper.includes("mailto:contact@mileyo.fr") &&
+      merchantSupportHelper.includes("supportChatUrl"),
   );
   ctx.assertTrue(
     "render branche le CTA sur merchantSupport.href",
@@ -125,7 +126,7 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "bouton distinct des autres actions",
-    html.includes("Modifier mes plats") &&
+    html.includes("Préparer ma semaine") &&
       html.includes("Changer de box") &&
       html.includes("Mettre mon abonnement en pause") &&
       html.includes("objective-support"),

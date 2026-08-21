@@ -10,6 +10,14 @@ export const selectStyle = {
   padding: "0.6rem 0.75rem",
 } as const;
 
+export const textInputStyle = {
+  border: "1px solid #c9cccf",
+  borderRadius: "0.5rem",
+  font: "inherit",
+  padding: "0.6rem 0.75rem",
+  width: "100%",
+} as const;
+
 export const productGridStyle = {
   display: "grid",
   gap: "1rem",
