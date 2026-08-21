@@ -249,7 +249,10 @@ const renderNextBoxCard = ({
       ? `Votre prochain prélèvement reste prévu le ${formatFrenchDate(selection.nextBillingDate)}.`
       : "Votre abonnement sera repris sans prélèvement immédiat.";
 
-  return `<section class="portal-card selection-card" data-selection-id="${escapeHtml(selection.id)}">
+  const mealEditorOpenByDefault =
+    isPaused && !isResumeProcessing && !isModificationBlocked;
+
+  return `<section class="portal-card selection-card${mealEditorOpenByDefault ? " is-meal-editing" : ""}" data-selection-id="${escapeHtml(selection.id)}">
       <div class="card-top">
         <h2>Ma prochaine box</h2>
         ${renderPortalSubscriptionStatus(portalState)}
@@ -275,7 +278,7 @@ const renderNextBoxCard = ({
       <div class="card-actions">
       ${
         isActive && !isModificationBlocked
-          ? `<button class="portal-button secondary edit-button" type="button">Modifier mes plats</button>`
+          ? `<button class="portal-button secondary edit-button" type="button">Préparer ma semaine</button>`
           : ""
       }
       ${
@@ -325,15 +328,30 @@ const renderNextBoxCard = ({
           }
         </div>
       </div>
-      <div class="editor${isPaused && !isResumeProcessing && !isModificationBlocked ? " paused-editor" : " hidden"}">
+      <div class="editor${mealEditorOpenByDefault ? " paused-editor" : " hidden"}">
         <div class="editor-heading">
-          <div>
-            <h3>${isPaused || isResumeProcessing ? "Préparez votre prochaine box" : "Modifier vos plats"}</h3>
-            <p class="selected-count meal-editor-count">0 / ${selection.mealsCount} plats sélectionnés</p>
+          <div class="editor-heading-copy">
+            <h3>Préparer votre prochaine semaine</h3>
+            <div class="meal-week-progress">
+              <div class="meal-week-progress-copy">
+                <p class="meal-week-progress-label">Votre semaine</p>
+                <p class="selected-count meal-editor-count" aria-live="polite">0 / ${selection.mealsCount} repas</p>
+              </div>
+              <div
+                aria-label="Progression de votre semaine"
+                aria-valuemax="${selection.mealsCount}"
+                aria-valuemin="0"
+                aria-valuenow="0"
+                class="meal-week-progress-track"
+                role="progressbar"
+              >
+                <div class="meal-week-progress-fill"></div>
+              </div>
+            </div>
           </div>
           ${
             isActive
-              ? `<button class="portal-button save-button" disabled type="button">Enregistrer</button>`
+              ? `<button class="portal-button save-button" disabled type="button">Valider ma semaine</button>`
               : ""
           }
         </div>
@@ -345,12 +363,12 @@ const renderNextBoxCard = ({
         }
         ${
           isPaused && !resumeRequiresPayment
-            ? `<p class="editor-notice paused-notice">Préparez votre prochaine box avant de reprendre votre abonnement. Aucun prélèvement immédiat ne sera effectué.</p>`
+            ? `<p class="editor-notice paused-notice">Préparez votre prochaine semaine avant de reprendre votre abonnement. Aucun prélèvement immédiat ne sera effectué.</p>`
             : ""
         }
         ${
           isPaused && resumeRequiresPayment
-            ? `<p class="editor-notice paused-notice">Préparez votre prochaine box avant de reprendre votre abonnement. Vous serez débité uniquement après confirmation.</p>`
+            ? `<p class="editor-notice paused-notice">Préparez votre prochaine semaine avant de reprendre votre abonnement. Vous serez débité uniquement après confirmation.</p>`
             : ""
         }
         ${
@@ -377,7 +395,7 @@ const renderNextBoxCard = ({
         }
         ${
           isPaused && !isModificationBlocked
-            ? `<button class="portal-button secondary save-button" disabled type="button">Enregistrer mes choix</button>`
+            ? `<button class="portal-button secondary save-button" disabled type="button">Valider ma semaine</button>`
             : ""
         }
       </div>

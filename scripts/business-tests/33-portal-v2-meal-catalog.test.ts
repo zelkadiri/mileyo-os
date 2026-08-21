@@ -242,6 +242,18 @@ const runSuite = () => {
         );
       }),
   );
+  ctx.assertTrue(
+    "rich meal fields are copied to PortalMeal",
+    mappedCatalog.every((meal, index) => {
+      const source = catalog[index];
+      return (
+        source != null &&
+        meal.badges === source.badges &&
+        meal.allergenes === source.allergenes &&
+        meal.ingredients === source.ingredients
+      );
+    }),
+  );
   ctx.assertEqual(
     "filled calories preserved",
     mappedCatalog[0]?.calories,
@@ -274,6 +286,9 @@ const runSuite = () => {
   distinctMacros.carbs = 61;
   distinctMacros.fat = 14;
   distinctMacros.portionGrams = 420;
+  distinctMacros.badges = ["Végétarien", "Sans gluten"];
+  distinctMacros.allergenes = ["Gluten", "Lait"];
+  distinctMacros.ingredients = ["Lentilles", "Épices"];
   const [mappedDistinct] = toPortalMealsFromBuilder([distinctMacros]);
   ctx.assertEqual(
     "distinct calories copied",
@@ -291,6 +306,21 @@ const runSuite = () => {
     "distinct portionGrams copied",
     mappedDistinct?.portionGrams,
     420,
+  );
+  ctx.assertEqual(
+    "distinct badges copied",
+    mappedDistinct?.badges.join("|"),
+    "Végétarien|Sans gluten",
+  );
+  ctx.assertEqual(
+    "distinct allergenes copied",
+    mappedDistinct?.allergenes.join("|"),
+    "Gluten|Lait",
+  );
+  ctx.assertEqual(
+    "distinct ingredients copied",
+    mappedDistinct?.ingredients.join("|"),
+    "Lentilles|Épices",
   );
   ctx.assertEqual(
     "distinct identity stays variantId",

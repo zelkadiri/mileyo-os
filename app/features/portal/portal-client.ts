@@ -232,18 +232,42 @@ export const portalClientScript = `
   function updateEditor(editor) {
     if (!editor.selectedCount) return;
     var total = selectedTotal(editor.quantities);
-    editor.selectedCount.textContent = total + " / " + editor.requiredMeals + " plats sélectionnés";
-    var isValid = total === editor.requiredMeals;
+    var required = editor.requiredMeals;
+    var percent =
+      required > 0 ? Math.min(100, Math.round((total / required) * 100)) : 0;
+    var isComplete = required > 0 && total === required;
+
+    editor.selectedCount.textContent = total + " / " + required + " repas";
+
+    if (editor.progressFill) {
+      editor.progressFill.style.width = percent + "%";
+    }
+    if (editor.progressTrack) {
+      editor.progressTrack.setAttribute("aria-valuenow", String(total));
+      editor.progressTrack.setAttribute("aria-valuemax", String(required));
+    }
+    if (editor.progress) {
+      editor.progress.classList.toggle("is-complete", isComplete);
+    }
+    if (editor.editor) {
+      editor.editor.classList.toggle("is-week-complete", isComplete);
+    }
+
     if (editor.saveButton) {
-      editor.saveButton.disabled = !isValid;
+      editor.saveButton.disabled = !isComplete;
     }
     if (editor.resumeButton) {
-      editor.resumeButton.disabled = !isValid;
+      editor.resumeButton.disabled = !isComplete;
     }
     if (editor.errorMessage) {
       editor.errorMessage.classList.add("hidden");
     }
     renderMealGrid(editor);
+  }
+
+  function setMealEditingState(editor, isEditing) {
+    if (!editor || !editor.card) return;
+    editor.card.classList.toggle("is-meal-editing", Boolean(isEditing));
   }
 
   function setEditorError(editor, message) {
@@ -258,6 +282,7 @@ export const portalClientScript = `
     if (editor.editButton) {
       editor.editButton.classList.remove("hidden");
     }
+    setMealEditingState(editor, false);
     setEditorError(editor, "");
   }
 
@@ -312,12 +337,16 @@ export const portalClientScript = `
 
     var editor = {
       cancelButton: card.querySelector(".cancel-button"),
+      card: card,
       editButton: card.querySelector(".edit-button"),
       editor: card.querySelector(".editor"),
       errorMessage: card.querySelector(".meal-editor-error"),
       isPaused: selection.portalState === "paused",
       isResumeProcessing: selection.portalState === "resume_processing",
       mealGrid: card.querySelector(".meal-editor-grid"),
+      progress: card.querySelector(".meal-week-progress"),
+      progressFill: card.querySelector(".meal-week-progress-fill"),
+      progressTrack: card.querySelector(".meal-week-progress-track"),
       quantities: JSON.parse(JSON.stringify(data.initialQuantities[selectionId] || {})),
       requiredMeals: selection.mealsCount,
       resumeButton: card.querySelector(".resume-button"),
@@ -325,6 +354,7 @@ export const portalClientScript = `
         ? "Reprendre mon abonnement et payer maintenant"
         : "Reprendre mon abonnement",
       saveButton: card.querySelector(".save-button"),
+      saveButtonLabel: "Valider ma semaine",
       selectedCount: card.querySelector(".meal-editor-count"),
       selectionId: selectionId
     };
@@ -332,6 +362,7 @@ export const portalClientScript = `
     editors[selectionId] = editor;
 
     if (editor.isPaused && !selection.resumeBlockedMessage) {
+      setMealEditingState(editor, true);
       updateEditor(editor);
     }
 
@@ -352,6 +383,7 @@ export const portalClientScript = `
         editor.quantities = JSON.parse(JSON.stringify(data.initialQuantities[selectionId] || {}));
         editor.editButton.classList.add("hidden");
         editor.editor.classList.remove("hidden");
+        setMealEditingState(editor, true);
         updateEditor(editor);
       });
 
@@ -387,7 +419,7 @@ export const portalClientScript = `
             document.close();
           });
         }).catch(function () {
-          editor.saveButton.textContent = editor.isPaused ? "Enregistrer mes choix" : "Enregistrer";
+          editor.saveButton.textContent = editor.saveButtonLabel;
           updateEditor(editor);
           setEditorError(editor, "Impossible d’enregistrer tes plats. Réessayez dans un instant.");
         });

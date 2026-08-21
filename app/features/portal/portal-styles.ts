@@ -424,6 +424,25 @@ button:disabled,
 
 .editor { margin-top: 18px; }
 
+.selection-card.is-meal-editing {
+  border-color: rgba(185, 138, 215, 0.72);
+  box-shadow:
+    var(--mileyo-shadow-soft),
+    0 0 0 1px rgba(185, 138, 215, 0.22);
+}
+
+.selection-card.is-meal-editing .editor {
+  background: linear-gradient(
+    180deg,
+    rgba(252, 248, 246, 0.96) 0%,
+    rgba(255, 255, 255, 0.98) 100%
+  );
+  border: 1px solid rgba(220, 194, 240, 0.55);
+  border-radius: 20px;
+  margin-top: 20px;
+  padding: 16px;
+}
+
 .editor-notice {
   color: var(--mileyo-muted);
   font-size: 0.9rem;
@@ -482,12 +501,87 @@ button:disabled,
 .portal-error { margin-top: 12px; }
 
 .editor-heading {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
   justify-content: space-between;
   margin-bottom: 16px;
+}
+
+.editor-heading-copy {
+  display: grid;
+  flex: 1 1 220px;
+  gap: 12px;
+  min-width: 0;
+}
+
+.editor-heading-copy h3 {
+  margin: 0;
+}
+
+.meal-week-progress {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+.meal-week-progress-copy {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  justify-content: space-between;
+}
+
+.meal-week-progress-label {
+  color: var(--mileyo-purple-black);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.meal-week-progress .meal-editor-count {
+  color: var(--mileyo-text);
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.meal-week-progress-track {
+  background: rgba(220, 194, 240, 0.35);
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.meal-week-progress-fill {
+  background: linear-gradient(
+    90deg,
+    var(--mileyo-purple) 0%,
+    var(--mileyo-purple-dark) 100%
+  );
+  border-radius: inherit;
+  height: 100%;
+  transition: width 0.22s ease, background 0.22s ease;
+  width: 0%;
+}
+
+.meal-week-progress.is-complete .meal-week-progress-fill {
+  background: linear-gradient(90deg, var(--mileyo-green) 0%, #5fb892 100%);
+}
+
+.meal-week-progress.is-complete .meal-week-progress-label,
+.editor.is-week-complete .meal-week-progress .meal-editor-count {
+  color: #2f6f57;
+}
+
+.editor.is-week-complete .save-button:not(:disabled) {
+  box-shadow: 0 10px 24px rgba(124, 201, 167, 0.28);
 }
 
 .meal-grid {
@@ -851,6 +945,19 @@ button:disabled,
 }
 
 @media (max-width: 559px) {
+  .selection-card.is-meal-editing .editor {
+    padding: 14px;
+  }
+
+  .editor-heading .save-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .meal-week-progress-track {
+    height: 9px;
+  }
+
   .meal-nutrition-modal {
     align-items: flex-end;
     padding: 0;

@@ -15,12 +15,15 @@ export type PortalBoxProduct = {
 };
 
 export type PortalMeal = {
+  allergenes: string[];
+  badges: string[];
   calories: number | null;
   carbs: number | null;
   fat: number | null;
   id: string;
   imageAlt: string;
   imageUrl: string | null;
+  ingredients: string[];
   objective: SubscriptionObjective;
   portionGrams: number | null;
   proteins: number | null;
