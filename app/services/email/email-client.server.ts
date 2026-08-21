@@ -2,8 +2,18 @@ import { Resend } from "resend";
 
 export const RESEND_API_KEY_ENV = "RESEND_API_KEY";
 export const EMAIL_FROM_ENV = "EMAIL_FROM";
+export const ENABLE_MILEYO_TRANSACTIONAL_EMAILS_ENV =
+  "ENABLE_MILEYO_TRANSACTIONAL_EMAILS";
 
 export type ResendClient = Resend;
+
+/**
+ * Mileyo-branded transactional emails (payment, etc.).
+ * Off by default — must be explicitly set to "true".
+ */
+export const isMileyoTransactionalEmailEnabled = (
+  env: NodeJS.ProcessEnv = process.env,
+): boolean => env[ENABLE_MILEYO_TRANSACTIONAL_EMAILS_ENV] === "true";
 
 /**
  * Resolve Resend API key from the environment.

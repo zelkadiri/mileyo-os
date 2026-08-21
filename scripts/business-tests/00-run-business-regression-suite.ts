@@ -69,6 +69,9 @@ const BUSINESS_SUITES = [
   "46-portal-dietitian-chat-support.test.ts",
   "47-portal-meal-filters.test.ts",
   "48-email-foundation.test.ts",
+  "49-email-payment-foundation.test.ts",
+  "50-email-payment-failed.test.ts",
+  "51-email-payment-recovered.test.ts",
 ];
 
 const LEGACY_SUITES = [

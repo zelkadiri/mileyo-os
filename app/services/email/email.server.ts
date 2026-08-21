@@ -131,10 +131,20 @@ export const sendEmail = async (
 export {
   createEmailClient,
   EMAIL_FROM_ENV,
+  ENABLE_MILEYO_TRANSACTIONAL_EMAILS_ENV,
   getEmailFrom,
   getResendApiKey,
+  isMileyoTransactionalEmailEnabled,
   RESEND_API_KEY_ENV,
 } from "./email-client.server";
+export {
+  buildPaymentFailedEmailData,
+  buildPaymentRecoveredEmailData,
+  formatPaymentEmailDateTime,
+  resolvePaymentEmailRecipient,
+  shouldSendPaymentFailedEmail,
+  shouldSendPaymentRecoveredEmail,
+} from "./payment-email.server";
 export { renderEmailTemplate } from "./email-render.server";
 export type {
   EmailPayload,
@@ -142,4 +152,11 @@ export type {
   EmailRenderResult,
   EmailSendResult,
   EmailTemplateName,
+  PaymentFailedEmailData,
+  PaymentRecoveredEmailData,
 } from "./email.types";
+export type {
+  PaymentEmailOrderSource,
+  PaymentEmailSelectionSource,
+  ResolvedPaymentEmailRecipient,
+} from "./payment-email.server";

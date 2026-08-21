@@ -2,12 +2,20 @@ import * as React from "react";
 import { render, toPlainText } from "react-email";
 
 import type { EmailRenderResult, EmailTemplateName } from "./email.types";
+import { PaymentFailedEmail } from "./templates/PaymentFailedEmail";
+import { PaymentRecoveredEmail } from "./templates/PaymentRecoveredEmail";
 import { TestEmail } from "./templates/TestEmail";
 
 const templateRegistry: Record<
   EmailTemplateName,
   React.ComponentType<Record<string, unknown>>
 > = {
+  "payment-failed": PaymentFailedEmail as React.ComponentType<
+    Record<string, unknown>
+  >,
+  "payment-recovered": PaymentRecoveredEmail as React.ComponentType<
+    Record<string, unknown>
+  >,
   test: TestEmail as React.ComponentType<Record<string, unknown>>,
 };
 

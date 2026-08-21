@@ -1,6 +1,6 @@
 /**
  * Generic email foundation types.
- * Domain-specific email payloads are added in later EMAIL steps.
+ * Domain-specific payment payloads live alongside the shared template registry.
  */
 
 export type EmailRecipient = {
@@ -9,7 +9,27 @@ export type EmailRecipient = {
 };
 
 /** Template identifiers known to the email layer. Expand as templates are added. */
-export type EmailTemplateName = "test";
+export type EmailTemplateName =
+  | "test"
+  | "payment-failed"
+  | "payment-recovered";
+
+/** Display data for PaymentFailedEmail (no business logic). */
+export type PaymentFailedEmailData = {
+  customerName?: string | null;
+  failureCount?: number | null;
+  nextRetryAt?: string | null;
+  recoveryId?: string | null;
+  subscriptionContractId?: string | null;
+};
+
+/** Display data for PaymentRecoveredEmail (no business logic). */
+export type PaymentRecoveredEmailData = {
+  customerName?: string | null;
+  orderId?: string | null;
+  recoveryId?: string | null;
+  subscriptionContractId?: string | null;
+};
 
 export type EmailPayload<TData = Record<string, unknown>> = {
   /** Optional override; otherwise uses process.env.EMAIL_FROM. */

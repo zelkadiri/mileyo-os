@@ -11,6 +11,16 @@ import {
   type RecoveryStatus,
 } from "../constants/subscriptionPaymentRecovery";
 import db from "../db.server";
+import {
+  buildPaymentFailedEmailData,
+  buildPaymentRecoveredEmailData,
+  isMileyoTransactionalEmailEnabled,
+  formatPaymentEmailDateTime,
+  resolvePaymentEmailRecipient,
+  sendEmail,
+  shouldSendPaymentFailedEmail,
+  shouldSendPaymentRecoveredEmail,
+} from "./email/email.server";
 import { computeNextSubscriptionCycleRetryAt } from "../utils/subscriptionCycleBilling";
 import {
   fetchShopifyBillingAttempt,
@@ -420,6 +430,88 @@ export const sendPaymentUpdateEmailForSelection = async ({
   return { ok: true, sentAt };
 };
 
+const trySendMileyoPaymentFailedEmail = async ({
+  recovery,
+  selection,
+}: {
+  recovery: {
+    failureCount: number;
+    id: string;
+    nextRetryAt: Date | null;
+    paymentFailedEmailSentAt: Date | null;
+  };
+  selection: SubscriptionMealSelection;
+}) => {
+  const order = await db.boxOrder.findUnique({
+    select: { customerEmail: true, customerName: true },
+    where: {
+      shop_shopifyOrderId: {
+        shop: selection.shop,
+        shopifyOrderId: selection.shopifyOrderId,
+      },
+    },
+  });
+
+  const { customerName, recipient } = resolvePaymentEmailRecipient(
+    selection,
+    order,
+  );
+
+  const eligible = shouldSendPaymentFailedEmail({
+    failureCount: recovery.failureCount,
+    hasRecipient: Boolean(recipient),
+    paymentFailedEmailSentAt: recovery.paymentFailedEmailSentAt,
+    transactionalEmailsEnabled: isMileyoTransactionalEmailEnabled(),
+  });
+
+  if (!eligible || !recipient) {
+    console.log("[paymentRecovery] mileyo payment-failed email skipped", {
+      failureCount: recovery.failureCount,
+      hasRecipient: Boolean(recipient),
+      alreadySent: Boolean(recovery.paymentFailedEmailSentAt),
+      flagEnabled: isMileyoTransactionalEmailEnabled(),
+      recoveryId: recovery.id,
+      selectionId: selection.id,
+    });
+    return;
+  }
+
+  const result = await sendEmail({
+    data: buildPaymentFailedEmailData({
+      customerName,
+      failureCount: recovery.failureCount,
+      nextRetryAt: formatPaymentEmailDateTime(recovery.nextRetryAt),
+      recoveryId: recovery.id,
+      subscriptionContractId: selection.subscriptionContractId,
+    }),
+    subject: "Votre paiement d’abonnement n’a pas abouti",
+    template: "payment-failed",
+    to: recipient,
+  });
+
+  if (!result.ok) {
+    console.log("[paymentRecovery] mileyo payment-failed email send failed", {
+      message: result.message,
+      reason: result.reason,
+      recoveryId: recovery.id,
+      selectionId: selection.id,
+    });
+    return;
+  }
+
+  await db.subscriptionPaymentRecovery.update({
+    data: { paymentFailedEmailSentAt: new Date() },
+    where: { id: recovery.id },
+  });
+
+  console.log("[paymentRecovery] mileyo payment-failed email sent", {
+    emailId: result.id,
+    recoveryId: recovery.id,
+    selectionId: selection.id,
+    to: recipient.email,
+  });
+};
+
 const scheduleRecoveryAfterFailure = async ({
   admin,
   billingCycleKey,
@@ -502,6 +594,7 @@ const scheduleRecoveryAfterFailure = async ({
 
   if (nextFailureCount === 1) {
     await sendPaymentUpdateEmailForSelection({ admin, selection });
+    await trySendMileyoPaymentFailedEmail({ recovery, selection });
   }
 
   if (nextFailureCount >= MAX_RECOVERY_FAILURES && selection.subscriptionContractId) {
@@ -876,7 +969,7 @@ export const closeRecoveryOnSuccessfulOrder = async ({
     return;
   }
 
-  await db.subscriptionPaymentRecovery.updateMany({
+  const updateResult = await db.subscriptionPaymentRecovery.updateMany({
     data: {
       nextRetryAt: null,
       status: RECOVERY_STATUS.RECOVERED,
@@ -889,8 +982,118 @@ export const closeRecoveryOnSuccessfulOrder = async ({
 
   console.log("[paymentRecovery] recovery closed after successful order", {
     orderId,
-    recoveredCount: openRecoveries.length,
+    recoveredCount: updateResult.count,
     selectionId,
+  });
+
+  if (updateResult.count === 0) {
+    return;
+  }
+
+  await trySendMileyoPaymentRecoveredEmail({
+    orderId,
+    recoveries: openRecoveries,
+    selectionId,
+  });
+};
+
+const trySendMileyoPaymentRecoveredEmail = async ({
+  orderId,
+  recoveries,
+  selectionId,
+}: {
+  orderId: string;
+  recoveries: {
+    id: string;
+    paymentRecoveredEmailSentAt: Date | null;
+  }[];
+  selectionId: string;
+}) => {
+  const alreadySentAt =
+    recoveries.find((recovery) => recovery.paymentRecoveredEmailSentAt)
+      ?.paymentRecoveredEmailSentAt ?? null;
+
+  const selection = await db.subscriptionMealSelection.findUnique({
+    where: { id: selectionId },
+  });
+
+  if (!selection) {
+    console.log("[paymentRecovery] mileyo payment-recovered email skipped", {
+      reason: "selection_missing",
+      selectionId,
+    });
+    return;
+  }
+
+  const order = await db.boxOrder.findUnique({
+    select: { customerEmail: true, customerName: true },
+    where: {
+      shop_shopifyOrderId: {
+        shop: selection.shop,
+        shopifyOrderId: selection.shopifyOrderId,
+      },
+    },
+  });
+
+  const { customerName, recipient } = resolvePaymentEmailRecipient(
+    selection,
+    order,
+  );
+
+  const eligible = shouldSendPaymentRecoveredEmail({
+    hasRealTransition: true,
+    hasRecipient: Boolean(recipient),
+    paymentRecoveredEmailSentAt: alreadySentAt,
+    transactionalEmailsEnabled: isMileyoTransactionalEmailEnabled(),
+  });
+
+  if (!eligible || !recipient) {
+    console.log("[paymentRecovery] mileyo payment-recovered email skipped", {
+      alreadySent: Boolean(alreadySentAt),
+      flagEnabled: isMileyoTransactionalEmailEnabled(),
+      hasRecipient: Boolean(recipient),
+      recoveryIds: recoveries.map((recovery) => recovery.id),
+      selectionId,
+    });
+    return;
+  }
+
+  const primaryRecoveryId = recoveries[0]?.id ?? null;
+
+  const result = await sendEmail({
+    data: buildPaymentRecoveredEmailData({
+      customerName,
+      orderId,
+      recoveryId: primaryRecoveryId,
+      subscriptionContractId: selection.subscriptionContractId,
+    }),
+    subject: "Votre paiement a été récupéré",
+    template: "payment-recovered",
+    to: recipient,
+  });
+
+  if (!result.ok) {
+    console.log("[paymentRecovery] mileyo payment-recovered email send failed", {
+      message: result.message,
+      reason: result.reason,
+      selectionId,
+    });
+    return;
+  }
+
+  const sentAt = new Date();
+
+  await db.subscriptionPaymentRecovery.updateMany({
+    data: { paymentRecoveredEmailSentAt: sentAt },
+    where: { id: { in: recoveries.map((recovery) => recovery.id) } },
+  });
+
+  console.log("[paymentRecovery] mileyo payment-recovered email sent", {
+    emailId: result.id,
+    orderId,
+    recoveryIds: recoveries.map((recovery) => recovery.id),
+    selectionId,
+    to: recipient.email,
   });
 };
 
