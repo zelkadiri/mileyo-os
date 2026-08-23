@@ -16,7 +16,8 @@ export type EmailTemplateName =
   | "subscription-created"
   | "subscription-paused"
   | "meal-selection-confirmed"
-  | "meal-selection-reminder";
+  | "meal-selection-reminder"
+  | "upcoming-delivery";
 
 /** V1 pause causes for SubscriptionPausedEmail. */
 export type SubscriptionPauseCause =
@@ -55,6 +56,17 @@ export type MealSelectionReminderEmailData = {
   cutoffLabel: string;
   mealsCount: number;
   portalUrl?: string | null;
+};
+
+/** Display data for UpcomingDeliveryEmail (no business logic). */
+export type UpcomingDeliveryEmailData = {
+  customerName?: string | null;
+  deliveryDateLabel: string;
+  mealsCount: number;
+  selectedMeals: string[];
+  portalUrl: string;
+  supportHref?: string | null;
+  supportLabel?: string | null;
 };
 
 /** Display data for PaymentFailedEmail (no business logic). */

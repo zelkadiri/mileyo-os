@@ -9,6 +9,7 @@ import { PaymentRecoveredEmail } from "./templates/PaymentRecoveredEmail";
 import { SubscriptionCreatedEmail } from "./templates/SubscriptionCreatedEmail";
 import { SubscriptionPausedEmail } from "./templates/SubscriptionPausedEmail";
 import { TestEmail } from "./templates/TestEmail";
+import { UpcomingDeliveryEmail } from "./templates/UpcomingDeliveryEmail";
 
 const templateRegistry: Record<
   EmailTemplateName,
@@ -30,6 +31,9 @@ const templateRegistry: Record<
     Record<string, unknown>
   >,
   "meal-selection-reminder": MealSelectionReminderEmail as React.ComponentType<
+    Record<string, unknown>
+  >,
+  "upcoming-delivery": UpcomingDeliveryEmail as React.ComponentType<
     Record<string, unknown>
   >,
   test: TestEmail as React.ComponentType<Record<string, unknown>>,

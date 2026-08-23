@@ -184,6 +184,20 @@ export {
   trySendMealSelectionConfirmedEmail,
   trySendMealSelectionReminderEmail,
 } from "./meal-selection-email.server";
+export {
+  buildUpcomingDeliveryEmailData,
+  buildUpcomingDeliveryEmailDataFromSelection,
+  evaluateUpcomingDeliveryEligibility,
+  formatUpcomingDeliveryDateLabel,
+  hasUsableUpcomingDeliveryMeals,
+  isUpcomingDeliveryCutoffSatisfied,
+  isUpcomingDeliveryEmailAlreadySentForDelivery,
+  isUpcomingDeliveryEmailSendWindowOpen,
+  resolveUpcomingDeliveryCycle,
+  resolveSubscriptionEmailRecipient as resolveUpcomingDeliveryEmailRecipient,
+  shouldSendUpcomingDeliveryEmail,
+  trySendUpcomingDeliveryEmail,
+} from "./upcoming-delivery-email.server";
 export { renderEmailTemplate } from "./email-render.server";
 export type {
   EmailPayload,
@@ -197,6 +211,7 @@ export type {
   SubscriptionPausedEmailData,
   MealSelectionConfirmedEmailData,
   MealSelectionReminderEmailData,
+  UpcomingDeliveryEmailData,
   SubscriptionPauseCause,
 } from "./email.types";
 export type {
@@ -206,6 +221,12 @@ export type {
   MealSelectionEmailSelectionSource,
   TrySendMealSelectionReminderResult,
 } from "./meal-selection-email.server";
+export type {
+  UpcomingDeliveryCycle,
+  TrySendUpcomingDeliveryEmailResult,
+  UpcomingDeliveryEmailOrderSource,
+  UpcomingDeliveryEmailSelectionSource,
+} from "./upcoming-delivery-email.server";
 export type {
   PaymentEmailOrderSource,
   PaymentEmailSelectionSource,

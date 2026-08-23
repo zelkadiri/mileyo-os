@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import { processDueMealSelectionReminders } from "../services/email/meal-selection-reminder-runner.server";
+import { processDueUpcomingDeliveryEmails } from "../services/email/upcoming-delivery-runner.server";
 import { processDueSubscriptionBillings } from "../services/subscriptionBillingWorker.server";
 import { resolveCronShop } from "../utils/cronShop.server";
 
@@ -79,10 +80,32 @@ const runProcessSubscriptionsCron = async (request: Request) => {
       );
     }
 
+    let upcomingDeliveryEmails = null;
+    let upcomingDeliveryError: string | null = null;
+
+    try {
+      upcomingDeliveryEmails = await processDueUpcomingDeliveryEmails(
+        shopConfig.shop,
+      );
+    } catch (upcomingError) {
+      upcomingDeliveryError =
+        upcomingError instanceof Error
+          ? upcomingError.message
+          : "Upcoming delivery email runner failed unexpectedly.";
+
+      console.error(
+        "[cron/process-subscriptions] upcoming delivery email failed",
+        upcomingDeliveryError,
+        upcomingError,
+      );
+    }
+
     return Response.json({
       ...billingSummary,
       mealSelectionReminderError,
       mealSelectionReminders,
+      upcomingDeliveryEmails,
+      upcomingDeliveryError,
     });
   } catch (error) {
     const message =
