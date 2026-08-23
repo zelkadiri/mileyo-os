@@ -84,6 +84,8 @@ const BUSINESS_SUITES = [
   "61-email-batch-dispatcher.test.ts",
   "62-email-event-foundation.test.ts",
   "63-email-transport-idempotency.test.ts",
+  "64-email-event-worker.test.ts",
+  "65-email-event-retry-cron.test.ts",
 ];
 
 const LEGACY_SUITES = [

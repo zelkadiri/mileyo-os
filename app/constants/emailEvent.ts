@@ -1,6 +1,7 @@
 /**
- * EmailEvent outbox constants (EMAIL-6B).
- * Status / type strings only — no send, retry policy, or domain coupling.
+ * EmailEvent outbox constants (EMAIL-6B / EMAIL-6D).
+ * Status / type strings + worker retry/reclaim limits.
+ * No send, no domain coupling.
  */
 
 export const EMAIL_EVENT_STATUS = {
@@ -56,3 +57,15 @@ export const isEmailEventType = (value: string): value is EmailEventType =>
 
 /** Max claim attempts before terminal failure (V1). attemptCount increments on claim only. */
 export const EMAIL_EVENT_MAX_ATTEMPTS = 5;
+
+/** Fixed V1 retry delay after a retryable handler failure (no complex backoff). */
+export const EMAIL_EVENT_RETRY_DELAY_MINUTES = 60;
+
+/** processingStartedAt older than this → reclaim stuck processing → pending. */
+export const EMAIL_EVENT_PROCESSING_STALE_AFTER_MINUTES = 10;
+
+/** Max due EmailEvent rows claimed/processed per worker run. */
+export const EMAIL_EVENT_PROCESSING_BATCH_LIMIT = 100;
+
+/** Bounded error detail entries retained on the worker summary. */
+export const EMAIL_EVENT_WORKER_MAX_ERRORS = 50;
