@@ -380,9 +380,9 @@ const runSuite = async () => {
       3,
     );
     ctx.assertEqual(
-      "production registry empty",
+      "production registry campaign handlers",
       Object.keys(EMAIL_EVENT_HANDLER_REGISTRY).length,
-      0,
+      2,
     );
 
     for (let i = 0; i < 5; i += 1) {
@@ -796,11 +796,9 @@ const runSuite = async () => {
       /trySend/.test(handlersSource),
     );
     ctx.assertTrue(
-      "registry production vide",
-      /EMAIL_EVENT_HANDLER_REGISTRY\s*=\s*\{\s*\}/.test(handlersSource) ||
-        /EMAIL_EVENT_HANDLER_REGISTRY: EmailEventHandlerRegistry = \{\}/.test(
-          handlersSource,
-        ),
+      "registry production contient reminder + upcoming",
+      /EMAIL_EVENT_TYPE\.MEAL_SELECTION_REMINDER/.test(handlersSource) &&
+        /EMAIL_EVENT_TYPE\.UPCOMING_DELIVERY/.test(handlersSource),
     );
   }
 

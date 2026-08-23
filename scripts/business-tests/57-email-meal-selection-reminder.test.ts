@@ -325,15 +325,19 @@ const runSuite = async () => {
     ),
   );
 
-  ctx.scenario("F. EMAIL-INFRA-2 — batch dispatcher");
+  ctx.scenario("F. EMAIL-INFRA-2 — batch dispatcher + outbox enqueue");
   ctx.assertTrue(
     "runner utilise dispatchEmailBatch",
     runnerSource.includes("dispatchEmailBatch({"),
   );
   ctx.assertTrue(
-    "trySend délégué dans worker (pas dans classify alone)",
-    runnerSource.includes("trySendMealSelectionReminderEmail({") &&
+    "ensureEmailEvent délégué dans worker (pas de trySend direct)",
+    runnerSource.includes("ensureEmailEvent({") &&
       runnerSource.includes("worker: async"),
+  );
+  ctx.assertFalse(
+    "runner sans trySendMealSelectionReminderEmail",
+    runnerSource.includes("trySendMealSelectionReminderEmail"),
   );
   ctx.assertTrue(
     "classify loop conserve for selection",
@@ -350,9 +354,12 @@ const runSuite = async () => {
       cronRunBlock.includes("processDueMealSelectionReminders"),
   );
   ctx.assertTrue(
-    "already_sent_for_delivery mappé skippedAlreadySent",
-    runnerSource.includes('reason === "already_sent_for_delivery"') &&
-      runnerSource.includes("skippedAlreadySent"),
+    "summary outbox enqueuedCreated",
+    runnerSource.includes("enqueuedCreated"),
+  );
+  ctx.assertFalse(
+    "already_sent_for_delivery runtime skip retiré du runner",
+    runnerSource.includes('reason === "already_sent_for_delivery"'),
   );
 
   return finishSuite("57-email-meal-selection-reminder", ctx);

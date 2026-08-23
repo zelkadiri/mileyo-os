@@ -3,9 +3,10 @@
  * Separate from billing worker — local DB only, no Shopify fetch.
  *
  * Phase A: classify + build eligibleItems (business skips counted here).
- * Phase B: dispatchEmailBatch → trySendUpcomingDeliveryEmail (infra concurrency).
+ * Phase B: dispatchEmailBatch → ensureEmailEvent (outbox enqueue, no direct send).
  */
 
+import { EMAIL_EVENT_TYPE } from "../../constants/emailEvent";
 import { RECOVERY_STATUS } from "../../constants/subscriptionPaymentRecovery";
 import db from "../../db.server";
 import { getPortalModificationBlockReason } from "../subscriptionModificationBlock.server";
@@ -14,6 +15,13 @@ import {
   EMAIL_BATCH_DEFAULT_MAX_ERRORS,
   dispatchEmailBatch,
 } from "./email-batch-dispatcher.server";
+import { ensureEmailEvent } from "./email-event.server";
+import {
+  backfillUpcomingDeliveryStampFromSentEvent,
+  buildCampaignEmailEventMetaJson,
+  buildUpcomingDeliveryEmailEventIdempotencyKey,
+  EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+} from "./email-outbox-campaign.server";
 import {
   hasUsableUpcomingDeliveryMeals,
   isUpcomingDeliveryCutoffSatisfied,
@@ -23,7 +31,6 @@ import {
   resolveSubscriptionEmailRecipient,
   resolveUpcomingDeliveryCycle,
   shouldSendUpcomingDeliveryEmail,
-  trySendUpcomingDeliveryEmail,
 } from "./upcoming-delivery-email.server";
 
 const PORTAL_RECOVERY_STATUSES = [
@@ -36,6 +43,8 @@ const PORTAL_RECOVERY_STATUSES = [
 
 export type UpcomingDeliveryRunnerSummary = {
   eligible: number;
+  enqueuedCreated: number;
+  enqueuedExisting: number;
   errors: string[];
   failed: number;
   scanned: number;
@@ -88,6 +97,8 @@ export type UpcomingDeliveryBoxOrderProof = {
 export const emptyUpcomingDeliveryRunnerSummary =
   (): UpcomingDeliveryRunnerSummary => ({
     eligible: 0,
+    enqueuedCreated: 0,
+    enqueuedExisting: 0,
     errors: [],
     failed: 0,
     scanned: 0,
@@ -306,31 +317,10 @@ const buildBoxOrderLookupKey = (
 ) => `${subscriptionSelectionId}:${scheduledDeliveryDate}`;
 
 type UpcomingDeliveryEligibleItem = {
+  effectiveDeliveryDate: string;
+  recipientEmail: string | null;
   selectionId: string;
-};
-
-/**
- * Map trySend skipped reasons onto existing business counters.
- * Known: already_sent_for_delivery → skippedAlreadySent;
- * not_eligible → skippedNoRecipient (pre-dispatcher behaviour).
- * Other runtime skips (selection_missing, invalid_email_data, …) are left
- * unmapped — same as before (no invented counters).
- */
-const applyUpcomingDeliveryRuntimeSkip = ({
-  reason,
-  summary,
-}: {
-  reason: string;
-  summary: UpcomingDeliveryRunnerSummary;
-}): void => {
-  if (reason === "already_sent_for_delivery") {
-    summary.skippedAlreadySent += 1;
-    return;
-  }
-
-  if (reason === "not_eligible") {
-    summary.skippedNoRecipient += 1;
-  }
+  shop: string;
 };
 
 const pushBoundedUpcomingDeliveryError = (
@@ -478,8 +468,18 @@ export const processDueUpcomingDeliveryEmails = async (
         continue;
       }
 
+      const { recipient } = resolveSubscriptionEmailRecipient(
+        selection,
+        recipientOrder ?? null,
+      );
+
       summary.eligible += 1;
-      eligibleItems.push({ selectionId: selection.id });
+      eligibleItems.push({
+        effectiveDeliveryDate: classification.effectiveDeliveryDate!,
+        recipientEmail: recipient?.email ?? null,
+        selectionId: selection.id,
+        shop: selection.shop,
+      });
     } catch (error) {
       summary.failed += 1;
       pushBoundedUpcomingDeliveryError(
@@ -491,38 +491,50 @@ export const processDueUpcomingDeliveryEmails = async (
     }
   }
 
-  // Phase B — bounded-concurrency send via shared dispatcher.
+  // Phase B — bounded-concurrency outbox enqueue via shared dispatcher.
   const batchResult = await dispatchEmailBatch({
     getItemKey: (item) => item.selectionId,
     items: eligibleItems,
     worker: async (item) => {
-      const sendResult = await trySendUpcomingDeliveryEmail({
-        now,
-        selectionId: item.selectionId,
-      });
+      try {
+        const idempotencyKey = buildUpcomingDeliveryEmailEventIdempotencyKey(
+          item.selectionId,
+          item.effectiveDeliveryDate,
+        );
 
-      if (sendResult.status === "sent") {
+        const ensureResult = await ensureEmailEvent({
+          eventType: EMAIL_EVENT_TYPE.UPCOMING_DELIVERY,
+          idempotencyKey,
+          metaJson: buildCampaignEmailEventMetaJson(item.effectiveDeliveryDate),
+          recipientEmail: item.recipientEmail,
+          referenceId: item.selectionId,
+          referenceType: EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+          shop: item.shop,
+        });
+
+        if (ensureResult.created) {
+          summary.enqueuedCreated += 1;
+        } else {
+          summary.enqueuedExisting += 1;
+          await backfillUpcomingDeliveryStampFromSentEvent({
+            deliveryDate: item.effectiveDeliveryDate,
+            event: ensureResult.event,
+            selectionId: item.selectionId,
+          });
+        }
+
         return { outcome: "success" };
-      }
-
-      if (sendResult.status === "failed") {
+      } catch (error) {
         return {
-          message: sendResult.message,
+          message:
+            error instanceof Error ? error.message : "ensureEmailEvent failed",
           outcome: "failed",
-          reason: sendResult.reason,
+          reason: "enqueue_failed",
         };
       }
-
-      applyUpcomingDeliveryRuntimeSkip({
-        reason: sendResult.reason,
-        summary,
-      });
-
-      return { outcome: "skipped", reason: sendResult.reason };
     },
   });
 
-  summary.sent += batchResult.succeeded;
   summary.failed += batchResult.failed;
 
   for (const error of batchResult.errors) {

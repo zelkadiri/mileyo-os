@@ -40,11 +40,18 @@ export type EmailEventHandlerRegistry = Readonly<
   Record<string, EmailEventHandler>
 >;
 
+import { EMAIL_EVENT_TYPE } from "../../constants/emailEvent";
+import { mealSelectionReminderEmailEventHandler } from "./meal-selection-reminder-email-event-handler.server";
+import { upcomingDeliveryEmailEventHandler } from "./upcoming-delivery-email-event-handler.server";
+
 /**
- * Production handler map. Intentionally empty in EMAIL-6D —
- * no domain email creates or processes EmailEvent yet.
+ * Production handler map. EMAIL-6E wires scheduled campaign emails only.
  */
-export const EMAIL_EVENT_HANDLER_REGISTRY: EmailEventHandlerRegistry = {};
+export const EMAIL_EVENT_HANDLER_REGISTRY: EmailEventHandlerRegistry = {
+  [EMAIL_EVENT_TYPE.MEAL_SELECTION_REMINDER]:
+    mealSelectionReminderEmailEventHandler,
+  [EMAIL_EVENT_TYPE.UPCOMING_DELIVERY]: upcomingDeliveryEmailEventHandler,
+};
 
 export const getEmailEventHandler = (
   eventType: string,

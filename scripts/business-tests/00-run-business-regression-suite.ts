@@ -86,6 +86,8 @@ const BUSINESS_SUITES = [
   "63-email-transport-idempotency.test.ts",
   "64-email-event-worker.test.ts",
   "65-email-event-retry-cron.test.ts",
+  "66-email-outbox-meal-reminder.test.ts",
+  "67-email-outbox-upcoming-delivery.test.ts",
 ];
 
 const LEGACY_SUITES = [

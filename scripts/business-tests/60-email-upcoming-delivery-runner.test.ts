@@ -402,19 +402,23 @@ const runSuite = async () => {
     ),
   );
 
-  ctx.scenario("G. Batch — dispatcher + summary");
+  ctx.scenario("G. Batch — dispatcher + outbox enqueue");
   ctx.assertTrue(
     "Phase A classify conserve for selection",
     runnerSource.includes("for (const selection of selections)"),
   );
   ctx.assertTrue(
-    "dispatchEmailBatch pour Phase B send",
+    "dispatchEmailBatch pour Phase B enqueue",
     runnerSource.includes("dispatchEmailBatch({"),
   );
   ctx.assertTrue(
-    "trySendUpcomingDeliveryEmail délégué dans worker",
-    runnerSource.includes("trySendUpcomingDeliveryEmail({") &&
+    "ensureEmailEvent délégué dans worker",
+    runnerSource.includes("ensureEmailEvent({") &&
       runnerSource.includes("worker: async"),
+  );
+  ctx.assertFalse(
+    "runner sans trySendUpcomingDeliveryEmail",
+    runnerSource.includes("trySendUpcomingDeliveryEmail"),
   );
   ctx.assertTrue(
     "isolation d'erreur Phase A try/catch",
@@ -435,9 +439,12 @@ const runSuite = async () => {
     runnerSource.includes("subscriptionPaymentRecovery.findMany"),
   );
   ctx.assertTrue(
-    "already_sent_for_delivery mappé skippedAlreadySent",
-    runnerSource.includes('reason === "already_sent_for_delivery"') &&
-      runnerSource.includes("skippedAlreadySent"),
+    "summary outbox enqueuedExisting",
+    runnerSource.includes("enqueuedExisting"),
+  );
+  ctx.assertFalse(
+    "already_sent_for_delivery runtime skip retiré du runner",
+    runnerSource.includes('reason === "already_sent_for_delivery"'),
   );
   ctx.assertFalse(
     "pas de Promise.all([reminder, upcoming]) dans cron",
@@ -452,11 +459,13 @@ const runSuite = async () => {
   const summary = emptyUpcomingDeliveryRunnerSummary();
   incrementUpcomingDeliverySkip(summary, "no_box_order");
   incrementUpcomingDeliverySkip(summary, "blocked");
-  summary.sent = 2;
+  summary.sent = 0;
+  summary.enqueuedCreated = 2;
   summary.failed = 1;
   ctx.assertEqual("summary skippedNoBoxOrder", summary.skippedNoBoxOrder, 1);
   ctx.assertEqual("summary skippedBlocked", summary.skippedBlocked, 1);
-  ctx.assertEqual("summary sent", summary.sent, 2);
+  ctx.assertEqual("summary sent reste 0 post-outbox", summary.sent, 0);
+  ctx.assertEqual("summary enqueuedCreated", summary.enqueuedCreated, 2);
   ctx.assertEqual("summary failed", summary.failed, 1);
 
   ctx.scenario("H. Runner global window + prefiltre DB");

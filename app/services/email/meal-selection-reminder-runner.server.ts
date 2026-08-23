@@ -3,9 +3,10 @@
  * Separate from subscription billing worker — local DB only, no Shopify fetch.
  *
  * Phase A: classify + build eligibleItems (business skips counted here).
- * Phase B: dispatchEmailBatch → trySendMealSelectionReminderEmail (infra concurrency).
+ * Phase B: dispatchEmailBatch → ensureEmailEvent (outbox enqueue, no direct send).
  */
 
+import { EMAIL_EVENT_TYPE } from "../../constants/emailEvent";
 import { RECOVERY_STATUS } from "../../constants/subscriptionPaymentRecovery";
 import db from "../../db.server";
 import { getDeliveryCutoffStatus } from "../../utils/deliveryDate";
@@ -15,6 +16,13 @@ import {
   EMAIL_BATCH_DEFAULT_MAX_ERRORS,
   dispatchEmailBatch,
 } from "./email-batch-dispatcher.server";
+import { ensureEmailEvent } from "./email-event.server";
+import {
+  backfillMealSelectionReminderStampFromSentEvent,
+  buildCampaignEmailEventMetaJson,
+  buildMealSelectionReminderEmailEventIdempotencyKey,
+  EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+} from "./email-outbox-campaign.server";
 import {
   hasExplicitMealSelectionForDelivery,
   isMealSelectionReminderAlreadySentForDelivery,
@@ -22,7 +30,6 @@ import {
   resolveMealSelectionCycle,
   resolveSubscriptionEmailRecipient,
   shouldSendMealSelectionReminderEmail,
-  trySendMealSelectionReminderEmail,
 } from "./meal-selection-email.server";
 
 const PORTAL_RECOVERY_STATUSES = [
@@ -35,6 +42,8 @@ const PORTAL_RECOVERY_STATUSES = [
 
 export type MealSelectionReminderRunnerSummary = {
   eligible: number;
+  enqueuedCreated: number;
+  enqueuedExisting: number;
   errors: string[];
   failed: number;
   scanned: number;
@@ -51,6 +60,8 @@ export type MealSelectionReminderRunnerSummary = {
 
 const emptySummary = (): MealSelectionReminderRunnerSummary => ({
   eligible: 0,
+  enqueuedCreated: 0,
+  enqueuedExisting: 0,
   errors: [],
   failed: 0,
   scanned: 0,
@@ -238,46 +249,10 @@ const incrementSkip = (
 };
 
 type MealSelectionReminderEligibleItem = {
-  customerEmail: string | null;
+  effectiveDeliveryDate: string;
+  recipientEmail: string | null;
   selectionId: string;
-  shopifyOrderId: string;
-  subscriptionContractId: string | null;
-};
-
-/**
- * Map trySend skipped reasons onto existing business counters.
- * Known: already_sent_for_delivery → skippedAlreadySent;
- * not_eligible + no recipient → skippedNoRecipient.
- * Other runtime skips (selection_missing, invalid_meals_count, …) are left
- * unmapped — same as pre-dispatcher behaviour (no invented counters).
- */
-const applyMealSelectionReminderRuntimeSkip = ({
-  item,
-  orderByShopifyOrderId,
-  reason,
-  summary,
-}: {
-  item: MealSelectionReminderEligibleItem;
-  orderByShopifyOrderId: Map<
-    string,
-    { customerEmail: string | null; customerName: string | null }
-  >;
-  reason: string;
-  summary: MealSelectionReminderRunnerSummary;
-}): void => {
-  if (reason === "already_sent_for_delivery") {
-    summary.skippedAlreadySent += 1;
-    return;
-  }
-
-  if (reason === "not_eligible") {
-    const order = orderByShopifyOrderId.get(item.shopifyOrderId);
-    const { recipient } = resolveSubscriptionEmailRecipient(item, order);
-
-    if (!recipient) {
-      summary.skippedNoRecipient += 1;
-    }
-  }
+  shop: string;
 };
 
 const pushBoundedRunnerError = (
@@ -377,12 +352,15 @@ export const processDueMealSelectionReminders = async (
         continue;
       }
 
+      const order = orderByShopifyOrderId.get(selection.shopifyOrderId);
+      const { recipient } = resolveSubscriptionEmailRecipient(selection, order);
+
       summary.eligible += 1;
       eligibleItems.push({
-        customerEmail: selection.customerEmail,
+        effectiveDeliveryDate: classification.effectiveDeliveryDate!,
+        recipientEmail: recipient?.email ?? null,
         selectionId: selection.id,
-        shopifyOrderId: selection.shopifyOrderId,
-        subscriptionContractId: selection.subscriptionContractId,
+        shop: selection.shop,
       });
     } catch (error) {
       summary.failed += 1;
@@ -395,39 +373,50 @@ export const processDueMealSelectionReminders = async (
     }
   }
 
-  // Phase B — bounded-concurrency send via shared dispatcher.
+  // Phase B — bounded-concurrency outbox enqueue via shared dispatcher.
   const batchResult = await dispatchEmailBatch({
     getItemKey: (item) => item.selectionId,
     items: eligibleItems,
     worker: async (item) => {
-      const sendResult = await trySendMealSelectionReminderEmail({
-        selectionId: item.selectionId,
-      });
+      try {
+        const idempotencyKey = buildMealSelectionReminderEmailEventIdempotencyKey(
+          item.selectionId,
+          item.effectiveDeliveryDate,
+        );
 
-      if (sendResult.status === "sent") {
+        const ensureResult = await ensureEmailEvent({
+          eventType: EMAIL_EVENT_TYPE.MEAL_SELECTION_REMINDER,
+          idempotencyKey,
+          metaJson: buildCampaignEmailEventMetaJson(item.effectiveDeliveryDate),
+          recipientEmail: item.recipientEmail,
+          referenceId: item.selectionId,
+          referenceType: EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+          shop: item.shop,
+        });
+
+        if (ensureResult.created) {
+          summary.enqueuedCreated += 1;
+        } else {
+          summary.enqueuedExisting += 1;
+          await backfillMealSelectionReminderStampFromSentEvent({
+            deliveryDate: item.effectiveDeliveryDate,
+            event: ensureResult.event,
+            selectionId: item.selectionId,
+          });
+        }
+
         return { outcome: "success" };
-      }
-
-      if (sendResult.status === "failed") {
+      } catch (error) {
         return {
-          message: sendResult.message,
+          message:
+            error instanceof Error ? error.message : "ensureEmailEvent failed",
           outcome: "failed",
-          reason: sendResult.reason,
+          reason: "enqueue_failed",
         };
       }
-
-      applyMealSelectionReminderRuntimeSkip({
-        item,
-        orderByShopifyOrderId,
-        reason: sendResult.reason,
-        summary,
-      });
-
-      return { outcome: "skipped", reason: sendResult.reason };
     },
   });
 
-  summary.sent += batchResult.succeeded;
   summary.failed += batchResult.failed;
 
   for (const error of batchResult.errors) {
