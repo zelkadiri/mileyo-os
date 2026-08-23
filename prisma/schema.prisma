@@ -122,6 +122,8 @@ model SubscriptionMealSelection {
   resumeAttemptLastFailedBillingAttemptId String?
   preferredDeliveryWeekday                Int?
   nextScheduledDeliveryDate               String?   @db.VarChar(10)
+  subscriptionCreatedEmailSentAt          DateTime?
+  subscriptionPausedEmailSentAt           DateTime?
   createdAt                       DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 

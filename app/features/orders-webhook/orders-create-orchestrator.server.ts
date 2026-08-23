@@ -19,6 +19,10 @@ import {
 } from "../../services/subscriptionBillingWorker.server";
 import { closeRecoveryOnSuccessfulOrder } from "../../services/subscriptionPaymentRecovery.server";
 import {
+  resetSubscriptionPausedEmailSentAt,
+  trySendSubscriptionCreatedEmail,
+} from "../../services/email/email.server";
+import {
   convertCheckoutLead,
   shouldConvertCheckoutLead,
 } from "../../services/checkoutLeadConversion.server";
@@ -480,6 +484,18 @@ export const handleOrdersCreateWebhook = async ({
           subscriptionContractId: contractIdForAlignment,
         });
       }
+
+      try {
+        await trySendSubscriptionCreatedEmail({
+          selectionId: linkedSelection.id,
+        });
+      } catch (error) {
+        console.log("[ORDERS_CREATE] subscription-created email failed", {
+          error: error instanceof Error ? error.message : error,
+          selectionId: linkedSelection.id,
+          shopifyOrderId,
+        });
+      }
     }
   }
 
@@ -552,6 +568,10 @@ export const handleOrdersCreateWebhook = async ({
             shopifyOrderId,
             subscriptionContractId: contractIdForSync,
           });
+
+          await resetSubscriptionPausedEmailSentAt({
+            selectionId: matchedSelection.id,
+          });
         } catch (error) {
           console.log("[ORDERS_CREATE] resume renewal scheduling failed", {
             error: error instanceof Error ? error.message : error,
@@ -577,6 +597,20 @@ export const handleOrdersCreateWebhook = async ({
           selectionId: matchedSelection.id,
           shopifyOrderId,
           subscriptionContractId: contractIdForSync,
+        });
+      }
+    }
+
+    if (isFirstOrderReplay) {
+      try {
+        await trySendSubscriptionCreatedEmail({
+          selectionId: matchedSelection.id,
+        });
+      } catch (error) {
+        console.log("[ORDERS_CREATE] subscription-created email failed", {
+          error: error instanceof Error ? error.message : error,
+          selectionId: matchedSelection.id,
+          shopifyOrderId,
         });
       }
     }

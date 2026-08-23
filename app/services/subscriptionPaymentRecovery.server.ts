@@ -20,6 +20,7 @@ import {
   sendEmail,
   shouldSendPaymentFailedEmail,
   shouldSendPaymentRecoveredEmail,
+  trySendSubscriptionPausedEmail,
 } from "./email/email.server";
 import { computeNextSubscriptionCycleRetryAt } from "../utils/subscriptionCycleBilling";
 import {
@@ -625,6 +626,20 @@ const scheduleRecoveryAfterFailure = async ({
       billingCycleKey,
       selectionId: selection.id,
     });
+
+    if (!pauseResult.error) {
+      try {
+        await trySendSubscriptionPausedEmail({
+          pauseCause: "payment_final_failure",
+          selectionId: selection.id,
+        });
+      } catch (error) {
+        console.log("[paymentRecovery] subscription-paused email failed", {
+          error: error instanceof Error ? error.message : error,
+          selectionId: selection.id,
+        });
+      }
+    }
   }
 
   return recovery;

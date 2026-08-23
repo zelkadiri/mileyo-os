@@ -4,6 +4,8 @@ import { render, toPlainText } from "react-email";
 import type { EmailRenderResult, EmailTemplateName } from "./email.types";
 import { PaymentFailedEmail } from "./templates/PaymentFailedEmail";
 import { PaymentRecoveredEmail } from "./templates/PaymentRecoveredEmail";
+import { SubscriptionCreatedEmail } from "./templates/SubscriptionCreatedEmail";
+import { SubscriptionPausedEmail } from "./templates/SubscriptionPausedEmail";
 import { TestEmail } from "./templates/TestEmail";
 
 const templateRegistry: Record<
@@ -14,6 +16,12 @@ const templateRegistry: Record<
     Record<string, unknown>
   >,
   "payment-recovered": PaymentRecoveredEmail as React.ComponentType<
+    Record<string, unknown>
+  >,
+  "subscription-created": SubscriptionCreatedEmail as React.ComponentType<
+    Record<string, unknown>
+  >,
+  "subscription-paused": SubscriptionPausedEmail as React.ComponentType<
     Record<string, unknown>
   >,
   test: TestEmail as React.ComponentType<Record<string, unknown>>,

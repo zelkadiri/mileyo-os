@@ -72,6 +72,9 @@ const BUSINESS_SUITES = [
   "49-email-payment-foundation.test.ts",
   "50-email-payment-failed.test.ts",
   "51-email-payment-recovered.test.ts",
+  "52-email-subscription-foundation.test.ts",
+  "53-email-subscription-created.test.ts",
+  "54-email-subscription-paused.test.ts",
 ];
 
 const LEGACY_SUITES = [

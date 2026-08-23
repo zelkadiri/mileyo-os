@@ -18,6 +18,7 @@ import {
   resolveBillingAttemptStatus,
   type ShopifyAdminGraphql,
 } from "./subscriptionBillingWorker.server";
+import { resetSubscriptionPausedEmailSentAt } from "./email/email.server";
 
 export type SubscriptionBillingAttemptWebhookPayload = {
   admin_graphql_api_id?: string | null;
@@ -335,6 +336,10 @@ export const handleSubscriptionBillingAttemptSuccessWebhook = async ({
       selectionId: selection.id,
       shopifyOrderId: resolved.orderId,
       subscriptionContractId: selection.subscriptionContractId,
+    });
+
+    await resetSubscriptionPausedEmailSentAt({
+      selectionId: selection.id,
     });
 
     return;

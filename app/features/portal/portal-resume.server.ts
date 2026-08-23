@@ -1,4 +1,5 @@
 import prisma from "../../db.server";
+import { resetSubscriptionPausedEmailSentAt } from "../../services/email/email.server";
 import {
   activateSubscriptionContractWithVerification,
   fetchSubscriptionContractNextBillingDate,
@@ -221,6 +222,8 @@ export const completePortalScheduledResume = async ({
       where: { id: selectionId },
     });
 
+    await resetSubscriptionPausedEmailSentAt({ selectionId });
+
     return {
       error:
         "Votre abonnement est repris, mais la date de prochaine facturation n’a pas pu être mise à jour automatiquement.",
@@ -239,6 +242,8 @@ export const completePortalScheduledResume = async ({
       where: { id: selectionId },
     });
 
+    await resetSubscriptionPausedEmailSentAt({ selectionId });
+
     return { ok: true };
   }
 
@@ -249,6 +254,8 @@ export const completePortalScheduledResume = async ({
     },
     where: { id: selectionId },
   });
+
+  await resetSubscriptionPausedEmailSentAt({ selectionId });
 
   return { ok: true };
 };

@@ -12,7 +12,29 @@ export type EmailRecipient = {
 export type EmailTemplateName =
   | "test"
   | "payment-failed"
-  | "payment-recovered";
+  | "payment-recovered"
+  | "subscription-created"
+  | "subscription-paused";
+
+/** V1 pause causes for SubscriptionPausedEmail. */
+export type SubscriptionPauseCause =
+  | "user_voluntary"
+  | "payment_final_failure";
+
+/** Display data for SubscriptionCreatedEmail (no business logic). */
+export type SubscriptionCreatedEmailData = {
+  customerName?: string | null;
+  mealsCount?: number | null;
+  nextDelivery?: string | null;
+  portalUrl?: string | null;
+};
+
+/** Display data for SubscriptionPausedEmail (no business logic). */
+export type SubscriptionPausedEmailData = {
+  customerName?: string | null;
+  pauseCause: SubscriptionPauseCause;
+  portalUrl?: string | null;
+};
 
 /** Display data for PaymentFailedEmail (no business logic). */
 export type PaymentFailedEmailData = {

@@ -20,6 +20,7 @@ import {
   resolvePaymentUpdateEligibility,
   sendPaymentUpdateEmailForSelection,
 } from "../../services/subscriptionPaymentRecovery.server";
+import { trySendSubscriptionPausedEmail, resetSubscriptionPausedEmailSentAt } from "../../services/email/email.server";
 import {
   fetchSubscriptionContractCurrentVariantId,
   updateSubscriptionContractBoxViaDraft,
@@ -337,6 +338,18 @@ const handlePauseSubscriptionAction = async ({
     });
 
     await archiveResumeAttemptOnPause(selection.id);
+
+    try {
+      await trySendSubscriptionPausedEmail({
+        pauseCause: "user_voluntary",
+        selectionId: selection.id,
+      });
+    } catch (error) {
+      console.log("[PORTAL] subscription-paused email failed", {
+        error: error instanceof Error ? error.message : error,
+        selectionId: selection.id,
+      });
+    }
 
     const portalData = await loadPortalData({ customerShopifyId, shop });
 
@@ -1017,6 +1030,23 @@ const handleResumeSubscriptionAndPayAction = async ({
           selectionId: selection.id,
           status: resumeLockStatus,
         });
+
+        if (
+          resumeLockOrderId &&
+          resumeLockStatus !== RESUME_LOCK_STATUS.FAILED &&
+          resumeLockStatus !== RESUME_LOCK_STATUS.PROCESSING
+        ) {
+          try {
+            await resetSubscriptionPausedEmailSentAt({
+              selectionId: selection.id,
+            });
+          } catch (error) {
+            console.log("[PORTAL] subscription-paused email reset failed", {
+              error: error instanceof Error ? error.message : error,
+              selectionId: selection.id,
+            });
+          }
+        }
       } else if (billingStarted) {
         await releaseResumeBillingLock({
           attemptId: resumeLockAttemptId,

@@ -145,6 +145,22 @@ export {
   shouldSendPaymentFailedEmail,
   shouldSendPaymentRecoveredEmail,
 } from "./payment-email.server";
+export {
+  buildSubscriptionCreatedEmailData,
+  buildSubscriptionPausedEmailData,
+  buildSubscriptionPortalUrl,
+  formatSubscriptionEmailDateTime,
+  formatSubscriptionEmailDeliveryDate,
+  isAllowedSubscriptionPauseCause,
+  resolveSubscriptionEmailRecipient,
+  shouldSendSubscriptionCreatedEmail,
+  shouldSendSubscriptionPausedEmail,
+  trySendSubscriptionCreatedEmail,
+  trySendSubscriptionPausedEmail,
+  resetSubscriptionPausedEmailSentAt,
+  SUBSCRIPTION_PAUSE_CAUSES_V1,
+  SUBSCRIPTION_PORTAL_PATH,
+} from "./subscription-email.server";
 export { renderEmailTemplate } from "./email-render.server";
 export type {
   EmailPayload,
@@ -154,9 +170,17 @@ export type {
   EmailTemplateName,
   PaymentFailedEmailData,
   PaymentRecoveredEmailData,
+  SubscriptionCreatedEmailData,
+  SubscriptionPausedEmailData,
+  SubscriptionPauseCause,
 } from "./email.types";
 export type {
   PaymentEmailOrderSource,
   PaymentEmailSelectionSource,
   ResolvedPaymentEmailRecipient,
 } from "./payment-email.server";
+export type {
+  ResolvedSubscriptionEmailRecipient,
+  SubscriptionEmailOrderSource,
+  SubscriptionEmailSelectionSource,
+} from "./subscription-email.server";
