@@ -2,6 +2,8 @@ import * as React from "react";
 import { render, toPlainText } from "react-email";
 
 import type { EmailRenderResult, EmailTemplateName } from "./email.types";
+import { MealSelectionConfirmedEmail } from "./templates/MealSelectionConfirmedEmail";
+import { MealSelectionReminderEmail } from "./templates/MealSelectionReminderEmail";
 import { PaymentFailedEmail } from "./templates/PaymentFailedEmail";
 import { PaymentRecoveredEmail } from "./templates/PaymentRecoveredEmail";
 import { SubscriptionCreatedEmail } from "./templates/SubscriptionCreatedEmail";
@@ -22,6 +24,12 @@ const templateRegistry: Record<
     Record<string, unknown>
   >,
   "subscription-paused": SubscriptionPausedEmail as React.ComponentType<
+    Record<string, unknown>
+  >,
+  "meal-selection-confirmed": MealSelectionConfirmedEmail as React.ComponentType<
+    Record<string, unknown>
+  >,
+  "meal-selection-reminder": MealSelectionReminderEmail as React.ComponentType<
     Record<string, unknown>
   >,
   test: TestEmail as React.ComponentType<Record<string, unknown>>,

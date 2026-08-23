@@ -161,6 +161,29 @@ export {
   SUBSCRIPTION_PAUSE_CAUSES_V1,
   SUBSCRIPTION_PORTAL_PATH,
 } from "./subscription-email.server";
+export {
+  buildMealSelectionConfirmedEmailData,
+  buildMealSelectionConfirmedEmailDataFromSelection,
+  buildMealSelectionReminderEmailData,
+  buildMealSelectionReminderEmailDataFromSelection,
+  evaluateMealSelectionConfirmedEligibility,
+  evaluateMealSelectionReminderEligibility,
+  formatMealSelectionCutoffLabel,
+  formatMealSelectionDeliveryDateLabel,
+  hasExplicitMealSelectionForDelivery,
+  isMealSelectionConfirmedAlreadySentForDelivery,
+  isMealSelectionCutoffPassed,
+  isMealSelectionCutoffUnknown,
+  isMealSelectionReminderAlreadySentForDelivery,
+  isMealSelectionReminderSendWindowOpen,
+  markMealSelectionExplicitForCurrentDelivery,
+  resolveMealSelectionCycle,
+  resolveSubscriptionEmailRecipient as resolveMealSelectionEmailRecipient,
+  shouldSendMealSelectionConfirmedEmail,
+  shouldSendMealSelectionReminderEmail,
+  trySendMealSelectionConfirmedEmail,
+  trySendMealSelectionReminderEmail,
+} from "./meal-selection-email.server";
 export { renderEmailTemplate } from "./email-render.server";
 export type {
   EmailPayload,
@@ -172,8 +195,17 @@ export type {
   PaymentRecoveredEmailData,
   SubscriptionCreatedEmailData,
   SubscriptionPausedEmailData,
+  MealSelectionConfirmedEmailData,
+  MealSelectionReminderEmailData,
   SubscriptionPauseCause,
 } from "./email.types";
+export type {
+  MarkMealSelectionExplicitResult,
+  MealSelectionCycle,
+  MealSelectionEmailOrderSource,
+  MealSelectionEmailSelectionSource,
+  TrySendMealSelectionReminderResult,
+} from "./meal-selection-email.server";
 export type {
   PaymentEmailOrderSource,
   PaymentEmailSelectionSource,

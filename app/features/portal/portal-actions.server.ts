@@ -22,6 +22,10 @@ import {
 } from "../../services/subscriptionPaymentRecovery.server";
 import { trySendSubscriptionPausedEmail, resetSubscriptionPausedEmailSentAt } from "../../services/email/email.server";
 import {
+  markMealSelectionExplicitForCurrentDelivery,
+  trySendMealSelectionConfirmedEmail,
+} from "../../services/email/meal-selection-email.server";
+import {
   fetchSubscriptionContractCurrentVariantId,
   updateSubscriptionContractBoxViaDraft,
 } from "../../services/subscriptionContractBoxChange.server";
@@ -558,6 +562,18 @@ const handleResumeSubscriptionAction = async ({
     );
   }
 
+  try {
+    await markMealSelectionExplicitForCurrentDelivery({
+      selectionId: selection.id,
+    });
+  } catch (error) {
+    console.log("[portal] meal selection explicit tracking failed", {
+      error: error instanceof Error ? error.message : error,
+      intent: "resumeSubscription",
+      selectionId: selection.id,
+    });
+  }
+
   const portalData = await loadPortalData({ customerShopifyId, shop });
 
   if (!portalData) {
@@ -799,6 +815,18 @@ const handleResumeSubscriptionAndPayAction = async ({
         }
 
         resumeLockStatus = RESUME_LOCK_STATUS.SUCCEEDED;
+
+        try {
+          await markMealSelectionExplicitForCurrentDelivery({
+            selectionId: selection.id,
+          });
+        } catch (error) {
+          console.log("[portal] meal selection explicit tracking failed", {
+            error: error instanceof Error ? error.message : error,
+            intent: "resumeSubscriptionAndPay",
+            selectionId: selection.id,
+          });
+        }
 
         return renderPortal({
           ...portalData,
@@ -1209,6 +1237,18 @@ const handleChangeSubscriptionBoxAction = async ({
       where: { id: selection.id },
     });
 
+    try {
+      await markMealSelectionExplicitForCurrentDelivery({
+        selectionId: selection.id,
+      });
+    } catch (error) {
+      console.log("[portal] meal selection explicit tracking failed", {
+        error: error instanceof Error ? error.message : error,
+        intent: "changeSubscriptionBox",
+        selectionId: selection.id,
+      });
+    }
+
     const portalData = await loadPortalData({ customerShopifyId, shop });
 
     if (!portalData) {
@@ -1306,6 +1346,30 @@ const handleUpdateFutureMealSelectionAction = async ({
     },
     where: { id: selection.id },
   });
+
+  try {
+    await markMealSelectionExplicitForCurrentDelivery({
+      selectionId: selection.id,
+    });
+  } catch (error) {
+    console.log("[portal] meal selection explicit tracking failed", {
+      error: error instanceof Error ? error.message : error,
+      intent: "updateFutureMealSelection",
+      selectionId: selection.id,
+    });
+  }
+
+  try {
+    await trySendMealSelectionConfirmedEmail({
+      selectionId: selection.id,
+    });
+  } catch (error) {
+    console.log("[portal] meal-selection-confirmed email failed", {
+      error: error instanceof Error ? error.message : error,
+      intent: "updateFutureMealSelection",
+      selectionId: selection.id,
+    });
+  }
 
   const portalData = await loadPortalData({ customerShopifyId, shop });
 

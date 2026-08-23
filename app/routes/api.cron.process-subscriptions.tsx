@@ -1,5 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
+import { processDueMealSelectionReminders } from "../services/email/meal-selection-reminder-runner.server";
 import { processDueSubscriptionBillings } from "../services/subscriptionBillingWorker.server";
 import { resolveCronShop } from "../utils/cronShop.server";
 
@@ -56,8 +57,33 @@ const runProcessSubscriptionsCron = async (request: Request) => {
   }
 
   try {
-    const summary = await processDueSubscriptionBillings(shopConfig.shop);
-    return Response.json(summary);
+    const billingSummary = await processDueSubscriptionBillings(shopConfig.shop);
+
+    let mealSelectionReminders = null;
+    let mealSelectionReminderError: string | null = null;
+
+    try {
+      mealSelectionReminders = await processDueMealSelectionReminders(
+        shopConfig.shop,
+      );
+    } catch (reminderError) {
+      mealSelectionReminderError =
+        reminderError instanceof Error
+          ? reminderError.message
+          : "Meal selection reminder runner failed unexpectedly.";
+
+      console.error(
+        "[cron/process-subscriptions] meal selection reminder failed",
+        mealSelectionReminderError,
+        reminderError,
+      );
+    }
+
+    return Response.json({
+      ...billingSummary,
+      mealSelectionReminderError,
+      mealSelectionReminders,
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Cron job failed unexpectedly.";

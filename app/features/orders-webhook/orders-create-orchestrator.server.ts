@@ -19,6 +19,7 @@ import {
 } from "../../services/subscriptionBillingWorker.server";
 import { closeRecoveryOnSuccessfulOrder } from "../../services/subscriptionPaymentRecovery.server";
 import {
+  markMealSelectionExplicitForCurrentDelivery,
   resetSubscriptionPausedEmailSentAt,
   trySendSubscriptionCreatedEmail,
 } from "../../services/email/email.server";
@@ -482,6 +483,18 @@ export const handleOrdersCreateWebhook = async ({
           selectionId: linkedSelection.id,
           shopifyOrderId,
           subscriptionContractId: contractIdForAlignment,
+        });
+      }
+
+      try {
+        await markMealSelectionExplicitForCurrentDelivery({
+          selectionId: linkedSelection.id,
+        });
+      } catch (error) {
+        console.log("[ORDERS_CREATE] meal selection explicit tracking failed", {
+          error: error instanceof Error ? error.message : error,
+          selectionId: linkedSelection.id,
+          shopifyOrderId,
         });
       }
 

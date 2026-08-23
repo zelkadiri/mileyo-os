@@ -75,6 +75,9 @@ const BUSINESS_SUITES = [
   "52-email-subscription-foundation.test.ts",
   "53-email-subscription-created.test.ts",
   "54-email-subscription-paused.test.ts",
+  "55-email-meal-selection-foundation.test.ts",
+  "56-email-meal-selection-confirmed.test.ts",
+  "57-email-meal-selection-reminder.test.ts",
 ];
 
 const LEGACY_SUITES = [

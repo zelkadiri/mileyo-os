@@ -124,6 +124,11 @@ model SubscriptionMealSelection {
   nextScheduledDeliveryDate               String?   @db.VarChar(10)
   subscriptionCreatedEmailSentAt          DateTime?
   subscriptionPausedEmailSentAt           DateTime?
+  mealSelectionLastExplicitDeliveryDate   String?   @db.VarChar(10)
+  mealSelectionConfirmedEmailSentAt       DateTime?
+  mealSelectionConfirmedDeliveryDate      String?   @db.VarChar(10)
+  mealSelectionReminderEmailSentAt        DateTime?
+  mealSelectionReminderDeliveryDate       String?   @db.VarChar(10)
   createdAt                       DateTime  @default(now())
   updatedAt                DateTime  @updatedAt
 

@@ -21,5 +21,9 @@ export const SUBSCRIPTION_CYCLE_MEAL_CUTOFF_WEEKDAY = 1;
 export const SUBSCRIPTION_CYCLE_MEAL_CUTOFF_HOUR = 23;
 export const SUBSCRIPTION_CYCLE_MEAL_CUTOFF_MINUTE = 59;
 
+/** Meal selection reminder send window — Sunday from 10:00 Europe/Paris. */
+export const MEAL_SELECTION_REMINDER_WINDOW_START_HOUR = 10;
+export const MEAL_SELECTION_REMINDER_WINDOW_START_MINUTE = 0;
+
 /** Allowed delivery weekdays — Thursday, Friday. */
 export const SUBSCRIPTION_CYCLE_DELIVERY_WEEKDAYS = [4, 5] as const;
