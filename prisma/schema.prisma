@@ -185,3 +185,34 @@ model CheckoutLead {
   @@unique([shop, email])
   @@index([shop, lastSeenAt])
 }
+
+// Lightweight transactional email outbox (EMAIL-6B).
+// Identity is (idempotencyKey) + stable shop/eventType/reference*.
+// recipientEmail is monitoring-only — retries must re-resolve recipients from domain services.
+model EmailEvent {
+  id                  String    @id @default(cuid())
+  shop                String
+  idempotencyKey      String    @unique
+  eventType           String
+  referenceType       String
+  referenceId         String
+  recipientEmail      String?
+  status              String
+  attemptCount        Int       @default(0)
+  lastAttemptAt       DateTime?
+  nextAttemptAt       DateTime?
+  processingStartedAt DateTime?
+  providerId          String?
+  lastErrorCode       String?
+  lastErrorMessage    String?
+  metaJson            String?
+  sentAt              DateTime?
+  cancelledAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([shop, status, nextAttemptAt])
+  @@index([eventType, createdAt])
+  @@index([referenceType, referenceId])
+}
