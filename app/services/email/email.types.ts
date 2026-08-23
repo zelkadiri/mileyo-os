@@ -96,6 +96,23 @@ export type EmailPayload<TData = Record<string, unknown>> = {
   data?: TData;
 };
 
+export type SendEmailOptions = {
+  idempotencyKey?: string;
+};
+
+/** Failure reasons returned by the transport layer (not domain/business rules). */
+export type EmailSendFailureReason =
+  | "missing_api_key"
+  | "missing_sender"
+  | "render_error"
+  | "send_error"
+  | "unknown_template"
+  | "invalid_idempotency_key"
+  | "invalid_idempotent_request"
+  | "concurrent_idempotent_requests"
+  | "rate_limit_exceeded"
+  | "validation_error";
+
 export type EmailSendSuccess = {
   ok: true;
   id: string;
@@ -103,13 +120,10 @@ export type EmailSendSuccess = {
 
 export type EmailSendFailure = {
   ok: false;
-  reason:
-    | "missing_api_key"
-    | "missing_sender"
-    | "render_error"
-    | "send_error"
-    | "unknown_template";
+  reason: EmailSendFailureReason;
   message: string;
+  /** Resend `ErrorResponse.name` when the provider returned a structured error. */
+  providerErrorCode?: string;
 };
 
 export type EmailSendResult = EmailSendSuccess | EmailSendFailure;

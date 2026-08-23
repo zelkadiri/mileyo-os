@@ -3,12 +3,33 @@ import {
   getEmailFrom,
   getResendApiKey,
 } from "./email-client.server";
+import {
+  mapResendSendError,
+  resolveSendEmailIdempotencyKey,
+} from "./email-resend-errors.server";
 import { renderEmailTemplate } from "./email-render.server";
 import type {
   EmailPayload,
   EmailRecipient,
   EmailSendResult,
+  SendEmailOptions,
 } from "./email.types";
+
+type SendEmailTestDeps = {
+  createClient?: typeof createEmailClient;
+};
+
+let sendEmailTestDeps: SendEmailTestDeps = {};
+
+/** @internal Mileyo business regression tests only. */
+export const __setSendEmailTestDeps = (deps: SendEmailTestDeps): void => {
+  sendEmailTestDeps = deps;
+};
+
+/** @internal Mileyo business regression tests only. */
+export const __resetSendEmailTestDeps = (): void => {
+  sendEmailTestDeps = {};
+};
 
 const normalizeRecipients = (
   to: EmailRecipient | EmailRecipient[],
@@ -31,6 +52,7 @@ const resolveSender = (payloadFrom?: string): string | null => {
  */
 export const sendEmail = async (
   payload: EmailPayload,
+  options?: SendEmailOptions,
 ): Promise<EmailSendResult> => {
   if (!getResendApiKey()) {
     return {
@@ -50,13 +72,19 @@ export const sendEmail = async (
     };
   }
 
-  const client = createEmailClient();
+  const clientFactory = sendEmailTestDeps.createClient ?? createEmailClient;
+  const client = clientFactory();
   if (!client) {
     return {
       ok: false,
       reason: "missing_api_key",
       message: "RESEND_API_KEY is not configured",
     };
+  }
+
+  const idempotency = resolveSendEmailIdempotencyKey(options?.idempotencyKey);
+  if ("ok" in idempotency) {
+    return idempotency;
   }
 
   let html: string;
@@ -97,21 +125,25 @@ export const sendEmail = async (
     };
   }
 
-  const { data, error } = await client.emails.send({
-    from,
-    to,
-    subject: payload.subject,
-    html,
-    text,
-    ...(payload.replyTo ? { replyTo: payload.replyTo } : {}),
-  });
+  const requestOptions =
+    idempotency.mode === "present"
+      ? { idempotencyKey: idempotency.key }
+      : undefined;
+
+  const { data, error } = await client.emails.send(
+    {
+      from,
+      to,
+      subject: payload.subject,
+      html,
+      text,
+      ...(payload.replyTo ? { replyTo: payload.replyTo } : {}),
+    },
+    requestOptions,
+  );
 
   if (error) {
-    return {
-      ok: false,
-      reason: "send_error",
-      message: error.message,
-    };
+    return mapResendSendError(error);
   }
 
   if (!data?.id) {
@@ -198,13 +230,21 @@ export {
   shouldSendUpcomingDeliveryEmail,
   trySendUpcomingDeliveryEmail,
 } from "./upcoming-delivery-email.server";
+export {
+  mapResendSendError,
+  resolveSendEmailIdempotencyKey,
+} from "./email-resend-errors.server";
+export type { ResendSendError } from "./email-resend-errors.server";
 export { renderEmailTemplate } from "./email-render.server";
 export type {
   EmailPayload,
   EmailRecipient,
   EmailRenderResult,
+  EmailSendFailure,
+  EmailSendFailureReason,
   EmailSendResult,
   EmailTemplateName,
+  SendEmailOptions,
   PaymentFailedEmailData,
   PaymentRecoveredEmailData,
   SubscriptionCreatedEmailData,
