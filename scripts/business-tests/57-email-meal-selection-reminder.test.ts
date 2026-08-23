@@ -325,6 +325,36 @@ const runSuite = async () => {
     ),
   );
 
+  ctx.scenario("F. EMAIL-INFRA-2 — batch dispatcher");
+  ctx.assertTrue(
+    "runner utilise dispatchEmailBatch",
+    runnerSource.includes("dispatchEmailBatch({"),
+  );
+  ctx.assertTrue(
+    "trySend délégué dans worker (pas dans classify alone)",
+    runnerSource.includes("trySendMealSelectionReminderEmail({") &&
+      runnerSource.includes("worker: async"),
+  );
+  ctx.assertTrue(
+    "classify loop conserve for selection",
+    runnerSource.includes("for (const selection of selections)"),
+  );
+  ctx.assertTrue(
+    "errors reminder plafonnées (max 50)",
+    runnerSource.includes("EMAIL_BATCH_DEFAULT_MAX_ERRORS") &&
+      runnerSource.includes("summary.errors.length >="),
+  );
+  ctx.assertFalse(
+    "pas de Promise.all sur runners cron",
+    cronRunBlock.includes("Promise.all([") &&
+      cronRunBlock.includes("processDueMealSelectionReminders"),
+  );
+  ctx.assertTrue(
+    "already_sent_for_delivery mappé skippedAlreadySent",
+    runnerSource.includes('reason === "already_sent_for_delivery"') &&
+      runnerSource.includes("skippedAlreadySent"),
+  );
+
   return finishSuite("57-email-meal-selection-reminder", ctx);
 };
 

@@ -1,6 +1,9 @@
 /**
  * Cron runner for meal-selection reminder emails.
  * Separate from subscription billing worker — local DB only, no Shopify fetch.
+ *
+ * Phase A: classify + build eligibleItems (business skips counted here).
+ * Phase B: dispatchEmailBatch → trySendMealSelectionReminderEmail (infra concurrency).
  */
 
 import { RECOVERY_STATUS } from "../../constants/subscriptionPaymentRecovery";
@@ -8,6 +11,10 @@ import db from "../../db.server";
 import { getDeliveryCutoffStatus } from "../../utils/deliveryDate";
 import { getPortalModificationBlockReason } from "../subscriptionModificationBlock.server";
 import { isMileyoTransactionalEmailEnabled } from "./email-client.server";
+import {
+  EMAIL_BATCH_DEFAULT_MAX_ERRORS,
+  dispatchEmailBatch,
+} from "./email-batch-dispatcher.server";
 import {
   hasExplicitMealSelectionForDelivery,
   isMealSelectionReminderAlreadySentForDelivery,
@@ -230,6 +237,60 @@ const incrementSkip = (
   }
 };
 
+type MealSelectionReminderEligibleItem = {
+  customerEmail: string | null;
+  selectionId: string;
+  shopifyOrderId: string;
+  subscriptionContractId: string | null;
+};
+
+/**
+ * Map trySend skipped reasons onto existing business counters.
+ * Known: already_sent_for_delivery → skippedAlreadySent;
+ * not_eligible + no recipient → skippedNoRecipient.
+ * Other runtime skips (selection_missing, invalid_meals_count, …) are left
+ * unmapped — same as pre-dispatcher behaviour (no invented counters).
+ */
+const applyMealSelectionReminderRuntimeSkip = ({
+  item,
+  orderByShopifyOrderId,
+  reason,
+  summary,
+}: {
+  item: MealSelectionReminderEligibleItem;
+  orderByShopifyOrderId: Map<
+    string,
+    { customerEmail: string | null; customerName: string | null }
+  >;
+  reason: string;
+  summary: MealSelectionReminderRunnerSummary;
+}): void => {
+  if (reason === "already_sent_for_delivery") {
+    summary.skippedAlreadySent += 1;
+    return;
+  }
+
+  if (reason === "not_eligible") {
+    const order = orderByShopifyOrderId.get(item.shopifyOrderId);
+    const { recipient } = resolveSubscriptionEmailRecipient(item, order);
+
+    if (!recipient) {
+      summary.skippedNoRecipient += 1;
+    }
+  }
+};
+
+const pushBoundedRunnerError = (
+  summary: MealSelectionReminderRunnerSummary,
+  message: string,
+): void => {
+  if (summary.errors.length >= EMAIL_BATCH_DEFAULT_MAX_ERRORS) {
+    return;
+  }
+
+  summary.errors.push(message);
+};
+
 export const processDueMealSelectionReminders = async (
   shop: string,
   options?: { now?: Date },
@@ -295,10 +356,12 @@ export const processDueMealSelectionReminders = async (
     orders.map((order) => [order.shopifyOrderId, order]),
   );
 
+  const eligibleItems: MealSelectionReminderEligibleItem[] = [];
+
+  // Phase A — classify; business skips only. Build eligibleItems for Phase B.
   for (const selection of selections) {
     try {
-      const recovery =
-        recoveryBySelectionId.get(selection.id) ?? null;
+      const recovery = recoveryBySelectionId.get(selection.id) ?? null;
       const classification = classifyMealSelectionReminderCandidate({
         now,
         recovery,
@@ -315,45 +378,66 @@ export const processDueMealSelectionReminders = async (
       }
 
       summary.eligible += 1;
-
-      const sendResult = await trySendMealSelectionReminderEmail({
+      eligibleItems.push({
+        customerEmail: selection.customerEmail,
         selectionId: selection.id,
+        shopifyOrderId: selection.shopifyOrderId,
+        subscriptionContractId: selection.subscriptionContractId,
       });
-
-      if (sendResult.status === "sent") {
-        summary.sent += 1;
-        continue;
-      }
-
-      if (sendResult.status === "failed") {
-        summary.failed += 1;
-        summary.errors.push(
-          `${selection.id}: ${sendResult.reason} — ${sendResult.message}`,
-        );
-        continue;
-      }
-
-      if (sendResult.reason === "already_sent_for_delivery") {
-        summary.skippedAlreadySent += 1;
-        continue;
-      }
-
-      if (sendResult.reason === "not_eligible") {
-        const order = orderByShopifyOrderId.get(selection.shopifyOrderId);
-        const { recipient } = resolveSubscriptionEmailRecipient(selection, order);
-
-        if (!recipient) {
-          summary.skippedNoRecipient += 1;
-        }
-      }
     } catch (error) {
       summary.failed += 1;
-      summary.errors.push(
+      pushBoundedRunnerError(
+        summary,
         `${selection.id}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
     }
+  }
+
+  // Phase B — bounded-concurrency send via shared dispatcher.
+  const batchResult = await dispatchEmailBatch({
+    getItemKey: (item) => item.selectionId,
+    items: eligibleItems,
+    worker: async (item) => {
+      const sendResult = await trySendMealSelectionReminderEmail({
+        selectionId: item.selectionId,
+      });
+
+      if (sendResult.status === "sent") {
+        return { outcome: "success" };
+      }
+
+      if (sendResult.status === "failed") {
+        return {
+          message: sendResult.message,
+          outcome: "failed",
+          reason: sendResult.reason,
+        };
+      }
+
+      applyMealSelectionReminderRuntimeSkip({
+        item,
+        orderByShopifyOrderId,
+        reason: sendResult.reason,
+        summary,
+      });
+
+      return { outcome: "skipped", reason: sendResult.reason };
+    },
+  });
+
+  summary.sent += batchResult.succeeded;
+  summary.failed += batchResult.failed;
+
+  for (const error of batchResult.errors) {
+    const key = error.itemKey ?? "unknown";
+    pushBoundedRunnerError(
+      summary,
+      error.reason
+        ? `${key}: ${error.reason} — ${error.message}`
+        : `${key}: ${error.message}`,
+    );
   }
 
   console.log("[mealSelectionReminder] runner completed", {

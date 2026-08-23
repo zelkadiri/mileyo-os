@@ -402,19 +402,28 @@ const runSuite = async () => {
     ),
   );
 
-  ctx.scenario("G. Batch — séquentiel + summary");
+  ctx.scenario("G. Batch — dispatcher + summary");
   ctx.assertTrue(
-    "traitement séquentiel for selection",
+    "Phase A classify conserve for selection",
     runnerSource.includes("for (const selection of selections)"),
   );
   ctx.assertTrue(
-    "try/catch par sélection",
+    "dispatchEmailBatch pour Phase B send",
+    runnerSource.includes("dispatchEmailBatch({"),
+  );
+  ctx.assertTrue(
+    "trySendUpcomingDeliveryEmail délégué dans worker",
+    runnerSource.includes("trySendUpcomingDeliveryEmail({") &&
+      runnerSource.includes("worker: async"),
+  );
+  ctx.assertTrue(
+    "isolation d'erreur Phase A try/catch",
     runnerSource.includes("} catch (error) {") &&
       runnerSource.includes("summary.failed += 1"),
   );
   ctx.assertTrue(
-    "trySendUpcomingDeliveryEmail délégué",
-    runnerSource.includes("trySendUpcomingDeliveryEmail({"),
+    "errors bornées max 50",
+    runnerSource.includes("EMAIL_BATCH_DEFAULT_MAX_ERRORS"),
   );
   ctx.assertTrue(
     "batch BoxOrders proof query",
@@ -424,6 +433,20 @@ const runSuite = async () => {
   ctx.assertTrue(
     "batch recoveries query",
     runnerSource.includes("subscriptionPaymentRecovery.findMany"),
+  );
+  ctx.assertTrue(
+    "already_sent_for_delivery mappé skippedAlreadySent",
+    runnerSource.includes('reason === "already_sent_for_delivery"') &&
+      runnerSource.includes("skippedAlreadySent"),
+  );
+  ctx.assertFalse(
+    "pas de Promise.all([reminder, upcoming]) dans cron",
+    cronRunBlock.includes("Promise.all") &&
+      cronRunBlock.includes("processDueUpcomingDeliveryEmails") &&
+      cronRunBlock.includes("processDueMealSelectionReminders") &&
+      /Promise\.all\([\s\S]*processDueMealSelectionReminders[\s\S]*processDueUpcomingDeliveryEmails/.test(
+        cronRunBlock,
+      ),
   );
 
   const summary = emptyUpcomingDeliveryRunnerSummary();

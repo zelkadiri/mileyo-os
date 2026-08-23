@@ -1,12 +1,19 @@
 /**
  * Cron runner for upcoming-delivery emails.
  * Separate from billing worker — local DB only, no Shopify fetch.
+ *
+ * Phase A: classify + build eligibleItems (business skips counted here).
+ * Phase B: dispatchEmailBatch → trySendUpcomingDeliveryEmail (infra concurrency).
  */
 
 import { RECOVERY_STATUS } from "../../constants/subscriptionPaymentRecovery";
 import db from "../../db.server";
 import { getPortalModificationBlockReason } from "../subscriptionModificationBlock.server";
 import { isMileyoTransactionalEmailEnabled } from "./email-client.server";
+import {
+  EMAIL_BATCH_DEFAULT_MAX_ERRORS,
+  dispatchEmailBatch,
+} from "./email-batch-dispatcher.server";
 import {
   hasUsableUpcomingDeliveryMeals,
   isUpcomingDeliveryCutoffSatisfied,
@@ -298,6 +305,45 @@ const buildBoxOrderLookupKey = (
   scheduledDeliveryDate: string,
 ) => `${subscriptionSelectionId}:${scheduledDeliveryDate}`;
 
+type UpcomingDeliveryEligibleItem = {
+  selectionId: string;
+};
+
+/**
+ * Map trySend skipped reasons onto existing business counters.
+ * Known: already_sent_for_delivery → skippedAlreadySent;
+ * not_eligible → skippedNoRecipient (pre-dispatcher behaviour).
+ * Other runtime skips (selection_missing, invalid_email_data, …) are left
+ * unmapped — same as before (no invented counters).
+ */
+const applyUpcomingDeliveryRuntimeSkip = ({
+  reason,
+  summary,
+}: {
+  reason: string;
+  summary: UpcomingDeliveryRunnerSummary;
+}): void => {
+  if (reason === "already_sent_for_delivery") {
+    summary.skippedAlreadySent += 1;
+    return;
+  }
+
+  if (reason === "not_eligible") {
+    summary.skippedNoRecipient += 1;
+  }
+};
+
+const pushBoundedUpcomingDeliveryError = (
+  summary: UpcomingDeliveryRunnerSummary,
+  message: string,
+): void => {
+  if (summary.errors.length >= EMAIL_BATCH_DEFAULT_MAX_ERRORS) {
+    return;
+  }
+
+  summary.errors.push(message);
+};
+
 export const processDueUpcomingDeliveryEmails = async (
   shop: string,
   options?: { now?: Date },
@@ -396,6 +442,9 @@ export const processDueUpcomingDeliveryEmails = async (
     );
   }
 
+  const eligibleItems: UpcomingDeliveryEligibleItem[] = [];
+
+  // Phase A — classify; business skips only. Build eligibleItems for Phase B.
   for (const selection of selections) {
     try {
       const recovery = recoveryBySelectionId.get(selection.id) ?? null;
@@ -430,48 +479,60 @@ export const processDueUpcomingDeliveryEmails = async (
       }
 
       summary.eligible += 1;
+      eligibleItems.push({ selectionId: selection.id });
+    } catch (error) {
+      summary.failed += 1;
+      pushBoundedUpcomingDeliveryError(
+        summary,
+        `${selection.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
 
+  // Phase B — bounded-concurrency send via shared dispatcher.
+  const batchResult = await dispatchEmailBatch({
+    getItemKey: (item) => item.selectionId,
+    items: eligibleItems,
+    worker: async (item) => {
       const sendResult = await trySendUpcomingDeliveryEmail({
         now,
-        selectionId: selection.id,
+        selectionId: item.selectionId,
       });
 
       if (sendResult.status === "sent") {
-        summary.sent += 1;
-        continue;
+        return { outcome: "success" };
       }
 
       if (sendResult.status === "failed") {
-        summary.failed += 1;
-
-        if (summary.errors.length < 50) {
-          summary.errors.push(
-            `${selection.id}: ${sendResult.reason} — ${sendResult.message}`,
-          );
-        }
-
-        continue;
+        return {
+          message: sendResult.message,
+          outcome: "failed",
+          reason: sendResult.reason,
+        };
       }
 
-      if (sendResult.reason === "already_sent_for_delivery") {
-        summary.skippedAlreadySent += 1;
-        continue;
-      }
+      applyUpcomingDeliveryRuntimeSkip({
+        reason: sendResult.reason,
+        summary,
+      });
 
-      if (sendResult.reason === "not_eligible") {
-        summary.skippedNoRecipient += 1;
-      }
-    } catch (error) {
-      summary.failed += 1;
+      return { outcome: "skipped", reason: sendResult.reason };
+    },
+  });
 
-      if (summary.errors.length < 50) {
-        summary.errors.push(
-          `${selection.id}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-    }
+  summary.sent += batchResult.succeeded;
+  summary.failed += batchResult.failed;
+
+  for (const error of batchResult.errors) {
+    const key = error.itemKey ?? "unknown";
+    pushBoundedUpcomingDeliveryError(
+      summary,
+      error.reason
+        ? `${key}: ${error.reason} — ${error.message}`
+        : `${key}: ${error.message}`,
+    );
   }
 
   console.log("[upcomingDeliveryEmail] runner completed", {

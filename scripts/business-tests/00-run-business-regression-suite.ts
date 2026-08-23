@@ -81,6 +81,7 @@ const BUSINESS_SUITES = [
   "58-email-upcoming-delivery-foundation.test.ts",
   "59-email-upcoming-delivery-send.test.ts",
   "60-email-upcoming-delivery-runner.test.ts",
+  "61-email-batch-dispatcher.test.ts",
 ];
 
 const LEGACY_SUITES = [
