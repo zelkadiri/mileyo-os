@@ -38,6 +38,7 @@ import {
   buildBuilderCheckoutLineAttributes,
   toShopifyResourceGid,
 } from "../../app/features/builder/builder-checkout.server";
+import { describeBuilderCheckoutThrownError } from "../../app/features/builder/builder-checkout-errors";
 import {
   CREATE_BUILDER_CHECKOUT_INTENT,
 } from "../../app/features/builder/builder-email";
@@ -126,6 +127,9 @@ const runSuite = () => {
   const createCheckoutFn = extractFunction(clientSource, "createBuilderCheckout");
   const checkoutServerSource = readRepoFile(
     "app/features/builder/builder-checkout.server.ts",
+  );
+  const checkoutErrorsSource = readRepoFile(
+    "app/features/builder/builder-checkout-errors.ts",
   );
   const routeSource = readRepoFile("app/routes/apps.box-builder.tsx");
   const emailModuleSource = readRepoFile("app/features/builder/builder-email.ts");
@@ -537,6 +541,34 @@ const runSuite = () => {
     checkoutServerSource.includes("unauthenticated.storefront"),
   );
   ctx.assertTrue(
+    "threw log uses safe diagnostic helper",
+    checkoutServerSource.includes("describeBuilderCheckoutThrownError") &&
+      checkoutServerSource.includes("message: details.message") &&
+      checkoutServerSource.includes("status: details.status") &&
+      checkoutServerSource.includes("requestId: details.requestId") &&
+      checkoutErrorsSource.includes(
+        "export const describeBuilderCheckoutThrownError",
+      ),
+  );
+  ctx.assertFalse(
+    "threw log does not dump Authorization",
+    /storefront cartCreate threw[\s\S]{0,400}Authorization/i.test(
+      checkoutServerSource,
+    ) || /Authorization/i.test(checkoutErrorsSource),
+  );
+  ctx.assertFalse(
+    "threw log does not dump email payload",
+    /storefront cartCreate threw[\s\S]{0,400}input\.email/.test(
+      checkoutServerSource,
+    ),
+  );
+  ctx.assertFalse(
+    "error helper does not log tokens or full headers",
+    checkoutErrorsSource.includes("accessToken") ||
+      checkoutErrorsSource.includes("Authorization") ||
+      checkoutErrorsSource.includes("privateAccessToken"),
+  );
+  ctx.assertTrue(
     "recap submit uses createBuilderCheckout",
     recapSubmit.includes("createBuilderCheckout"),
   );
@@ -557,6 +589,56 @@ const runSuite = () => {
     cartSource.includes(BUILDER_CART_PREPARE_ERROR) &&
       clientSource.includes("CART_PREPARE_ERROR"),
   );
+
+  ctx.scenario("G2. Safe cartCreate threw diagnostics");
+  const httpLike = {
+    name: "HttpResponseError",
+    message: `Received an error response (401 Unauthorized) from Shopify:\n${"x".repeat(400)}`,
+    response: {
+      code: 401,
+      statusText: "Unauthorized",
+      headers: {
+        "X-Request-Id": "req-test-123",
+        Authorization: "Bearer secret-must-not-leak",
+      },
+      body: { errors: "access denied" },
+    },
+  };
+  const httpDiag = describeBuilderCheckoutThrownError(httpLike);
+  ctx.assertEqual("http name", httpDiag.name, "HttpResponseError");
+  ctx.assertEqual("http status", httpDiag.status, 401);
+  ctx.assertEqual("http requestId", httpDiag.requestId, "req-test-123");
+  ctx.assertTrue(
+    "http message truncated",
+    typeof httpDiag.message === "string" &&
+      httpDiag.message.length <= 301 &&
+      httpDiag.message.endsWith("…"),
+  );
+  ctx.assertFalse(
+    "http diag omits Authorization",
+    JSON.stringify(httpDiag).includes("Bearer") ||
+      JSON.stringify(httpDiag).includes("Authorization"),
+  );
+
+  const gqlLike = {
+    name: "GraphqlQueryError",
+    message: "Access denied for cartCreate field.",
+    headers: { "x-request-id": "gql-req-9" },
+    response: {},
+  };
+  const gqlDiag = describeBuilderCheckoutThrownError(gqlLike);
+  ctx.assertEqual("gql status absent", gqlDiag.status, undefined);
+  ctx.assertEqual("gql requestId", gqlDiag.requestId, "gql-req-9");
+  ctx.assertEqual(
+    "gql message kept",
+    gqlDiag.message,
+    "Access denied for cartCreate field.",
+  );
+
+  const plain = describeBuilderCheckoutThrownError(new Error("boom"));
+  ctx.assertEqual("plain Error name", plain.name, "Error");
+  ctx.assertEqual("plain Error message", plain.message, "boom");
+  ctx.assertEqual("plain Error status absent", plain.status, undefined);
 
   ctx.scenario("H. Variant ID normalization");
   ctx.assertEqual(

@@ -6,8 +6,8 @@ import {
   BUILDER_CART_PREPARE_ERROR,
   getShopifyNumericId,
 } from "./builder-cart";
+import { describeBuilderCheckoutThrownError } from "./builder-checkout-errors";
 import {
-  CAPTURE_CHECKOUT_LEAD_INTENT,
   CREATE_BUILDER_CHECKOUT_INTENT,
   normalizeBuilderEmail,
 } from "./builder-email";
@@ -329,11 +329,13 @@ export const createBuilderStorefrontCheckout = async ({
 
     return { checkoutUrl, ok: true };
   } catch (error) {
-    const err = error as { message?: string; name?: string };
+    const details = describeBuilderCheckoutThrownError(error);
     console.error("[builder_checkout] storefront cartCreate threw", {
       intent: CREATE_BUILDER_CHECKOUT_INTENT,
-      name: err.name ?? "unknown",
-      relatedIntent: CAPTURE_CHECKOUT_LEAD_INTENT,
+      name: details.name,
+      message: details.message,
+      status: details.status,
+      requestId: details.requestId,
       shop,
     });
     return { message: BUILDER_CART_PREPARE_ERROR, ok: false };
