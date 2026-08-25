@@ -1,0 +1,647 @@
+/**
+ * Admin email observability (EMAIL-6G-A) — read-only UI.
+ * No retry / cancel / delete / write actions.
+ */
+
+import type { ReactNode } from "react";
+import { Form, Link, useLoaderData, useSearchParams } from "react-router";
+
+import {
+  EMAIL_EVENT_STATUSES,
+  EMAIL_EVENT_TYPES,
+} from "../../constants/emailEvent";
+import type { loadEmailsPageData } from "./emails-data.server";
+import {
+  formatAdminDateTime,
+  formatAdminDateTimeCompact,
+  formatAttemptCountLabel,
+  formatEmailEventStatusLabel,
+  formatEmailEventTypeLabel,
+  formatEmailNextOrSentLabel,
+  formatReferenceLabel,
+  formatSafeMetaLabel,
+  formatSafeMetaValue,
+  formatSuccessRatePercent,
+  getEmailStatusBadgeTone,
+  truncateErrorMessage,
+  truncateForTable,
+} from "./emails-formatters";
+import {
+  detailGridStyle,
+  detailKeyStyle,
+  detailRowStyle,
+  detailSectionStyle,
+  detailSectionTitleStyle,
+  detailValueStyle,
+  drawerBackdropStyle,
+  drawerHeaderMetaStyle,
+  drawerHeaderStyle,
+  drawerPanelStyle,
+  drawerSummaryStyle,
+  drawerTitleStyle,
+  emptyStateStyle,
+  errorCellStyle,
+  errorPanelStyle,
+  filterControlStyle,
+  filterFieldStyle,
+  filterLabelStyle,
+  filterSubmitButtonStyle,
+  filtersFormStyle,
+  introStyle,
+  introSubStyle,
+  metaPairStyle,
+  monoStyle,
+  mutedStyle,
+  pageShellStyle,
+  paginationRowStyle,
+  providerCellStyle,
+  rowOpenStyle,
+  secondaryButtonStyle,
+  statusBadgeStyle,
+  summaryCardIncidentStyle,
+  summaryCardStyle,
+  summaryGridStyle,
+  summaryLabelStyle,
+  summarySubLabelStyle,
+  summaryValueMutedStyle,
+  summaryValueStyle,
+  tableStyle,
+  tableWrapStyle,
+  tdStyle,
+  techIdBlockStyle,
+  thStyle,
+  timelineDisclaimerStyle,
+  timelineListStyle,
+  truncateCellStyle,
+  warningBannerStyle,
+} from "./emails-styles";
+import type { EmailAdminListItem } from "./emails-types";
+import { EMAIL_ADMIN_PERIODS } from "./emails-types";
+
+type PageData = Awaited<ReturnType<typeof loadEmailsPageData>>;
+
+const PERIOD_LABELS: Record<(typeof EMAIL_ADMIN_PERIODS)[number], string> = {
+  "24h": "24 h",
+  "7d": "7 jours",
+  "30d": "30 jours",
+  all: "Tout",
+};
+
+const buildFilterHref = (
+  current: URLSearchParams,
+  patch: Record<string, string | null>,
+): string => {
+  const next = new URLSearchParams(current);
+  for (const [key, value] of Object.entries(patch)) {
+    if (value == null || value === "") {
+      next.delete(key);
+    } else {
+      next.set(key, value);
+    }
+  }
+  const qs = next.toString();
+  return qs ? `/app/emails?${qs}` : "/app/emails";
+};
+
+const StatusBadge = ({ event }: { event: EmailAdminListItem }) => {
+  const tone = getEmailStatusBadgeTone({
+    attemptCount: event.attemptCount,
+    status: event.status,
+  });
+  return (
+    <span style={statusBadgeStyle(tone)}>
+      {formatEmailEventStatusLabel({
+        attemptCount: event.attemptCount,
+        status: event.status,
+      })}
+    </span>
+  );
+};
+
+export default function EmailsPage() {
+  const {
+    detail,
+    events,
+    filters,
+    metrics,
+    pageSize,
+    totalCount,
+    totalPages,
+  } = useLoaderData<PageData>();
+  const [searchParams] = useSearchParams();
+
+  const hasActiveFilters =
+    filters.status !== "all" ||
+    filters.eventType !== "all" ||
+    filters.period !== "all" ||
+    filters.q !== "";
+
+  const emptyCopy = (() => {
+    if (totalCount === 0 && !hasActiveFilters) {
+      return "Aucun événement email pour le moment.";
+    }
+    if (totalCount === 0 && filters.status === "failed") {
+      return "Aucun email en échec pour ces filtres.";
+    }
+    if (totalCount === 0) {
+      return "Aucun résultat pour ces filtres.";
+    }
+    return null;
+  })();
+
+  const successRateLabel = formatSuccessRatePercent(metrics.successRate24h);
+  const successRateEmpty = metrics.successRate24h == null;
+
+  return (
+    <s-page heading="Emails">
+      <div style={pageShellStyle}>
+        <s-section>
+          <s-stack gap="base">
+            <div>
+              <p style={introStyle}>
+                Suivez l’état des emails transactionnels Mileyo.
+              </p>
+              <p style={introSubStyle}>Données en lecture seule.</p>
+            </div>
+
+            <div style={summaryGridStyle}>
+              <div style={summaryCardStyle}>
+                <p style={summaryLabelStyle}>Envoyés</p>
+                <p style={summaryValueStyle}>{metrics.sentLast24h}</p>
+                <p style={summarySubLabelStyle}>24 h</p>
+              </div>
+              <div style={summaryCardStyle}>
+                <p style={summaryLabelStyle}>En attente</p>
+                <p style={summaryValueStyle}>{metrics.pending}</p>
+              </div>
+              <div style={summaryCardStyle}>
+                <p style={summaryLabelStyle}>En traitement</p>
+                <p style={summaryValueStyle}>{metrics.processing}</p>
+              </div>
+              <div style={summaryCardIncidentStyle}>
+                <p style={summaryLabelStyle}>Échoués</p>
+                <p style={summaryValueStyle}>{metrics.failed}</p>
+              </div>
+              <div style={summaryCardIncidentStyle}>
+                <p style={summaryLabelStyle}>Épuisés</p>
+                <p style={summaryValueStyle}>{metrics.exhausted}</p>
+              </div>
+              <div style={summaryCardStyle}>
+                <p style={summaryLabelStyle}>Annulés</p>
+                <p style={summaryValueStyle}>{metrics.cancelled}</p>
+              </div>
+              <div style={summaryCardStyle}>
+                <p style={summaryLabelStyle}>Taux de succès</p>
+                <p
+                  style={
+                    successRateEmpty
+                      ? summaryValueMutedStyle
+                      : summaryValueStyle
+                  }
+                >
+                  {successRateLabel}
+                </p>
+                {!successRateEmpty ? (
+                  <p style={summarySubLabelStyle}>24 h</p>
+                ) : null}
+              </div>
+            </div>
+          </s-stack>
+        </s-section>
+
+        <s-section heading="Événements">
+          <s-stack gap="base">
+            <Form method="get" style={filtersFormStyle}>
+              <label style={filterFieldStyle}>
+                <span style={filterLabelStyle}>Statut</span>
+                <select
+                  defaultValue={filters.status}
+                  name="status"
+                  style={filterControlStyle}
+                >
+                  <option value="all">Tous</option>
+                  {EMAIL_EVENT_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {formatEmailEventStatusLabel({
+                        attemptCount: 0,
+                        status,
+                      })}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={filterFieldStyle}>
+                <span style={filterLabelStyle}>Type</span>
+                <select
+                  defaultValue={filters.eventType}
+                  name="eventType"
+                  style={filterControlStyle}
+                >
+                  <option value="all">Tous</option>
+                  {EMAIL_EVENT_TYPES.map((eventType) => (
+                    <option key={eventType} value={eventType}>
+                      {formatEmailEventTypeLabel(eventType)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={filterFieldStyle}>
+                <span style={filterLabelStyle}>Période</span>
+                <select
+                  defaultValue={filters.period}
+                  name="period"
+                  style={filterControlStyle}
+                >
+                  {EMAIL_ADMIN_PERIODS.map((period) => (
+                    <option key={period} value={period}>
+                      {PERIOD_LABELS[period]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ ...filterFieldStyle, minWidth: "220px", flex: 1 }}>
+                <span style={filterLabelStyle}>Recherche</span>
+                <input
+                  defaultValue={filters.q}
+                  name="q"
+                  placeholder="email, référence, provider, clé…"
+                  style={filterControlStyle}
+                  type="search"
+                />
+              </label>
+
+              <button style={filterSubmitButtonStyle} type="submit">
+                Filtrer
+              </button>
+              {hasActiveFilters ? (
+                <Link style={secondaryButtonStyle} to="/app/emails">
+                  Réinitialiser
+                </Link>
+              ) : null}
+            </Form>
+
+            {emptyCopy ? (
+              <div style={emptyStateStyle}>{emptyCopy}</div>
+            ) : (
+              <>
+                <div style={tableWrapStyle}>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...thStyle, width: "9%" }}>Créé</th>
+                        <th style={{ ...thStyle, width: "13%" }}>Type</th>
+                        <th style={{ ...thStyle, width: "11%" }}>
+                          Destinataire
+                        </th>
+                        <th style={{ ...thStyle, width: "9%" }}>Statut</th>
+                        <th style={{ ...thStyle, width: "5%" }}>Tentatives</th>
+                        <th style={{ ...thStyle, width: "16%" }}>
+                          Envoi / prochain essai
+                        </th>
+                        <th style={{ ...thStyle, width: "14%" }}>Référence</th>
+                        <th style={{ ...thStyle, width: "8%" }}>Provider</th>
+                        <th style={{ ...thStyle, width: "15%" }}>Erreur</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {events.map((event) => {
+                        const referenceFull = formatReferenceLabel({
+                          referenceId: event.referenceId,
+                          referenceType: event.referenceType,
+                        });
+                        const detailHref = buildFilterHref(searchParams, {
+                          event: event.id,
+                        });
+                        return (
+                          <tr key={event.id}>
+                            <td style={tdStyle}>
+                              <Link
+                                style={rowOpenStyle}
+                                title="Voir le détail"
+                                to={detailHref}
+                              >
+                                {formatAdminDateTime(event.createdAt) ?? "—"}
+                              </Link>
+                            </td>
+                            <td style={tdStyle}>
+                              {formatEmailEventTypeLabel(event.eventType)}
+                            </td>
+                            <td style={{ ...tdStyle, ...monoStyle }}>
+                              {event.recipientMasked}
+                            </td>
+                            <td style={tdStyle}>
+                              <StatusBadge event={event} />
+                              {event.isStaleProcessing ? (
+                                <p style={warningBannerStyle}>
+                                  Traitement potentiellement bloqué
+                                </p>
+                              ) : null}
+                            </td>
+                            <td style={tdStyle}>{event.attemptCount}</td>
+                            <td style={tdStyle}>
+                              {formatEmailNextOrSentLabel({
+                                nextAttemptAt: event.nextAttemptAt,
+                                sentAt: event.sentAt,
+                                status: event.status,
+                              })}
+                            </td>
+                            <td
+                              style={{
+                                ...tdStyle,
+                                ...monoStyle,
+                                ...truncateCellStyle,
+                              }}
+                              title={referenceFull}
+                            >
+                              {truncateForTable(referenceFull, 28)}
+                            </td>
+                            <td
+                              style={{
+                                ...tdStyle,
+                                ...monoStyle,
+                                ...providerCellStyle,
+                              }}
+                              title={event.providerId ?? undefined}
+                            >
+                              {truncateForTable(event.providerId, 20)}
+                            </td>
+                            <td style={{ ...tdStyle, ...errorCellStyle }}>
+                              {event.lastErrorCode || event.lastErrorMessage ? (
+                                <>
+                                  {event.lastErrorCode ? (
+                                    <div style={monoStyle}>
+                                      {event.lastErrorCode}
+                                    </div>
+                                  ) : null}
+                                  <div>
+                                    {truncateErrorMessage(
+                                      event.lastErrorMessage,
+                                    )}
+                                  </div>
+                                </>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style={paginationRowStyle}>
+                  <p style={mutedStyle}>
+                    {totalCount} événement{totalCount === 1 ? "" : "s"} · page{" "}
+                    {filters.page}/{totalPages} · {pageSize}/page
+                  </p>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    {filters.page > 1 ? (
+                      <Link
+                        style={secondaryButtonStyle}
+                        to={buildFilterHref(searchParams, {
+                          event: null,
+                          page: String(filters.page - 1),
+                        })}
+                      >
+                        Précédent
+                      </Link>
+                    ) : null}
+                    {filters.page < totalPages ? (
+                      <Link
+                        style={secondaryButtonStyle}
+                        to={buildFilterHref(searchParams, {
+                          event: null,
+                          page: String(filters.page + 1),
+                        })}
+                      >
+                        Suivant
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            )}
+          </s-stack>
+        </s-section>
+      </div>
+
+      {detail ? (
+        <>
+          <Link
+            aria-label="Fermer le détail"
+            style={drawerBackdropStyle}
+            to={buildFilterHref(searchParams, { event: null })}
+          />
+          <aside aria-label="Détail email" style={drawerPanelStyle}>
+            <div style={drawerHeaderStyle}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <h2 style={drawerTitleStyle}>
+                  {formatEmailEventTypeLabel(detail.eventType)}
+                </h2>
+                <div style={drawerHeaderMetaStyle}>
+                  <StatusBadge event={detail} />
+                </div>
+                <p style={drawerSummaryStyle}>
+                  {formatAttemptCountLabel(detail.attemptCount)}
+                  <br />
+                  Créé le{" "}
+                  {formatAdminDateTimeCompact(detail.createdAt) ?? "—"}
+                </p>
+                {detail.isStaleProcessing ? (
+                  <p style={warningBannerStyle}>
+                    Traitement potentiellement bloqué (&gt; 10 min)
+                  </p>
+                ) : null}
+              </div>
+              <Link
+                style={secondaryButtonStyle}
+                to={buildFilterHref(searchParams, { event: null })}
+              >
+                Fermer
+              </Link>
+            </div>
+
+            <div style={detailGridStyle}>
+              <section style={detailSectionStyle}>
+                <h3 style={detailSectionTitleStyle}>État</h3>
+                <DetailField
+                  label="Statut"
+                  valueNode={<StatusBadge event={detail} />}
+                />
+                <DetailField
+                  label="Tentatives"
+                  value={String(detail.attemptCount)}
+                />
+                <DetailField
+                  label="Créé"
+                  value={formatAdminDateTime(detail.createdAt) ?? "—"}
+                />
+                <DetailField
+                  label="Dernière tentative"
+                  value={formatAdminDateTime(detail.lastAttemptAt) ?? "—"}
+                />
+                <DetailField
+                  label="Prochain essai"
+                  value={
+                    detail.status === "pending"
+                      ? formatEmailNextOrSentLabel({
+                          nextAttemptAt: detail.nextAttemptAt,
+                          sentAt: detail.sentAt,
+                          status: detail.status,
+                        })
+                      : "—"
+                  }
+                />
+                <DetailField
+                  label="Envoyé"
+                  value={formatAdminDateTime(detail.sentAt) ?? "—"}
+                />
+                <DetailField
+                  label="Annulé"
+                  value={formatAdminDateTime(detail.cancelledAt) ?? "—"}
+                />
+              </section>
+
+              <section style={detailSectionStyle}>
+                <h3 style={detailSectionTitleStyle}>Destinataire</h3>
+                <DetailField
+                  label="Email"
+                  value={detail.recipientEmailMasked}
+                  mono
+                />
+              </section>
+
+              <section style={detailSectionStyle}>
+                <h3 style={detailSectionTitleStyle}>
+                  Références techniques
+                </h3>
+                <TechIdField
+                  label="Provider ID"
+                  value={detail.providerId ?? "—"}
+                />
+                <TechIdField
+                  label="Type de référence"
+                  value={detail.referenceType}
+                />
+                <TechIdField
+                  label="ID de référence"
+                  value={detail.referenceId}
+                />
+                <TechIdField
+                  label="Clé d’idempotence"
+                  value={detail.idempotencyKey}
+                />
+              </section>
+
+              {detail.lastErrorCode || detail.lastErrorMessage ? (
+                <section style={detailSectionStyle}>
+                  <h3 style={detailSectionTitleStyle}>Erreur</h3>
+                  <div style={errorPanelStyle}>
+                    {detail.lastErrorCode ? (
+                      <div>
+                        <p style={detailKeyStyle}>Code</p>
+                        <p style={{ ...detailValueStyle, ...monoStyle }}>
+                          {detail.lastErrorCode}
+                        </p>
+                      </div>
+                    ) : null}
+                    {detail.lastErrorMessage ? (
+                      <div>
+                        <p style={detailKeyStyle}>Message</p>
+                        <p style={detailValueStyle}>
+                          {detail.lastErrorMessage}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null}
+
+              <section style={detailSectionStyle}>
+                <h3 style={detailSectionTitleStyle}>Métadonnées</h3>
+                {detail.metaUnavailable ? (
+                  <p style={detailValueStyle}>Métadonnées indisponibles</p>
+                ) : detail.metaSafe == null ? (
+                  <p style={detailValueStyle}>Aucune métadonnée safe</p>
+                ) : (
+                  <dl style={{ margin: 0 }}>
+                    {Object.entries(detail.metaSafe).map(([key, value]) => (
+                      <div key={key} style={metaPairStyle}>
+                        <dt style={detailKeyStyle}>
+                          {formatSafeMetaLabel(key)}
+                        </dt>
+                        <dd style={{ ...detailValueStyle, margin: 0 }}>
+                          {formatSafeMetaValue(key, value)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </section>
+
+              <section style={detailSectionStyle}>
+                <h3 style={detailSectionTitleStyle}>Jalons connus</h3>
+                <p style={timelineDisclaimerStyle}>
+                  Dérivés des timestamps actuels — pas un historique complet des
+                  tentatives.
+                </p>
+                <ol style={timelineListStyle}>
+                  {detail.timeline.map((step, index) => (
+                    <li key={`${step.label}-${index}`}>
+                      <strong>{step.label}</strong>
+                      {step.at ? ` — ${step.at}` : ""}
+                    </li>
+                  ))}
+                </ol>
+              </section>
+
+              <p style={{ ...introSubStyle, marginTop: "0.25rem" }}>
+                Lecture seule — aucun retry.
+              </p>
+            </div>
+          </aside>
+        </>
+      ) : null}
+    </s-page>
+  );
+}
+
+const DetailField = ({
+  label,
+  mono,
+  value,
+  valueNode,
+}: {
+  label: string;
+  mono?: boolean;
+  value?: string;
+  valueNode?: ReactNode;
+}) => (
+  <div style={detailRowStyle}>
+    <p style={detailKeyStyle}>{label}</p>
+    {valueNode != null ? (
+      <div style={detailValueStyle}>{valueNode}</div>
+    ) : (
+      <p style={{ ...detailValueStyle, ...(mono ? monoStyle : null) }}>
+        {value}
+      </p>
+    )}
+  </div>
+);
+
+const TechIdField = ({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) => (
+  <div style={detailRowStyle}>
+    <p style={detailKeyStyle}>{label}</p>
+    <p style={techIdBlockStyle}>{value}</p>
+  </div>
+);
