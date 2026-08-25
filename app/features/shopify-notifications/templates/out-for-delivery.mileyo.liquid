@@ -1,0 +1,716 @@
+{% if fulfillment.item_count == item_count %}
+  {% capture email_title %}Votre commande est en cours de livraison{% endcapture %}
+  {% capture email_body %}Bonne nouvelle, votre commande Mileyo est en cours de livraison. Elle devrait arriver très bientôt.{% endcapture %}
+{% elsif fulfillment.item_count > 1 %}
+  {% if fulfillment_status == 'fulfilled' %}
+    {% capture email_title %}Les derniers articles de votre commande sont en cours de livraison{% endcapture %}
+    {% capture email_body %}Les derniers articles de votre commande Mileyo sont en cours de livraison. Ils devraient arriver très bientôt.{% endcapture %}
+  {% else %}
+    {% capture email_title %}Certains articles de votre commande sont en cours de livraison{% endcapture %}
+    {% capture email_body %}Plusieurs articles de votre commande Mileyo sont en cours de livraison. Le reste suivra séparément. Vous pouvez suivre cet envoi ci-dessous.{% endcapture %}
+  {% endif %}
+{% else %}
+  {% if fulfillment_status == 'fulfilled' %}
+    {% capture email_title %}Le dernier article de votre commande est en cours de livraison{% endcapture %}
+    {% capture email_body %}Le dernier article de votre commande Mileyo est en cours de livraison. Il devrait arriver très bientôt.{% endcapture %}
+  {% else %}
+    {% capture email_title %}Un article de votre commande est en cours de livraison{% endcapture %}
+    {% capture email_body %}Un article de votre commande Mileyo est en cours de livraison. Le reste suivra séparément. Vous pouvez suivre cet envoi ci-dessous.{% endcapture %}
+  {% endif %}
+{% endif %}
+
+{% capture email_emphasis %}{{ fulfillment.estimated_delivery_at | date: format: 'date' }}{% endcapture %}
+
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+  <title>{{ email_title }}</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width">
+  <link rel="stylesheet" type="text/css" href="/assets/notifications/styles.css">
+  <style>
+
+    /*
+      Mileyo Out for Delivery — single main card shell.
+      Shopify repeats .container per section; those stay transparent width wrappers.
+      Only .mileyo-main-card is the white surface.
+    */
+    body, .body {
+      background-color: #FCF8F6 !important;
+      color: #3A2C45 !important;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .body > tr > td {
+      padding: 24px 12px !important;
+    }
+    .mileyo-main-card {
+      background-color: #FFFFFF !important;
+      border: 0 !important;
+      border-radius: 16px !important;
+      box-shadow: none !important;
+      margin: 0 auto !important;
+      max-width: 600px !important;
+      width: 100% !important;
+    }
+    .mileyo-main-card__inner {
+      padding: 0 !important;
+    }
+    .mileyo-main-card .header,
+    .mileyo-main-card .content,
+    .mileyo-main-card .section,
+    .mileyo-main-card .footer,
+    .mileyo-main-card .header__cell,
+    .mileyo-main-card .content__cell,
+    .mileyo-main-card .section__cell,
+    .mileyo-main-card .footer__cell {
+      background-color: transparent !important;
+      border: 0 !important;
+      box-shadow: none !important;
+    }
+    .mileyo-main-card .header__cell { padding: 24px 24px 12px !important; }
+    .mileyo-main-card .content__cell { padding: 4px 24px 28px !important; }
+    .mileyo-main-card .section__cell {
+      border-top: 1px solid #E8D9F2 !important;
+      padding: 32px 24px 28px !important;
+    }
+    .mileyo-main-card .footer__cell {
+      border-top: 1px solid #E8D9F2 !important;
+      padding: 22px 24px 28px !important;
+    }
+    /* Width wrappers only — NOT cards */
+    table.container, .container {
+      background-color: transparent !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      max-width: 100% !important;
+      outline: none !important;
+      width: 100% !important;
+    }
+    h2, h3, .shop-name__text {
+      color: #5A1B69 !important;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif !important;
+      font-weight: 700 !important;
+      letter-spacing: -0.02em !important;
+    }
+    h2 { font-size: 24px !important; line-height: 30px !important; margin: 0 0 10px !important; }
+    h3 { font-size: 20px !important; line-height: 26px !important; margin: 0 0 20px !important; }
+    p { color: #3A2C45 !important; font-size: 15px !important; line-height: 22px !important; margin: 0 0 10px !important; }
+    a, a:hover, a:active, a:visited { color: #5A1B69 !important; }
+    .mileyo-logo { display: block; margin: 0 auto 8px; max-width: 120px; height: auto; width: 120px; }
+    .mileyo-header { text-align: center !important; padding: 0 !important; }
+    .order-number__text, .po-number__text, .disclaimer__subtext, .mileyo-order-ref {
+      color: #6F5A7D !important;
+      font-size: 13px !important;
+      font-weight: 500 !important;
+      letter-spacing: 0.02em;
+    }
+    .mileyo-order-ref { display: block; margin: 8px auto 0; text-align: center; }
+    .empty-line,
+    td.empty-line {
+      display: none !important;
+      font-size: 0 !important;
+      height: 0 !important;
+      line-height: 0 !important;
+      padding: 0 !important;
+    }
+    .mileyo-eta {
+      background-color: #FCF8F6 !important;
+      border: 1px solid #E8D9F2 !important;
+      border-radius: 12px !important;
+      margin: 18px 0 8px !important;
+      padding: 14px 16px !important;
+    }
+    .mileyo-eta__label {
+      color: #6F5A7D !important;
+      display: block !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      letter-spacing: 0.04em !important;
+      margin: 0 0 4px !important;
+      text-transform: uppercase !important;
+    }
+    .mileyo-eta__date {
+      color: #5A1B69 !important;
+      display: block !important;
+      font-size: 16px !important;
+      font-weight: 700 !important;
+      letter-spacing: -0.01em !important;
+      margin: 0 !important;
+    }
+    .mileyo-tracking {
+      margin: 16px 0 0 !important;
+      padding: 0 !important;
+    }
+    .mileyo-tracking__label {
+      color: #6F5A7D !important;
+      display: block !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      letter-spacing: 0.04em !important;
+      margin: 0 0 8px !important;
+      text-transform: uppercase !important;
+    }
+    .mileyo-tracking__company {
+      color: #3A2C45 !important;
+      display: block !important;
+      font-size: 14px !important;
+      font-weight: 600 !important;
+      margin: 0 0 2px !important;
+    }
+    .mileyo-tracking__number,
+    .mileyo-tracking__number a {
+      color: #5A1B69 !important;
+      font-size: 14px !important;
+      font-weight: 500 !important;
+      text-decoration: none !important;
+    }
+    .mileyo-tracking__row {
+      margin: 0 0 10px !important;
+    }
+    .actions { margin: 0 !important; }
+    .actions__cell { padding: 18px 0 0 !important; text-align: center !important; }
+    .actions__group { margin-top: 16px !important; }
+    .button__cell,
+    .actions-buttons .button__cell--primary,
+    .main-action-cell .button__cell,
+    .button__cell--shop-app {
+      border: 0 !important;
+      border-radius: 28px !important;
+      box-sizing: border-box !important;
+      display: inline-block !important;
+      height: 46px !important;
+      max-width: 200px !important;
+      min-width: 200px !important;
+      padding: 0 !important;
+      text-align: center !important;
+      vertical-align: middle !important;
+      width: 200px !important;
+    }
+    .button__cell,
+    .actions-buttons .button__cell--primary,
+    .main-action-cell .button__cell {
+      background: #5A1B69 !important;
+      background-color: #5A1B69 !important;
+    }
+    .button__text,
+    .button__text--shop-app {
+      box-sizing: border-box !important;
+      display: inline-block !important;
+      font-size: 14px !important;
+      height: 46px !important;
+      line-height: 46px !important;
+      max-width: 200px !important;
+      min-width: 200px !important;
+      padding: 0 12px !important;
+      text-align: center !important;
+      text-decoration: none !important;
+      vertical-align: middle !important;
+      width: 200px !important;
+    }
+    .button__text {
+      color: #FFFFFF !important;
+      font-weight: 700 !important;
+    }
+    .button__cell--shop-app {
+      background: #7B4A8A !important;
+      background-color: #7B4A8A !important;
+      opacity: 1;
+    }
+    .button__text--shop-app {
+      color: #FFFFFF !important;
+      font-weight: 600 !important;
+    }
+    .button__shop-logo {
+      display: inline-block !important;
+      margin-left: 4px !important;
+      vertical-align: middle !important;
+    }
+    .actions-buttons {
+      margin: 0 auto !important;
+      width: 200px !important;
+    }
+    .actions-buttons td { text-align: center !important; }
+    .button__cell--separator {
+      font-size: 12px !important;
+      height: 12px !important;
+      line-height: 12px !important;
+      width: 200px !important;
+    }
+    .main-action-cell { margin: 0 auto !important; width: 200px !important; }
+    .link__cell, .secondary-action-cell, .mileyo-store-link, .mileyo-secondary-link {
+      color: #6F5A7D !important;
+      font-size: 14px !important;
+    }
+    .mileyo-store-link a, .mileyo-secondary-link a {
+      color: #6F5A7D !important;
+      font-weight: 500 !important;
+      text-decoration: none !important;
+    }
+    .order-list__item {
+      border-bottom: 1px solid #E8D9F2 !important;
+    }
+    .order-list__item:last-child {
+      border-bottom: 0 !important;
+    }
+    .order-list__product-image {
+      border-radius: 10px !important;
+    }
+    .order-list__item-title {
+      color: #3A2C45 !important;
+      font-size: 15px !important;
+      font-weight: 600 !important;
+    }
+    .order-list__item-variant, .order-list__item-refunded {
+      color: #6F5A7D !important;
+      font-size: 13px !important;
+    }
+    .disclaimer__subtext {
+      color: #6F5A7D !important;
+      font-size: 13px !important;
+      line-height: 20px !important;
+      margin: 0 !important;
+    }
+    @media only screen and (max-width: 480px) {
+      .mileyo-main-card .header__cell,
+      .mileyo-main-card .content__cell,
+      .mileyo-main-card .section__cell,
+      .mileyo-main-card .footer__cell { padding-left: 18px !important; padding-right: 18px !important; }
+      .actions-buttons,
+      .main-action-cell,
+      .button__cell,
+      .button__cell--shop-app,
+      .button__text,
+      .button__text--shop-app,
+      .button__cell--separator {
+        display: block !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+      }
+    }
+
+  </style>
+</head>
+
+  <body>
+    <table class="body">
+      <tr>
+        <td align="center">
+          <table class="mileyo-main-card" width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr>
+              <td class="mileyo-main-card__inner">
+          <table class="header row">
+  <tr>
+    <td class="header__cell">
+      <center>
+
+        <table class="container">
+          <tr>
+            <td>
+
+              <table class="row" width="100%">
+                <tr>
+                  <td class="shop-name__cell mileyo-header" align="center" style="text-align:center;" width="100%">
+                    <img class="mileyo-logo" src="https://cdn.shopify.com/s/files/1/0965/8512/2120/files/Mileyo_Mileyo_violet_sur_Blanc_1.png?v=1779889306" alt="Mileyo" width="120" height="37">
+                    <span class="mileyo-order-ref order-number__text">Commande {{ order_name }}</span>
+                    {%- if po_number %}
+                      <span class="mileyo-order-ref po-number__text">Bon de commande nº&nbsp;{{ po_number }}</span>
+                    {%- endif %}
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+        </table>
+
+      </center>
+    </td>
+  </tr>
+</table>
+
+          <table class="row content">
+  <tr>
+    <td class="content__cell">
+      <center>
+        <table class="container">
+          <tr>
+            <td>
+              
+            <h2>{{ email_title }}</h2>
+            <p>{{ email_body }}</p>
+            {% if fulfillment.estimated_delivery_at %}
+              <div class="mileyo-eta">
+                <span class="mileyo-eta__label">Livraison estimée</span>
+                <span class="mileyo-eta__date">{{ email_emphasis }}</span>
+              </div>
+            {% endif %}
+
+
+            {% if fulfillment.tracking_url or order_status_url %}
+                <table class="row actions">
+  <tr>
+    <td class="empty-line">&nbsp;</td>
+  </tr>
+  <tr>
+    <td class="actions__cell" align="center">
+      <table class="actions-buttons" cellpadding="0" cellspacing="0" border="0" align="center">
+        <tr>
+          <td class="button__cell button__cell--primary" align="center">
+            {% if fulfillment.tracking_url %}
+              <a href="{{ fulfillment.tracking_url }}" class="button__text">Suivre ma livraison</a>
+            {% elsif order_status_url %}
+              <a href="{{ order_status_url }}" class="button__text">Suivre ma commande</a>
+            {% endif %}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+            {% else %}
+              {% if shop.url %}
+    <table class="row actions">
+      <tr>
+        <td class="actions__cell" align="center">
+          <table class="link secondary-action-cell mileyo-store-link" align="center">
+            <tr>
+              <td class="link__cell" align="center"><a href="{{ shop.url }}">Visiter la boutique</a></td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+{% endif %}
+
+            {% endif %}
+
+
+
+{% if fulfillment.tracking_numbers.size > 0 %}
+  <div class="mileyo-tracking">
+    <span class="mileyo-tracking__label">Suivi</span>
+  {% if fulfillment.tracking_numbers.size == 1 and fulfillment.tracking_company and fulfillment.tracking_url %}
+    <div class="mileyo-tracking__row">
+      <span class="mileyo-tracking__company">{{ fulfillment.tracking_company }}</span>
+      <span class="mileyo-tracking__number"><a href="{{ fulfillment.tracking_url }}">{{ fulfillment.tracking_numbers.first }}</a></span>
+    </div>
+  {% elsif fulfillment.tracking_numbers.size == 1 %}
+    <div class="mileyo-tracking__row">
+      {% if fulfillment.tracking_company %}
+        <span class="mileyo-tracking__company">{{ fulfillment.tracking_company }}</span>
+      {% endif %}
+      <span class="mileyo-tracking__number">{{ fulfillment.tracking_numbers.first }}</span>
+    </div>
+  {% else %}
+    {% if fulfillment.tracking_company %}
+      <span class="mileyo-tracking__company">{{ fulfillment.tracking_company }}</span>
+    {% endif %}
+    {% for tracking_number in fulfillment.tracking_numbers %}
+      <div class="mileyo-tracking__row">
+        {% if fulfillment.tracking_urls[forloop.index0] %}
+          <span class="mileyo-tracking__number"><a href="{{ fulfillment.tracking_urls[forloop.index0] }}">{{ tracking_number }}</a></span>
+        {% else %}
+          <span class="mileyo-tracking__number">{{ tracking_number }}</span>
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% endif %}
+  </div>
+{% endif %}
+
+
+            </td>
+          </tr>
+        </table>
+      </center>
+    </td>
+  </tr>
+</table>
+
+          <table class="row section">
+  <tr>
+    <td class="section__cell">
+      <center>
+        <table class="container">
+          <tr>
+            <td>
+              <h3>Articles dans cet envoi</h3>
+            </td>
+          </tr>
+        </table>
+        <table class="container">
+          <tr>
+            <td>
+              
+<table class="row">
+  {% for line in fulfillment.fulfillment_line_items %}
+{% comment %} Skip child add-ons since they will be rendered under the parent line item {% endcomment %}
+{% unless line.line_item.nested_line_child? %}
+
+  {% assign is_parent = false %}
+  {% assign is_nested_line_parent = line.line_item.nested_line_parent? %}
+  {% if line.line_item.bundle_parent? or line.line_item.nested_line_parent? %}
+    {% assign is_parent = true %}
+  {% endif %}
+  {% if is_nested_line_parent %}
+    {% assign css_order_list_cell_nested_line_parent_class = 'order-list__parent-cell' %}
+    {% assign css_order_list_parent_image_cell_nested_line_parent_class = 'order-list__nested-parent-image-cell' %}
+  {% endif %}
+
+  <tr class="order-list__item">
+    <td class="order-list__item__cell {{ css_order_list_cell_nested_line_parent_class }}">
+      <table height="100%">
+        <td style="padding-bottom: 0px;">
+          <table height="100%">
+            <tr valign="top">
+              {% if false and is_parent %}
+                <td class="order-list__parent-image-cell {{ css_order_list_parent_image_cell_nested_line_parent_class }}">
+                  {% if line.line_item.image %}
+                    <img src="{{ line.line_item | img_url: 'compact_cropped' }}" align="left" width="60" height="60" class="order-list__product-image"/>
+                  {% else %}
+                    <div class="order-list__no-image-cell">
+                      <img src="{{ 'notifications/no-image.png' | shopify_asset_url }}" align="left" class="order-list__no-product-image"/>
+                    </div>
+                  {% endif %}
+                </td>
+              {% else %}
+                <td class="order-list__image-cell">
+                  {% if line.line_item.image %}
+                    <img src="{{ line.line_item | img_url: 'compact_cropped' }}" align="left" width="60" height="60" class="order-list__product-image"/>
+                  {% else %}
+                    <div class="order-list__no-image-cell">
+                      <img src="{{ 'notifications/no-image.png' | shopify_asset_url }}" align="left" width="60" height="60" class="order-list__no-product-image"/>
+                    </div>
+                  {% endif %}
+                </td>
+              {% endif %}
+            </tr>
+            {% if is_nested_line_parent %}
+              <tr height="100%">
+                <td style="padding: 0px;" height="100%">
+                  <table height="100%">
+                    <tr>
+                      <td height="100%" class="nested-line-item-spacer-cell">
+                        <div class="nested-line-item-spacer"></div>
+                      </td>
+                      <td height="100%" class="parent-vertical-line__cell">
+                        <div class="parent-vertical-line__content"></div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            {% endif %}
+          </table>
+        </td>
+
+        <td class="order-list__product-description-cell">
+          {% if line.line_item.presentment_title %}
+            {% assign line_title = line.line_item.presentment_title %}
+          {% elsif line.line_item.title %}
+            {% assign line_title = line.line_item.title %}
+          {% else %}
+            {% assign line_title = line.line_item.product.title %}
+          {% endif %}
+          {% if line.quantity < line.line_item.quantity %}
+            {% capture line_display %}
+              {{ line.quantity }}&nbsp;sur&nbsp;{{ line.line_item.quantity }}
+            {% endcapture %}
+          {% else %}
+            {% assign line_display = line.quantity %}
+          {% endif %}
+
+          <span class="order-list__item-title">{{ line_title }}&nbsp;&times;&nbsp;{{ line_display }}</span><br/>
+
+          {% if line.line_item.variant.title != 'Default Title' and is_parent == false %}
+            <span class="order-list__item-variant">{{ line.line_item.variant.title }}</span><br/>
+          {% elsif line.line_item.variant.title != 'Default Title' and line.line_item.nested_line_parent? %}
+            <span class="order-list__item-variant">{{ line.line_item.variant.title }}</span><br/>
+          {% elsif line.line_item.variant.title != 'Default Title' and line.line_item.bundle_parent? and false == false %}
+            <span class="order-list__item-variant">{{ line.line_item.variant.title }}</span><br/>
+          {% endif %}
+
+          {% if line.line_item.bundle_parent? %}
+            {% for child_line in line.line_item.bundle_components %}
+{% if true %}
+  {% assign css_class = 'order-list__bundle-item' %}
+  {% assign css_image_class = 'order-list__image-cell' %}
+  {% assign css_description_class = 'order-list__product-description-cell' %}
+{% else %}
+  {% assign css_class = 'order-list__deliverable-item_abandoned' %}
+  {% assign css_image_class = 'order-list__image-cell--nested-line-item' %}
+  {% assign css_description_class = 'order-list__product-description-cell--nested-line-item' %}
+{% endif %}
+
+<table height="100%">
+  <tr class="order-list__item">
+    <td class="{{ css_class }}" height="100%">
+      <table height="100%">
+        <td class="{{ css_image_class }}">
+          {% if child_line.image %}
+            <img src="{{ child_line | img_url: 'compact_cropped' }}" align="left" width="40" height="40" class="order-list__product-image small"/>
+          {% else %}
+            <div class="order-list__no-image-cell small">
+              <img src="{{ 'notifications/no-image.png' | shopify_asset_url }}" align="left" width="20" height="20" class="order-list__no-product-image small"/>
+            </div>
+          {% endif %}
+        </td>
+
+        <td class="{{ css_description_class }}">
+          {% if child_line.product.title %}
+            {% assign item_title = child_line.product.title %}
+          {% else %}
+            {% assign item_title = child_line.title %}
+          {% endif %}
+
+          {% assign item_display = child_line.quantity %}
+
+            <span class="order-list__item-title">{{ item_display }}&nbsp;&times;&nbsp;{{ item_title }}</span><br>
+
+          {% if child_line.variant.title != 'Default Title'%}
+            <span class="order-list__item-variant">{{ child_line.variant.title }}</span><br/>
+          {% endif %}
+          {% if child_line.selling_plan_allocation %}
+            <span class="order-list__item-variant">{{ child_line.selling_plan_allocation.selling_plan.name }}</span>
+          {% endif %}
+        </td>
+      </table>
+    </td>
+  </tr>
+</table>
+            {% endfor %}
+          {% else %}
+            {% for group in line.line_item.groups %}
+              {% if group.deliverable? %}
+                <span class="order-list__item-variant">Pour&nbsp;: {{ group.display_title }}</span><br/>
+              {% else %}
+                <span class="order-list__item-variant">Partie de&nbsp;: {{ group.display_title }}</span><br/>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+
+          {% if line.line_item.selling_plan_allocation %}
+            <span class="order-list__item-variant">{{ line.line_item.selling_plan_allocation.selling_plan.name }}</span><br/>
+          {% endif %}
+
+          {% if line.line_item.refunded_quantity > 0 %}
+            <span class="order-list__item-refunded">Remboursé</span>
+          {% endif %}
+
+          {% if line.line_item.discount_allocations %}
+            {% for discount_allocation in line.line_item.discount_allocations %}
+              {% if discount_allocation.discount_application.target_selection != 'all' %}
+              <p>
+                <span class="order-list__item-discount-allocation">
+                  <img src="{{ 'notifications/discounttag.png' | shopify_asset_url }}" width="18" height="18" class="discount-tag-icon" />
+                  <span>
+                    {{ discount_allocation.discount_application.title | upcase }}
+                    (-{{ discount_allocation.amount | money }})
+                  </span>
+                </span>
+              </p>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+        </td>
+      </table>
+
+      {% if line.line_item.nested_line_parent? %}
+        {% for child_line in line.line_item.nested_lines %}
+{% assign css_class = 'order-list__deliverable-item_abandoned' %}
+{% assign css_image_class = 'order-list__image-cell--nested-line-item' %}
+{% assign css_description_class = 'order-list__product-description-cell--nested-line-item' %}
+{% if forloop.last %}
+  {% assign css_curved_line_cell_container_class = 'curved-line-cell-container__top-spacer-cell--show-border' %}
+  {% assign css_hide_vertical_line_class = 'vertical-line__content--hide' %}
+  {% assign css_curved_line_cell_container_cell__no_padding_class = 'curved-line-cell-container__cell--no-padding' %}
+{% endif %}
+
+<table height="100%">
+  <tr class="order-list__item">
+    <td class="{{ css_class }}" height="100%">
+      <table height="100%">
+        <td class="{{ css_image_class }}">
+          {% if child_line.image %}
+            <img src="{{ child_line | img_url: 'compact_cropped' }}" align="left" width="40" height="40" class="order-list__product-image small"/>
+          {% else %}
+            <div class="order-list__no-image-cell small">
+              <img src="{{ 'notifications/no-image.png' | shopify_asset_url }}" align="left" width="20" height="20" class="order-list__no-product-image small"/>
+            </div>
+          {% endif %}
+        </td>
+
+        <td class="{{ css_description_class }}">
+          {% if child_line.product.title %}
+            {% assign item_title = child_line.product.title %}
+          {% else %}
+            {% assign item_title = child_line.title %}
+          {% endif %}
+
+          {% assign item_display = child_line.quantity %}
+
+            <span class="order-list__item-title">{{ item_display }}&nbsp;&times;&nbsp;{{ item_title }}</span><br>
+
+          {% if child_line.variant.title != 'Default Title'%}
+            <span class="order-list__item-variant">{{ child_line.variant.title }}</span><br/>
+          {% endif %}
+          {% if child_line.selling_plan_allocation %}
+            <span class="order-list__item-variant">{{ child_line.selling_plan_allocation.selling_plan.name }}</span>
+          {% endif %}
+        </td>
+      </table>
+    </td>
+  </tr>
+</table>
+        {% endfor %}
+      {% endif %}
+    </td>
+  </tr>
+
+{% endunless %}
+  {% endfor %}
+
+            </td>
+          </tr>
+        </table>
+      </center>
+    </td>
+  </tr>
+</table>
+
+          <table class="row footer">
+  <tr>
+    <td class="footer__cell">
+      <center>
+        <table class="container">
+          <tr>
+            <td>
+              
+              <p class="disclaimer__subtext">Une question ? Répondez simplement à cet e-mail ou contactez-nous à <a href="mailto:{{ shop.email }}">{{ shop.email }}</a>.</p>
+            </td>
+          </tr>
+        </table>
+      </center>
+    </td>
+  </tr>
+</table>
+
+<!-- shopify-shop-marketplace-footer -->
+
+              </td>
+            </tr>
+          </table>
+
+<img src="{{ 'notifications/spacer.png' | shopify_asset_url }}" class="spacer" height="1" />
+
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

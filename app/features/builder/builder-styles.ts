@@ -28,6 +28,7 @@ export const builderStyles = `
   --box-rail-gap: 12px;
   --box-rail-card-width-mobile: 78%;
   --box-rail-card-width-desktop: calc((100% - (3 * var(--box-rail-gap))) / 4.28);
+  --mileyo-font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -35,7 +36,7 @@ export const builderStyles = `
 body {
   background: var(--mileyo-cream);
   color: var(--mileyo-text);
-  font-family: "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--mileyo-font-sans);
   line-height: 1.45;
   margin: 0;
   -webkit-font-smoothing: antialiased;
@@ -507,9 +508,10 @@ body {
 
 .meal-filters-drawer-title {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: 1.25rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
 }
@@ -1724,9 +1726,10 @@ body {
 
 .meal-detail-drawer-title {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: 1.35rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
 }

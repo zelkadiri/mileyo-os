@@ -95,6 +95,7 @@ const BUSINESS_SUITES = [
   "72-email-outbox-meal-selection-confirmed.test.ts",
   "73-email-event-immediate-processing.test.ts",
   "74-email-template-design-system.test.ts",
+  "75-shopify-notification-templates.test.ts",
 ];
 
 const LEGACY_SUITES = [

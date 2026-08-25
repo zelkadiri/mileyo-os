@@ -116,6 +116,25 @@ const runSuite = async () => {
   );
 
   ctx.assertTrue(
+    "tokens: stack sans Inter / system (pas Georgia)",
+    tokensSource.includes("Inter, -apple-system") &&
+      !tokensSource.includes("Georgia") &&
+      !tokensSource.includes("Times New Roman") &&
+      !tokensSource.includes("Times, serif"),
+  );
+  ctx.assertTrue(
+    "tokens: display = même famille sans serif",
+    tokensSource.includes(
+      "export const mileyoEmailDisplayFontFamily = mileyoEmailFontFamily",
+    ),
+  );
+  ctx.assertTrue(
+    "tokens: titres letter-spacing négatif",
+    tokensSource.includes('letterSpacing: "-0.02em"') ||
+      tokensSource.includes("letterSpacing: '-0.02em'"),
+  );
+
+  ctx.assertTrue(
     "layout embarque MileyoEmailHeader",
     layoutSource.includes("MileyoEmailHeader"),
   );

@@ -31,7 +31,7 @@ export const TestEmail = ({
 const body: React.CSSProperties = {
   backgroundColor: "#f6f6f6",
   fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif',
   margin: 0,
   padding: "24px 0",
 };

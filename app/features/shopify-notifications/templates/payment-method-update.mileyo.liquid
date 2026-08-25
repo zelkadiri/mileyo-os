@@ -1,0 +1,244 @@
+{% capture email_title %}Mettez à jour votre moyen de paiement{% endcapture %}
+{% capture email_greeting %}Bonjour {{ display_name }},{% endcapture %}
+{% capture email_body %}Pour continuer à utiliser votre moyen de paiement avec Mileyo, veuillez vérifier ou mettre à jour vos informations de paiement.{% endcapture %}
+
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+  <title>{{ email_title }}</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width">
+  <link rel="stylesheet" type="text/css" href="/assets/notifications/styles.css">
+  <style>
+
+    /*
+      Mileyo Payment method update — single main card shell.
+      Shopify repeats .container per section; those stay transparent width wrappers.
+      Only .mileyo-main-card is the white surface.
+    */
+    body, .body {
+      background-color: #FCF8F6 !important;
+      color: #3A2C45 !important;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .body > tr > td {
+      padding: 24px 12px !important;
+    }
+    .mileyo-main-card {
+      background-color: #FFFFFF !important;
+      border: 0 !important;
+      border-radius: 16px !important;
+      box-shadow: none !important;
+      margin: 0 auto !important;
+      max-width: 600px !important;
+      width: 100% !important;
+    }
+    .mileyo-main-card__inner {
+      padding: 0 !important;
+    }
+    .mileyo-main-card .header,
+    .mileyo-main-card .content,
+    .mileyo-main-card .footer,
+    .mileyo-main-card .header__cell,
+    .mileyo-main-card .content__cell,
+    .mileyo-main-card .footer__cell {
+      background-color: transparent !important;
+      border: 0 !important;
+      box-shadow: none !important;
+    }
+    .mileyo-main-card .header__cell { padding: 24px 24px 12px !important; }
+    .mileyo-main-card .content__cell { padding: 4px 24px 28px !important; }
+    .mileyo-main-card .footer__cell {
+      border-top: 1px solid #E8D9F2 !important;
+      padding: 22px 24px 28px !important;
+    }
+    table.container, .container {
+      background-color: transparent !important;
+      border: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      max-width: 100% !important;
+      outline: none !important;
+      width: 100% !important;
+    }
+    h2, .shop-name__text {
+      color: #5A1B69 !important;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif !important;
+      font-weight: 700 !important;
+      letter-spacing: -0.02em !important;
+    }
+    h2 { font-size: 24px !important; line-height: 30px !important; margin: 0 0 20px !important; }
+    p { color: #3A2C45 !important; font-size: 15px !important; line-height: 22px !important; margin: 0 0 10px !important; }
+    a, a:hover, a:active, a:visited { color: #5A1B69 !important; }
+    .mileyo-logo { display: block; margin: 0 auto 8px; max-width: 120px; height: auto; width: 120px; }
+    .mileyo-header { text-align: center !important; padding: 0 !important; }
+    .empty-line,
+    td.empty-line {
+      display: none !important;
+      font-size: 0 !important;
+      height: 0 !important;
+      line-height: 0 !important;
+      padding: 0 !important;
+    }
+    .actions { margin: 0 !important; }
+    .actions__cell { padding: 18px 0 0 !important; text-align: center !important; }
+    .button__cell,
+    .main-action-cell .button__cell {
+      background: #5A1B69 !important;
+      background-color: #5A1B69 !important;
+      border: 0 !important;
+      border-radius: 28px !important;
+      box-sizing: border-box !important;
+      display: inline-block !important;
+      height: 46px !important;
+      max-width: 100% !important;
+      min-width: 280px !important;
+      padding: 0 !important;
+      text-align: center !important;
+      vertical-align: middle !important;
+      width: auto !important;
+    }
+    .button__text {
+      box-sizing: border-box !important;
+      color: #FFFFFF !important;
+      display: inline-block !important;
+      font-size: 14px !important;
+      font-weight: 700 !important;
+      height: 46px !important;
+      line-height: 46px !important;
+      max-width: 100% !important;
+      min-width: 280px !important;
+      padding: 0 20px !important;
+      text-align: center !important;
+      text-decoration: none !important;
+      vertical-align: middle !important;
+      width: auto !important;
+    }
+    .main-action-cell { margin: 0 auto !important; }
+    .mileyo-security-note {
+      color: #6F5A7D !important;
+      font-size: 13px !important;
+      line-height: 20px !important;
+      margin: 16px 0 0 !important;
+      text-align: center !important;
+    }
+    .disclaimer__subtext {
+      color: #6F5A7D !important;
+      font-size: 13px !important;
+      line-height: 20px !important;
+      margin: 0 !important;
+    }
+    @media only screen and (max-width: 480px) {
+      .mileyo-main-card .header__cell,
+      .mileyo-main-card .content__cell,
+      .mileyo-main-card .footer__cell { padding-left: 18px !important; padding-right: 18px !important; }
+      .main-action-cell,
+      .button__cell,
+      .button__text {
+        display: block !important;
+        max-width: 100% !important;
+        min-width: 100% !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+      }
+    }
+
+  </style>
+</head>
+
+  <body>
+    <table class="body">
+      <tr>
+        <td align="center">
+          <table class="mileyo-main-card" width="100%" cellpadding="0" cellspacing="0" role="presentation">
+            <tr>
+              <td class="mileyo-main-card__inner">
+          <table class="header row">
+  <tr>
+    <td class="header__cell">
+      <center>
+
+        <table class="container">
+          <tr>
+            <td>
+
+              <table class="row" width="100%">
+                <tr>
+                  <td class="shop-name__cell mileyo-header" align="center" style="text-align:center;" width="100%">
+                    <img class="mileyo-logo" src="https://cdn.shopify.com/s/files/1/0965/8512/2120/files/Mileyo_Mileyo_violet_sur_Blanc_1.png?v=1779889306" alt="{{ shop.name }}" width="120" height="37">
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+        </table>
+
+      </center>
+    </td>
+  </tr>
+</table>
+
+          <table class="row content">
+  <tr>
+    <td class="content__cell">
+      <center>
+        <table class="container">
+          <tr>
+            <td>
+              
+            <h2>{{ email_title }}</h2>
+            <p>{{ email_greeting }}</p>
+            <p>{{ email_body }}</p>
+            <table class="row actions">
+              <tr>
+                <td class="empty-line">&nbsp;</td>
+              </tr>
+              <tr>
+                <td class="actions__cell" align="center">
+                  <table class="button main-action-cell" cellpadding="0" cellspacing="0" border="0" align="center">
+                    <tr>
+                      <td class="button__cell" align="center"><a href="{{ email_confirmation_url }}" class="button__text">Mettre à jour mon moyen de paiement</a></td>
+                    </tr>
+                  </table>
+                  <p class="mileyo-security-note">Ce lien sécurisé est fourni par Shopify pour mettre à jour vos informations de paiement.</p>
+                </td>
+              </tr>
+            </table>
+
+            </td>
+          </tr>
+        </table>
+      </center>
+    </td>
+  </tr>
+</table>
+          <table class="row footer">
+  <tr>
+    <td class="footer__cell">
+      <center>
+        <table class="container">
+          <tr>
+            <td>
+              
+              <p class="disclaimer__subtext">Une question ? <a href="mailto:contact@mileyo.fr">contact@mileyo.fr</a><!-- shopify-shop-marketplace-footer --></p>
+            </td>
+          </tr>
+        </table>
+      </center>
+    </td>
+  </tr>
+</table>
+
+<img src="{{ 'notifications/spacer.png' | shopify_asset_url }}" class="spacer" height="1" />
+
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

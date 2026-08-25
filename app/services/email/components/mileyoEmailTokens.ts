@@ -42,13 +42,15 @@ export const mileyoEmailColors = {
   title: "#5A1B69",
 } as const;
 
-/** Body stack mirrors portal/builder (Segoe UI first). */
+/** Body + titles: modern sans only (no empattement). */
 export const mileyoEmailFontFamily =
-  '"Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif';
+  'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif';
 
-/** Display stack for titles — Georgia like portal hero titles. */
-export const mileyoEmailDisplayFontFamily =
-  'Georgia, "Times New Roman", Times, serif';
+/**
+ * Title stack — same sans family as body.
+ * Premium feel via weight / size / letter-spacing / color, not empattement.
+ */
+export const mileyoEmailDisplayFontFamily = mileyoEmailFontFamily;
 
 export const mileyoEmailBodyStyle: React.CSSProperties = {
   backgroundColor: mileyoEmailColors.background,

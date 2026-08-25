@@ -18,6 +18,7 @@ export const portalStyles = `
   --mileyo-radius-lg: 24px;
   --mileyo-shadow: 0 24px 70px rgba(185, 138, 215, 0.18);
   --mileyo-shadow-soft: 0 8px 28px rgba(90, 27, 105, 0.08);
+  --mileyo-font-sans: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -25,7 +26,7 @@ export const portalStyles = `
 body {
   background: linear-gradient(180deg, var(--mileyo-cream) 0%, #fff 42%, var(--mileyo-cream) 100%);
   color: var(--mileyo-text);
-  font-family: "Segoe UI", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--mileyo-font-sans);
   margin: 0;
 }
 
@@ -48,7 +49,9 @@ body {
 .portal-card h2,
 .portal-card h3 {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
+  font-weight: 700;
+  letter-spacing: -0.02em;
   margin: 0 0 10px;
 }
 
@@ -329,7 +332,7 @@ body {
 
 .dietitian-lead {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: 1.08rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -392,7 +395,7 @@ body {
 
 .next-box-hero .hero-week-title {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: clamp(1.52rem, 4vw, 2.05rem);
   font-weight: 700;
   letter-spacing: -0.025em;
@@ -426,7 +429,7 @@ body {
 
 .hero-delivery-value {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: clamp(1.02rem, 2.6vw, 1.18rem);
   font-weight: 700;
   letter-spacing: -0.015em;
@@ -547,7 +550,7 @@ body {
 
 .subscription-plan-box {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: 1.18rem;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -572,7 +575,7 @@ body {
 
 .subscription-plan-price {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: 1.28rem;
   font-weight: 700;
   letter-spacing: -0.025em;
@@ -833,8 +836,10 @@ body {
 
 .section-heading {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   margin: 0 0 12px;
 }
 
@@ -1611,9 +1616,10 @@ button:disabled,
 
 .meal-filters-drawer-title {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: 1.25rem;
   font-weight: 700;
+  letter-spacing: -0.02em;
   line-height: 1.25;
   margin: 0;
 }
@@ -2079,8 +2085,10 @@ button:disabled,
 
 .meal-nutrition-modal-head h2 {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   margin: 0;
 }
 
@@ -2319,7 +2327,7 @@ button:disabled,
 
 .meal-detail-title {
   color: var(--mileyo-purple-black);
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--mileyo-font-sans);
   font-size: 1.38rem;
   font-weight: 700;
   letter-spacing: -0.01em;
