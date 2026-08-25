@@ -87,7 +87,7 @@ const runSuite = async () => {
   ctx.assertTrue("created html non vide", createdRendered.html.length > 0);
   ctx.assertTrue(
     "created html contient le titre",
-    createdRendered.html.includes("Abonnement confirmé"),
+    createdRendered.html.includes("Votre abonnement est confirmé"),
   );
   ctx.assertTrue(
     "created html contient le prénom",
@@ -95,7 +95,7 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "created html contient mealsCount",
-    createdRendered.html.includes("repas par livraison"),
+    createdRendered.html.includes("8 repas"),
   );
   ctx.assertTrue(
     "created html contient nextDelivery",
@@ -104,6 +104,10 @@ const runSuite = async () => {
   ctx.assertTrue(
     "created html contient le lien portail",
     createdRendered.html.includes("/apps/box-builder/portal"),
+  );
+  ctx.assertTrue(
+    "created html contient CTA",
+    createdRendered.html.includes("Gérer mon abonnement"),
   );
   ctx.assertTrue("created text non vide", createdRendered.text.length > 0);
 
@@ -115,11 +119,11 @@ const runSuite = async () => {
   });
   ctx.assertTrue(
     "voluntary html contient le titre pause",
-    voluntaryRendered.html.includes("Abonnement en pause"),
+    voluntaryRendered.html.includes("Votre abonnement est en pause"),
   );
   ctx.assertTrue(
     "voluntary html contient confirmation pause",
-    voluntaryRendered.html.includes("mise en pause"),
+    voluntaryRendered.html.includes("maintenant en pause"),
   );
   ctx.assertTrue(
     "voluntary html contient reprendre",
@@ -127,7 +131,7 @@ const runSuite = async () => {
   );
   ctx.assertFalse(
     "voluntary html sans copie échec paiement",
-    voluntaryRendered.html.includes("échecs de paiement"),
+    voluntaryRendered.html.includes("finaliser le paiement"),
   );
 
   ctx.scenario("E. Renderer — SubscriptionPausedEmail payment_final_failure");
@@ -138,11 +142,13 @@ const runSuite = async () => {
   });
   ctx.assertTrue(
     "failure html contient le titre suspendu",
-    failureRendered.html.includes("Abonnement suspendu"),
+    failureRendered.html.includes(
+      "Votre abonnement est temporairement suspendu",
+    ),
   );
   ctx.assertTrue(
     "failure html explique échecs paiement",
-    failureRendered.html.includes("échecs de paiement"),
+    failureRendered.html.includes("finaliser le paiement"),
   );
   ctx.assertTrue(
     "failure html mentionne moyen de paiement",
@@ -150,7 +156,7 @@ const runSuite = async () => {
   );
   ctx.assertFalse(
     "failure html sans copie pause volontaire",
-    failureRendered.html.includes("mise en pause de votre abonnement"),
+    failureRendered.html.includes("maintenant en pause"),
   );
 
   ctx.scenario("F. Eligibility — SubscriptionCreatedEmail");

@@ -20,6 +20,7 @@ import {
   buildPaymentRecoveredEmailData,
   resolvePaymentEmailRecipient,
 } from "./payment-email.server";
+import { buildSubscriptionPortalUrl } from "./subscription-email.server";
 
 let testHandlerDb: typeof db | null = null;
 
@@ -146,10 +147,11 @@ export const processPaymentRecoveredEmailEvent = async ({
       data: buildPaymentRecoveredEmailData({
         customerName,
         orderId,
+        portalUrl: buildSubscriptionPortalUrl({ shop: selection.shop }),
         recoveryId: recoveryIds[0] ?? null,
         subscriptionContractId: selection.subscriptionContractId,
       }),
-      subject: "Votre paiement a été récupéré",
+      subject: "Votre paiement Mileyo est confirmé",
       template: "payment-recovered",
       to: recipient,
     },

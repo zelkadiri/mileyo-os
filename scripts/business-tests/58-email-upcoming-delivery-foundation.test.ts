@@ -414,7 +414,7 @@ const runSuite = async () => {
   ctx.assertTrue(
     "mealsCount rendu",
     renderedWithName.text.includes("8 repas") &&
-      renderedWithName.text.includes("prévu"),
+      renderedWithName.text.includes("dans votre box"),
   );
   ctx.assertTrue(
     "liste repas rendue",
@@ -436,13 +436,13 @@ const runSuite = async () => {
       renderedWithName.html.includes("Contactez notre équipe"),
   );
   ctx.assertTrue(
-    "support absent sans casser le rendu",
-    renderedWithoutName.html.length > 0 &&
-      !renderedWithoutName.html.includes("Une question ?"),
+    "support fallback sans supportHref",
+    renderedWithoutName.html.includes("Une question ?") &&
+      renderedWithoutName.html.includes("Nous contacter"),
   );
   ctx.assertTrue(
-    "wording prudent — prévue",
-    renderedWithName.html.includes("est prévue pour"),
+    "wording prudent — arrive bientôt",
+    renderedWithName.html.includes("arrive bientôt"),
   );
   ctx.assertFalse(
     "absence promesse sera livrée à",
@@ -469,12 +469,19 @@ const runSuite = async () => {
   }
 
   ctx.assertTrue(
-    "header Mileyo",
-    renderedWithName.html.includes("Mileyo"),
+    "header logo Mileyo",
+    renderedWithName.html.includes("cdn.shopify.com") ||
+      renderedWithName.html.includes('alt="Mileyo"') ||
+      renderedWithName.html.includes("Mileyo"),
   );
   ctx.assertTrue(
     "titre prochaine box",
-    renderedWithName.html.includes("Votre prochaine box"),
+    renderedWithName.html.includes("Votre box arrive bientôt"),
+  );
+  ctx.assertFalse(
+    "pas de fallback URL long sous CTA",
+    renderedWithName.html.includes("Le bouton ne fonctionne pas") ||
+      renderedWithName.html.includes("Copiez ce lien"),
   );
 
   return finishSuite("58-email-upcoming-delivery-foundation", ctx);

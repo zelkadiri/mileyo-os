@@ -86,7 +86,7 @@ const runSuite = async () => {
   ctx.assertTrue("confirmed html non vide", confirmedRendered.html.length > 0);
   ctx.assertTrue(
     "confirmed html contient le titre",
-    confirmedRendered.html.includes("Sélection confirmée"),
+    confirmedRendered.html.includes("Vos repas sont confirmés"),
   );
   ctx.assertTrue(
     "confirmed html contient la date",
@@ -94,7 +94,7 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "confirmed html contient CTA modifier",
-    confirmedRendered.html.includes("Modifier ma sélection"),
+    confirmedRendered.html.includes("Modifier mes repas"),
   );
   ctx.assertTrue("confirmed text non vide", confirmedRendered.text.length > 0);
 
@@ -109,11 +109,11 @@ const runSuite = async () => {
   ctx.assertTrue("reminder html non vide", reminderRendered.html.length > 0);
   ctx.assertTrue(
     "reminder html contient le titre",
-    reminderRendered.html.includes("Choisissez vos repas"),
+    reminderRendered.html.includes("Il est temps de choisir vos repas"),
   );
   ctx.assertTrue(
-    "reminder html mentionne carry-over",
-    reminderRendered.html.includes("dernière livraison"),
+    "reminder html mentionne cutoff",
+    reminderRendered.html.includes("lundi 24 août à 23h59"),
   );
   ctx.assertTrue(
     "reminder html contient CTA choisir",

@@ -15,6 +15,7 @@ import db from "../db.server";
 import {
   buildPaymentFailedEmailData,
   buildPaymentRecoveredEmailData,
+  buildSubscriptionPortalUrl,
   isMileyoTransactionalEmailEnabled,
   formatPaymentEmailDateTime,
   resolvePaymentEmailRecipient,
@@ -496,6 +497,7 @@ const trySendMileyoPaymentFailedEmail = async ({
       customerName,
       failureCount: recovery.failureCount,
       nextRetryAt: formatPaymentEmailDateTime(recovery.nextRetryAt),
+      portalUrl: buildSubscriptionPortalUrl({ shop: selection.shop }),
       recoveryId: recovery.id,
       subscriptionContractId: selection.subscriptionContractId,
     }),
@@ -1170,10 +1172,11 @@ const trySendMileyoPaymentRecoveredEmail = async ({
     data: buildPaymentRecoveredEmailData({
       customerName,
       orderId,
+      portalUrl: buildSubscriptionPortalUrl({ shop: selection.shop }),
       recoveryId: primaryRecoveryId,
       subscriptionContractId: selection.subscriptionContractId,
     }),
-    subject: "Votre paiement a été récupéré",
+    subject: "Votre paiement Mileyo est confirmé",
     template: "payment-recovered",
     to: recipient,
   });

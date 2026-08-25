@@ -68,7 +68,11 @@ export const formatPaymentEmailDateTime = (
     return null;
   }
 
-  return date.toLocaleString("fr-FR", {
+  // Client-facing premium FR date — no clock / seconds.
+  return date.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
     timeZone: SUBSCRIPTION_CYCLE_TIMEZONE,
   });
 };
@@ -137,12 +141,14 @@ export const buildPaymentFailedEmailData = ({
   customerName,
   failureCount,
   nextRetryAt,
+  portalUrl,
   recoveryId,
   subscriptionContractId,
 }: {
   customerName?: string | null;
   failureCount?: number | null;
   nextRetryAt?: string | Date | null;
+  portalUrl?: string | null;
   recoveryId?: string | null;
   subscriptionContractId?: string | null;
 }): PaymentFailedEmailData => ({
@@ -152,6 +158,7 @@ export const buildPaymentFailedEmailData = ({
     nextRetryAt instanceof Date
       ? nextRetryAt.toISOString()
       : (nextRetryAt ?? null),
+  portalUrl: portalUrl?.trim() || null,
   recoveryId: recoveryId ?? null,
   subscriptionContractId: subscriptionContractId ?? null,
 });
@@ -159,16 +166,19 @@ export const buildPaymentFailedEmailData = ({
 export const buildPaymentRecoveredEmailData = ({
   customerName,
   orderId,
+  portalUrl,
   recoveryId,
   subscriptionContractId,
 }: {
   customerName?: string | null;
   orderId?: string | null;
+  portalUrl?: string | null;
   recoveryId?: string | null;
   subscriptionContractId?: string | null;
 }): PaymentRecoveredEmailData => ({
   customerName: customerName?.trim() || null,
   orderId: orderId ?? null,
+  portalUrl: portalUrl?.trim() || null,
   recoveryId: recoveryId ?? null,
   subscriptionContractId: subscriptionContractId ?? null,
 });

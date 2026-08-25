@@ -22,6 +22,7 @@ import {
   formatPaymentEmailDateTime,
   resolvePaymentEmailRecipient,
 } from "./payment-email.server";
+import { buildSubscriptionPortalUrl } from "./subscription-email.server";
 
 let testHandlerDb: typeof db | null = null;
 
@@ -138,6 +139,7 @@ export const processPaymentFailedEmailEvent = async ({
         customerName,
         failureCount: recovery.failureCount,
         nextRetryAt: formatPaymentEmailDateTime(recovery.nextRetryAt),
+        portalUrl: buildSubscriptionPortalUrl({ shop: selection.shop }),
         recoveryId: recovery.id,
         subscriptionContractId: selection.subscriptionContractId,
       }),

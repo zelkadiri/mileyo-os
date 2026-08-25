@@ -74,6 +74,7 @@ export type PaymentFailedEmailData = {
   customerName?: string | null;
   failureCount?: number | null;
   nextRetryAt?: string | null;
+  portalUrl?: string | null;
   recoveryId?: string | null;
   subscriptionContractId?: string | null;
 };
@@ -82,6 +83,7 @@ export type PaymentFailedEmailData = {
 export type PaymentRecoveredEmailData = {
   customerName?: string | null;
   orderId?: string | null;
+  portalUrl?: string | null;
   recoveryId?: string | null;
   subscriptionContractId?: string | null;
 };

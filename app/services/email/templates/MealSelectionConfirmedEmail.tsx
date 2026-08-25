@@ -1,14 +1,14 @@
 import * as React from "react";
+
 import {
-  Body,
-  Container,
-  Head,
-  Heading,
-  Html,
-  Link,
-  Preview,
-  Text,
-} from "react-email";
+  formatEmailGreeting,
+  MileyoEmailButton,
+  MileyoEmailLayout,
+  MileyoEmailText,
+  MileyoInfoCard,
+  MileyoMealList,
+  mileyoEmailMutedStyle,
+} from "../components";
 
 export type MealSelectionConfirmedEmailProps = {
   customerName?: string | null;
@@ -28,111 +28,43 @@ export const MealSelectionConfirmedEmail = ({
   deliveryDateLabel,
   selectedMeals = [],
   selectedCount,
-  mealsCount,
   portalUrl,
 }: MealSelectionConfirmedEmailProps) => {
-  const greeting = customerName?.trim()
-    ? `Bonjour ${customerName.trim()},`
-    : "Bonjour,";
+  const greeting = formatEmailGreeting(customerName);
   const count = selectedCount ?? selectedMeals.length;
+  const previewDate = deliveryDateLabel?.trim() || "prochaine livraison";
 
   return (
-    <Html lang="fr">
-      <Head />
-      <Preview>Votre sélection de repas est confirmée</Preview>
-      <Body style={body}>
-        <Container style={container}>
-          <Heading style={heading} as="h1">
-            Sélection confirmée
-          </Heading>
-          <Text style={text}>{greeting}</Text>
-          <Text style={text}>
-            Votre sélection de repas pour la livraison du{" "}
-            <strong>{deliveryDateLabel}</strong> est bien enregistrée.
-          </Text>
-          {mealsCount != null && mealsCount > 0 ? (
-            <Text style={text}>
-              Vous avez choisi {count} repas sur {mealsCount}.
-            </Text>
-          ) : null}
-          {selectedMeals.length > 0 ? (
-            <>
-              <Text style={text}>Vos repas :</Text>
-              <Text style={list}>
-                {selectedMeals.map((meal, index) => (
-                  <span key={`${meal}-${index}`}>
-                    {index > 0 ? <br /> : null}• {meal}
-                  </span>
-                ))}
-              </Text>
-            </>
-          ) : null}
-          {portalUrl ? (
-            <Text style={text}>
-              Vous pouvez modifier votre sélection jusqu&apos;à la date limite
-              depuis votre{" "}
-              <Link href={portalUrl} style={link}>
-                espace client
-              </Link>
-              .
-            </Text>
-          ) : null}
-          {portalUrl ? (
-            <Text style={text}>
-              <Link href={portalUrl} style={ctaLink}>
-                Modifier ma sélection
-              </Link>
-            </Text>
-          ) : null}
-        </Container>
-      </Body>
-    </Html>
+    <MileyoEmailLayout
+      preview={`Vos repas pour le ${previewDate} sont enregistrés.`}
+      eyebrow="Votre sélection"
+      title="Vos repas sont confirmés"
+    >
+      <MileyoEmailText>{greeting}</MileyoEmailText>
+      <MileyoEmailText>
+        Votre sélection pour la livraison du {deliveryDateLabel} est bien
+        enregistrée.
+      </MileyoEmailText>
+      {count > 0 ? (
+        <MileyoInfoCard
+          items={[
+            {
+              label: "Votre sélection",
+              value: `${count} repas sélectionnés`,
+            },
+          ]}
+        />
+      ) : null}
+      <MileyoMealList meals={selectedMeals} />
+      <MileyoEmailText style={mileyoEmailMutedStyle}>
+        Vous pouvez encore modifier votre sélection jusqu&apos;à la date
+        limite.
+      </MileyoEmailText>
+      {portalUrl ? (
+        <MileyoEmailButton href={portalUrl}>Modifier mes repas</MileyoEmailButton>
+      ) : null}
+    </MileyoEmailLayout>
   );
-};
-
-const body: React.CSSProperties = {
-  backgroundColor: "#f6f6f6",
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-  margin: 0,
-  padding: "24px 0",
-};
-
-const container: React.CSSProperties = {
-  backgroundColor: "#ffffff",
-  margin: "0 auto",
-  maxWidth: "560px",
-  padding: "24px",
-};
-
-const heading: React.CSSProperties = {
-  color: "#111111",
-  fontSize: "20px",
-  fontWeight: 600,
-  margin: "0 0 16px",
-};
-
-const text: React.CSSProperties = {
-  color: "#333333",
-  fontSize: "14px",
-  lineHeight: "22px",
-  margin: "0 0 12px",
-};
-
-const list: React.CSSProperties = {
-  ...text,
-  margin: "0 0 16px",
-};
-
-const link: React.CSSProperties = {
-  color: "#111111",
-  textDecoration: "underline",
-};
-
-const ctaLink: React.CSSProperties = {
-  color: "#111111",
-  fontWeight: 600,
-  textDecoration: "underline",
 };
 
 export default MealSelectionConfirmedEmail;

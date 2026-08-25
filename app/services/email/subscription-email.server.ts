@@ -95,7 +95,9 @@ export const formatSubscriptionEmailDeliveryDate = (
   }
 
   return date.toLocaleDateString("fr-FR", {
-    dateStyle: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
     timeZone: SUBSCRIPTION_CYCLE_TIMEZONE,
   });
 };
@@ -113,7 +115,10 @@ export const formatSubscriptionEmailDateTime = (
     return null;
   }
 
-  return date.toLocaleString("fr-FR", {
+  return date.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
     timeZone: SUBSCRIPTION_CYCLE_TIMEZONE,
   });
 };

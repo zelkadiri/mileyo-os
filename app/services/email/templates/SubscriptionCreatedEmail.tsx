@@ -1,14 +1,13 @@
 import * as React from "react";
+
 import {
-  Body,
-  Container,
-  Head,
-  Heading,
-  Html,
-  Link,
-  Preview,
-  Text,
-} from "react-email";
+  formatEmailGreeting,
+  MileyoEmailButton,
+  MileyoEmailLayout,
+  MileyoEmailText,
+  MileyoInfoCard,
+  mileyoEmailMutedStyle,
+} from "../components";
 
 export type SubscriptionCreatedEmailProps = {
   customerName?: string | null;
@@ -27,87 +26,50 @@ export const SubscriptionCreatedEmail = ({
   nextDelivery,
   portalUrl,
 }: SubscriptionCreatedEmailProps) => {
-  const greeting = customerName?.trim()
-    ? `Bonjour ${customerName.trim()},`
-    : "Bonjour,";
+  const greeting = formatEmailGreeting(customerName);
+  const infoItems = [
+    ...(nextDelivery
+      ? [{ label: "Prochaine livraison", value: nextDelivery }]
+      : []),
+    ...(mealsCount != null && mealsCount > 0
+      ? [
+          {
+            label: "Votre box",
+            value: `${mealsCount} repas`,
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <Html lang="fr">
-      <Head />
-      <Preview>Votre abonnement Mileyo est actif</Preview>
-      <Body style={body}>
-        <Container style={container}>
-          <Heading style={heading} as="h1">
-            Abonnement confirmé
-          </Heading>
-          <Text style={text}>{greeting}</Text>
-          <Text style={text}>
-            Votre abonnement Mileyo est bien en place. Nous préparons vos
-            prochaines livraisons selon la sélection que vous avez choisie.
-          </Text>
-          {mealsCount != null && mealsCount > 0 ? (
-            <Text style={text}>
-              Votre box contient {mealsCount} repas par livraison.
-            </Text>
-          ) : null}
-          {nextDelivery ? (
-            <Text style={text}>
-              Prochaine livraison prévue : {nextDelivery}
-            </Text>
-          ) : null}
-          {portalUrl ? (
-            <Text style={text}>
-              Vous pouvez gérer votre abonnement, modifier vos repas ou mettre
-              en pause depuis votre{" "}
-              <Link href={portalUrl} style={link}>
-                espace client
-              </Link>
-              .
-            </Text>
-          ) : (
-            <Text style={text}>
-              Vous pourrez bientôt gérer votre abonnement depuis votre espace
-              client Mileyo.
-            </Text>
-          )}
-        </Container>
-      </Body>
-    </Html>
+    <MileyoEmailLayout
+      preview="Votre abonnement Mileyo est maintenant actif."
+      eyebrow="Bienvenue chez Mileyo"
+      title="Votre abonnement est confirmé"
+    >
+      <MileyoEmailText>{greeting}</MileyoEmailText>
+      <MileyoEmailText>
+        Tout est prêt. Votre abonnement Mileyo est maintenant actif.
+      </MileyoEmailText>
+      <MileyoInfoCard items={infoItems} />
+      {portalUrl ? (
+        <>
+          <MileyoEmailButton href={portalUrl}>
+            Gérer mon abonnement
+          </MileyoEmailButton>
+          <MileyoEmailText style={{ ...mileyoEmailMutedStyle, marginTop: 16 }}>
+            Vous pourrez modifier vos repas, gérer vos prochaines livraisons ou
+            mettre votre abonnement en pause depuis votre espace client.
+          </MileyoEmailText>
+        </>
+      ) : (
+        <MileyoEmailText style={mileyoEmailMutedStyle}>
+          Vous pourrez bientôt gérer votre abonnement depuis votre espace
+          client Mileyo.
+        </MileyoEmailText>
+      )}
+    </MileyoEmailLayout>
   );
-};
-
-const body: React.CSSProperties = {
-  backgroundColor: "#f6f6f6",
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-  margin: 0,
-  padding: "24px 0",
-};
-
-const container: React.CSSProperties = {
-  backgroundColor: "#ffffff",
-  margin: "0 auto",
-  maxWidth: "560px",
-  padding: "24px",
-};
-
-const heading: React.CSSProperties = {
-  color: "#111111",
-  fontSize: "20px",
-  fontWeight: 600,
-  margin: "0 0 16px",
-};
-
-const text: React.CSSProperties = {
-  color: "#333333",
-  fontSize: "14px",
-  lineHeight: "22px",
-  margin: "0 0 12px",
-};
-
-const link: React.CSSProperties = {
-  color: "#111111",
-  textDecoration: "underline",
 };
 
 export default SubscriptionCreatedEmail;

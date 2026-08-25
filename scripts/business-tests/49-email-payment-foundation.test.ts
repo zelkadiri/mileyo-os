@@ -74,12 +74,15 @@ const runSuite = async () => {
   const failedRendered = await renderEmailTemplate("payment-failed", {
     customerName: "Alice",
     failureCount: 1,
-    nextRetryAt: "dimanche 00:05",
+    nextRetryAt: "26 août 2026",
+    portalUrl: "https://mileyo-dev.myshopify.com/apps/box-builder/portal",
   });
   ctx.assertTrue("failed html non vide", failedRendered.html.length > 0);
   ctx.assertTrue(
     "failed html contient le titre",
-    failedRendered.html.includes("Paiement échoué"),
+    failedRendered.html.includes(
+      "Un problème est survenu avec votre paiement",
+    ),
   );
   ctx.assertTrue(
     "failed html contient le prénom",
@@ -87,13 +90,23 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "failed html contient nextRetryAt",
-    failedRendered.html.includes("dimanche 00:05"),
+    failedRendered.html.includes("26 août 2026"),
+  );
+  ctx.assertFalse(
+    "failed html sans copy technique tentative",
+    failedRendered.html.includes("Tentative") &&
+      failedRendered.html.includes("enregistrée"),
+  );
+  ctx.assertTrue(
+    "failed html contient CTA",
+    failedRendered.html.includes("Gérer mon abonnement"),
   );
   ctx.assertTrue("failed text non vide", failedRendered.text.length > 0);
 
   ctx.scenario("D. Renderer — PaymentRecoveredEmail");
   const recoveredRendered = await renderEmailTemplate("payment-recovered", {
     customerName: "Bob",
+    portalUrl: "https://mileyo-dev.myshopify.com/apps/box-builder/portal",
   });
   ctx.assertTrue(
     "recovered html non vide",
@@ -101,11 +114,15 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "recovered html contient le titre",
-    recoveredRendered.html.includes("Paiement récupéré"),
+    recoveredRendered.html.includes("Paiement confirmé"),
   );
   ctx.assertTrue(
     "recovered html contient le prénom",
     recoveredRendered.html.includes("Bob"),
+  );
+  ctx.assertTrue(
+    "recovered html contient CTA",
+    recoveredRendered.html.includes("Voir mon abonnement"),
   );
   ctx.assertTrue(
     "recovered text non vide",
