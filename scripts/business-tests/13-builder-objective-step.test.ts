@@ -413,11 +413,15 @@ const runSuite = () => {
 
   const addToCartFn =
     clientSource.match(
-      /function addSelectedBoxToCart[\s\S]*?\n {2}function /,
+      /function createBuilderCheckout[\s\S]*?\n {2}function /,
     )?.[0] ?? "";
-  ctx.assertTrue("cart add present", addToCartFn.includes("/cart/add.js"));
+  ctx.assertTrue(
+    "storefront checkout intent present",
+    addToCartFn.includes("CREATE_CHECKOUT_INTENT") ||
+      addToCartFn.includes("create_builder_checkout"),
+  );
   ctx.assertFalse(
-    "objective launch pricing not injected into cart",
+    "objective launch pricing not injected into checkout",
     /launchPrice|launchPricePerMeal|discountCents|LAUNCH_DISCOUNT/.test(
       addToCartFn,
     ),

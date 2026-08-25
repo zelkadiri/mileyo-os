@@ -2,7 +2,7 @@
 
 client_id = "f2f34d1691ccbc32d9abf403695d0f9c"
 name = "Mileyo Subcription Os Dev"
-application_url = "https://116cbd82be5f.ngrok.app"
+application_url = "https://78e4cf784f59.ngrok.app"
 embedded = true
 
 [build]
@@ -54,7 +54,7 @@ api_version = "2026-04"
 # TODO(box-v2-inventory): After merging, deploy updated Shopify app config and reinstall /
 # approve new scopes on each shop (dev + production): read_locations, write_inventory.
 # Required to activate Box V2 InventoryItems at Online Store fulfillment locations.
-scopes = "read_orders,read_own_subscription_contracts,write_metaobject_definitions,write_metaobjects,write_own_subscription_contracts,write_products,read_customers,write_customers,read_locations,write_inventory"
+scopes = "read_orders,read_own_subscription_contracts,write_metaobject_definitions,write_metaobjects,write_own_subscription_contracts,write_products,read_customers,write_customers,read_locations,write_inventory,unauthenticated_read_product_listings,unauthenticated_read_checkouts,unauthenticated_write_checkouts"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
@@ -62,6 +62,6 @@ use_legacy_install_flow = false
 redirect_urls = [ ]
 
 [app_proxy]
-url = "https://116cbd82be5f.ngrok.app/apps/box-builder"
+url = "https://78e4cf784f59.ngrok.app/apps/box-builder"
 subpath = "box-builder"
 prefix = "apps"

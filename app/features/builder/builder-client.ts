@@ -3,9 +3,11 @@ import { mealNutritionFormatRuntimeScript } from "../../utils/mealNutritionForma
 import { mealFilterRuntimeScript } from "./builder-filter-runtime";
 import {
   BUILDER_CART_PREPARE_ERROR,
-  builderCartRuntimeScript,
 } from "./builder-cart";
-import { CAPTURE_CHECKOUT_LEAD_INTENT } from "./builder-email";
+import {
+  CAPTURE_CHECKOUT_LEAD_INTENT,
+  CREATE_BUILDER_CHECKOUT_INTENT,
+} from "./builder-email";
 import {
   BUILDER_STEP_COUNT,
   getBuilderStepLabel,
@@ -105,6 +107,7 @@ export const builderClientScript = `
   var recapMeals = document.getElementById("recap-meals");
   var recapEmail = document.getElementById("recap-email");
   var CAPTURE_LEAD_INTENT = ${JSON.stringify(CAPTURE_CHECKOUT_LEAD_INTENT)};
+  var CREATE_CHECKOUT_INTENT = ${JSON.stringify(CREATE_BUILDER_CHECKOUT_INTENT)};
   var CART_PREPARE_ERROR = ${JSON.stringify(BUILDER_CART_PREPARE_ERROR)};
   var mealDetailDrawer = document.getElementById("meal-detail-drawer");
   var mealDetailDrawerMedia = document.getElementById("meal-detail-drawer-media");
@@ -121,7 +124,6 @@ export const builderClientScript = `
   var mealFiltersOpen = false;
 
   ${mealFilterRuntimeScript}
-  ${builderCartRuntimeScript}
   ${mealNutritionFormatRuntimeScript}
 
   function getDeliveryWindowOptions() {
@@ -238,10 +240,6 @@ export const builderClientScript = `
       launchPricePerMealCents: Math.round(launchPriceCents / mealCount),
       regularPriceCents: regularPriceCents
     };
-  }
-
-  function getVariantCartId(variantId) {
-    return getShopifyNumericId(variantId);
   }
 
   function isBoxAvailable(box) {
@@ -1585,7 +1583,7 @@ export const builderClientScript = `
     showStep("email");
   });
 
-  function addSelectedBoxToCart() {
+  function createBuilderCheckout() {
     if (!selectedBox || !isMealsSelectionComplete()) {
       return Promise.reject(new Error("incomplete_box"));
     }
@@ -1603,8 +1601,7 @@ export const builderClientScript = `
       return Promise.reject(new Error("invalid_delivery"));
     }
 
-    var variantId = getVariantCartId(selectedBox.variantId);
-    if (!variantId) {
+    if (!selectedBox.variantId) {
       setError("Cette box n’a pas de variante disponible.");
       return Promise.reject(new Error("missing_variant"));
     }
@@ -1615,100 +1612,49 @@ export const builderClientScript = `
       return Promise.reject(new Error("missing_selling_plan"));
     }
 
-    var sellingPlanId = getVariantCartId(selectedBox.sellingPlanId);
-    if (!sellingPlanId) {
-      setError("Abonnement bientôt disponible pour cette box.");
-      updateSummary();
-      return Promise.reject(new Error("missing_selling_plan"));
+    if (!isBuilderEmailValid(selectedEmail)) {
+      setError("Entrez une adresse e-mail valide.");
+      showStep("email");
+      return Promise.reject(new Error("invalid_email"));
     }
 
-    var properties = {
-      "Type de commande": "Abonnement hebdomadaire",
-      "Nombre de repas": String(selectedBox.mealCount),
-      "_mileyo_delivery_date": selectedScheduledDeliveryDate,
-      "Date de livraison souhaitée":
-        selectedWindow.rangeLabel +
-        " (" +
-        selectedScheduledDeliveryDate +
-        ")"
-    };
-    var propertyIndex = 1;
+    var meals = [];
     data.meals.forEach(function (meal) {
       var quantity = selectedMeals[meal.variantId] || 0;
-      for (var index = 0; index < quantity; index += 1) {
-        properties["Plat " + propertyIndex] = meal.title;
-        propertyIndex += 1;
+      if (quantity > 0) {
+        meals.push({
+          title: meal.title,
+          quantity: quantity
+        });
       }
     });
 
-    var item = {
-      id: variantId,
-      properties: properties,
-      quantity: 1,
-      selling_plan: sellingPlanId
-    };
-
-    return fetch("/cart/add.js", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: [item]
-      })
-    }).then(function (response) {
-      if (!response.ok) throw new Error("Add to cart failed");
-      window.location.href = "/checkout";
-    });
-  }
-
-  function fetchStorefrontCart() {
-    return fetch("/cart.js", {
-      headers: { Accept: "application/json" }
-    }).then(function (response) {
-      if (!response.ok) throw new Error("cart_inspect_failed");
-      return response.json();
-    });
-  }
-
-  function removeCartLineByKey(key) {
-    return fetch("/cart/change.js", {
+    return fetch(window.location.pathname + window.location.search, {
       method: "POST",
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        id: key,
-        quantity: 0
+        intent: CREATE_CHECKOUT_INTENT,
+        email: selectedEmail,
+        boxVariantId: selectedBox.variantId,
+        sellingPlanId: selectedBox.sellingPlanId,
+        mealCount: selectedBox.mealCount,
+        scheduledDeliveryDate: selectedScheduledDeliveryDate,
+        deliveryRangeLabel: selectedWindow.rangeLabel,
+        meals: meals
       })
     }).then(function (response) {
-      if (!response.ok) throw new Error("cart_remove_failed");
-    });
-  }
-
-  function removeExistingMileyoBoxes(cart) {
-    var items = cart && cart.items ? cart.items : [];
-    var catalogNumericIds = toCatalogNumericIds(data.boxes);
-    var keys = collectMileyoBuilderBoxLineKeys(items, catalogNumericIds);
-    var chain = Promise.resolve();
-    keys.forEach(function (key) {
-      chain = chain.then(function () {
-        return removeCartLineByKey(key);
+      return response.json().then(function (payload) {
+        if (!response.ok || !payload || payload.ok !== true || !payload.checkoutUrl) {
+          throw new Error("checkout_create_failed");
+        }
+        window.location.href = String(payload.checkoutUrl);
+      }, function () {
+        throw new Error("checkout_create_failed");
       });
     });
-    return chain;
-  }
-
-  function replaceSelectedBoxInCart() {
-    return fetchStorefrontCart()
-      .catch(function () {
-        throw new Error("cart_inspect_failed");
-      })
-      .then(function (cart) {
-        return removeExistingMileyoBoxes(cart);
-      })
-      .then(function () {
-        return addSelectedBoxToCart();
-      });
   }
 
   function captureCheckoutLead() {
@@ -1821,11 +1767,11 @@ export const builderClientScript = `
     updateRecapCta();
     setError("");
 
-    replaceSelectedBoxInCart()
+    createBuilderCheckout()
       .catch(function (error) {
         isSubmittingCheckout = false;
         updateRecapCta();
-        if (error && (error.message === "cart_inspect_failed" || error.message === "cart_remove_failed")) {
+        if (error && error.message === "checkout_create_failed") {
           setError(CART_PREPARE_ERROR);
           return;
         }

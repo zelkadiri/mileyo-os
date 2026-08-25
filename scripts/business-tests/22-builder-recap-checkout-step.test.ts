@@ -34,6 +34,13 @@ import {
   getBuilderStepLabel,
   getBuilderStepProgressPercent,
 } from "../../app/features/builder/builder-objective-options";
+import {
+  buildBuilderCheckoutLineAttributes,
+  toShopifyResourceGid,
+} from "../../app/features/builder/builder-checkout.server";
+import {
+  CREATE_BUILDER_CHECKOUT_INTENT,
+} from "../../app/features/builder/builder-email";
 import { createBusinessTestContext, finishSuite } from "./_framework";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -116,8 +123,12 @@ const runSuite = () => {
   );
   const emailSubmit = extractFunction(clientSource, "handleEmailSubmit");
   const recapSubmit = extractFunction(clientSource, "handleRecapSubmit");
-  const replaceCart = extractFunction(clientSource, "replaceSelectedBoxInCart");
-  const addToCartFn = extractFunction(clientSource, "addSelectedBoxToCart");
+  const createCheckoutFn = extractFunction(clientSource, "createBuilderCheckout");
+  const checkoutServerSource = readRepoFile(
+    "app/features/builder/builder-checkout.server.ts",
+  );
+  const routeSource = readRepoFile("app/routes/apps.box-builder.tsx");
+  const emailModuleSource = readRepoFile("app/features/builder/builder-email.ts");
 
   ctx.scenario("A. Step system — 6 steps including recap");
   ctx.assertEqual("step count is 6", BUILDER_STEP_COUNT, 6);
@@ -407,19 +418,23 @@ const runSuite = () => {
   );
   ctx.assertEqual("UI constant remains 20", FIRST_BOX_LAUNCH_DISCOUNT_EUR, 20);
 
-  const addFn =
-    clientSource.match(/function addSelectedBoxToCart[\s\S]*?\n {2}function /)?.[0] ??
+  const createCheckoutFnMatch =
+    clientSource.match(/function createBuilderCheckout[\s\S]*?\n {2}function /)?.[0] ??
     "";
-  ctx.assertTrue("cart add function present", addFn.includes("/cart/add.js"));
-  ctx.assertFalse(
-    "launch pricing not injected into cart add",
-    /launchPrice|launchPricePerMeal|LAUNCH_DISCOUNT|discountCents/.test(addFn),
+  ctx.assertTrue(
+    "storefront checkout function present",
+    createCheckoutFnMatch.includes("CREATE_CHECKOUT_INTENT") ||
+      createCheckoutFn.includes("create_builder_checkout"),
   );
   ctx.assertFalse(
-    "cart properties exclude launch price fields",
-    /launch|discount|promo/i.test(
-      clientSource.match(/var properties = \{[\s\S]*?\n {4}\};/)?.[0] ?? "",
+    "launch pricing not injected into checkout create",
+    /launchPrice|launchPricePerMeal|LAUNCH_DISCOUNT|discountCents/.test(
+      createCheckoutFnMatch,
     ),
+  );
+  ctx.assertFalse(
+    "ajax cart properties block removed",
+    /var properties = \{/.test(clientSource),
   );
 
   ctx.scenario("F. Recap guard + derived state");
@@ -444,13 +459,90 @@ const runSuite = () => {
       clientSource.includes("selectedEmail"),
   );
 
-  ctx.scenario("G. Cart inspection — no clear");
-  ctx.assertTrue('GET /cart.js', clientSource.includes('fetch("/cart.js"'));
+  ctx.scenario("G. Storefront Cart checkout — buyerIdentity email");
+  ctx.assertEqual(
+    "checkout intent constant",
+    CREATE_BUILDER_CHECKOUT_INTENT,
+    "create_builder_checkout",
+  );
+  ctx.assertEqual(
+    "variant gid passthrough",
+    toShopifyResourceGid("ProductVariant", V2_VARIANT_GID),
+    V2_VARIANT_GID,
+  );
+  ctx.assertEqual(
+    "variant numeric to gid",
+    toShopifyResourceGid("ProductVariant", V2_VARIANT_NUMERIC),
+    V2_VARIANT_GID,
+  );
+  ctx.assertEqual(
+    "selling plan numeric to gid",
+    toShopifyResourceGid("SellingPlan", "3530227852"),
+    "gid://shopify/SellingPlan/3530227852",
+  );
+  const lineAttributes = buildBuilderCheckoutLineAttributes({
+    deliveryRangeLabel: "Lun–Mer",
+    mealCount: 2,
+    meals: [
+      { quantity: 1, title: "Poulet" },
+      { quantity: 1, title: "Saumon" },
+    ],
+    scheduledDeliveryDate: "2026-08-20",
+  });
   ctx.assertTrue(
-    "inspect before add",
-    replaceCart.includes("fetchStorefrontCart") &&
-      replaceCart.includes("removeExistingMileyoBoxes") &&
-      replaceCart.includes("addSelectedBoxToCart"),
+    "attributes include order type",
+    lineAttributes.some(
+      (attribute) =>
+        attribute.key === "Type de commande" &&
+        attribute.value === "Abonnement hebdomadaire",
+    ),
+  );
+  ctx.assertTrue(
+    "attributes include delivery technical",
+    lineAttributes.some(
+      (attribute) =>
+        attribute.key === "_mileyo_delivery_date" &&
+        attribute.value === "2026-08-20",
+    ),
+  );
+  ctx.assertTrue(
+    "attributes include Plat lines",
+    lineAttributes.some((attribute) => attribute.key === "Plat 1") &&
+      lineAttributes.some((attribute) => attribute.key === "Plat 2"),
+  );
+  ctx.assertFalse(
+    "attributes exclude email",
+    lineAttributes.some((attribute) =>
+      attribute.key.toLowerCase().includes("email"),
+    ),
+  );
+  ctx.assertTrue(
+    "create_builder_checkout intent in email module",
+    emailModuleSource.includes('CREATE_BUILDER_CHECKOUT_INTENT = "create_builder_checkout"'),
+  );
+  ctx.assertTrue(
+    "route handles create_builder_checkout",
+    routeSource.includes("CREATE_BUILDER_CHECKOUT_INTENT") &&
+      routeSource.includes("createBuilderStorefrontCheckout"),
+  );
+  ctx.assertTrue(
+    "server cartCreate mutation",
+    checkoutServerSource.includes("cartCreate") &&
+      checkoutServerSource.includes("buyerIdentity") &&
+      checkoutServerSource.includes("sellingPlanId") &&
+      checkoutServerSource.includes("checkoutUrl"),
+  );
+  ctx.assertTrue(
+    "server uses unauthenticated.storefront",
+    checkoutServerSource.includes("unauthenticated.storefront"),
+  );
+  ctx.assertTrue(
+    "recap submit uses createBuilderCheckout",
+    recapSubmit.includes("createBuilderCheckout"),
+  );
+  ctx.assertFalse(
+    "no ajax cart/add in client",
+    clientSource.includes("/cart/add.js"),
   );
   ctx.assertFalse(
     "no cart/clear.js in client",
@@ -461,11 +553,7 @@ const runSuite = () => {
     cartSource.includes("/cart/clear.js"),
   );
   ctx.assertTrue(
-    "recap submit uses replaceSelectedBoxInCart",
-    recapSubmit.includes("replaceSelectedBoxInCart"),
-  );
-  ctx.assertTrue(
-    "inspect failure copy",
+    "prepare failure copy reused",
     cartSource.includes(BUILDER_CART_PREPARE_ERROR) &&
       clientSource.includes("CART_PREPARE_ERROR"),
   );
@@ -528,7 +616,7 @@ const runSuite = () => {
     }),
   );
 
-  ctx.scenario("J. Targeted remove — extras survive");
+  ctx.scenario("J. Line attribute helpers still identify extras");
   const mixedCart = [v2BoxLine(), dessertLine(), drinkLine()];
   ctx.assertEqual(
     "only old box key collected",
@@ -536,10 +624,8 @@ const runSuite = () => {
     `${V2_VARIANT_NUMERIC}:hash-v2`,
   );
   ctx.assertTrue(
-    "change.js uses line key quantity 0",
-    clientSource.includes('fetch("/cart/change.js"') &&
-      clientSource.includes("quantity: 0") &&
-      clientSource.includes("removeCartLineByKey"),
+    "cart helper still exports line key collector",
+    cartSource.includes("collectMileyoBuilderBoxLineKeys"),
   );
 
   ctx.scenario("K. Multiple old boxes");
@@ -555,70 +641,64 @@ const runSuite = () => {
     !removedKeys.includes("9001:tiramisu"),
   );
 
-  ctx.scenario("L. Inspection / remove failure blocks add");
+  ctx.scenario("L. Storefront checkout failure blocks redirect");
   ctx.assertTrue(
-    "inspect fail error name",
-    clientSource.includes('"cart_inspect_failed"'),
+    "checkout create fail error name",
+    clientSource.includes('"checkout_create_failed"'),
   );
   ctx.assertTrue(
-    "remove fail error name",
-    clientSource.includes('"cart_remove_failed"'),
-  );
-  ctx.assertTrue(
-    "recap catch blocks add on inspect/remove fail",
-    recapSubmit.includes("cart_inspect_failed") &&
-      recapSubmit.includes("cart_remove_failed") &&
+    "recap catch shows prepare error on create fail",
+    recapSubmit.includes("checkout_create_failed") &&
       recapSubmit.includes("CART_PREPARE_ERROR"),
   );
-  ctx.assertTrue(
-    "add only after cleanup in replaceSelectedBoxInCart",
-    /removeExistingMileyoBoxes[\s\S]*addSelectedBoxToCart/.test(replaceCart),
+  ctx.assertFalse(
+    "no ajax inspect/remove fail path",
+    clientSource.includes('"cart_inspect_failed"') ||
+      clientSource.includes('"cart_remove_failed"'),
   );
 
-  ctx.scenario("M. Final cart add + properties + redirect");
+  ctx.scenario("M. Storefront payload + checkoutUrl redirect");
   ctx.assertTrue(
-    "selling_plan still set",
-    clientSource.includes("selling_plan: sellingPlanId"),
+    "sellingPlanId included in checkout POST",
+    createCheckoutFn.includes("sellingPlanId: selectedBox.sellingPlanId"),
   );
   ctx.assertTrue(
-    "delivery technical property",
-    clientSource.includes(
-      '"_mileyo_delivery_date": selectedScheduledDeliveryDate',
+    "delivery date included in checkout POST",
+    createCheckoutFn.includes(
+      "scheduledDeliveryDate: selectedScheduledDeliveryDate",
     ),
   );
-  const propertiesMatch = clientSource.match(
-    /var properties = \{[\s\S]*?\n {4}\};/,
-  );
-  ctx.assertTrue("cart properties block exists", Boolean(propertiesMatch));
-  ctx.assertFalse(
-    "email not in cart properties",
-    Boolean(propertiesMatch?.[0].toLowerCase().includes("email")),
-  );
-  ctx.assertFalse(
-    "no recap marker property",
-    Boolean(propertiesMatch?.[0].includes("_mileyo_recap")),
+  ctx.assertTrue(
+    "buyerIdentity email set server-side",
+    checkoutServerSource.includes("buyerIdentity: {") &&
+      checkoutServerSource.includes("email: input.email"),
   );
   ctx.assertTrue(
-    "Plat N still from meal.title",
-    clientSource.includes('properties["Plat " + propertyIndex] = meal.title'),
+    "Plat N from meal titles on server",
+    checkoutServerSource.includes("`Plat ${propertyIndex}`"),
   );
   ctx.assertTrue(
-    "redirect checkout",
-    addToCartFn.includes('window.location.href = "/checkout"'),
+    "redirect uses checkoutUrl",
+    createCheckoutFn.includes("payload.checkoutUrl") &&
+      createCheckoutFn.includes("window.location.href = String(payload.checkoutUrl)"),
+  );
+  ctx.assertFalse(
+    "no bare /checkout redirect",
+    clientSource.includes('window.location.href = "/checkout"'),
   );
   ctx.assertFalse(
     "no redirect to /cart page",
     clientSource.includes('window.location.href = "/cart"'),
   );
   ctx.assertFalse(
-    "no checkout email query",
+    "no checkout email query hack",
     clientSource.includes("checkout[email]") ||
       clientSource.includes("checkout%5Bemail%5D"),
   );
-  ctx.assertFalse(
-    "no Storefront buyer identity",
-    clientSource.includes("cartBuyerIdentityUpdate") ||
-      clientSource.includes("buyerIdentity"),
+  ctx.assertTrue(
+    "Storefront buyer identity used",
+    checkoutServerSource.includes("buyerIdentity") &&
+      clientSource.includes("CREATE_CHECKOUT_INTENT"),
   );
   ctx.assertFalse(
     "no discount code in checkout URL",

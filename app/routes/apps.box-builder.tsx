@@ -7,6 +7,12 @@ import {
   fetchBuilderMealOptions,
 } from "../features/builder/builder-catalog.server";
 import {
+  CREATE_BUILDER_CHECKOUT_INTENT,
+  createBuilderStorefrontCheckout,
+  parseCreateBuilderCheckoutBody,
+  parseCreateBuilderCheckoutInput,
+} from "../features/builder/builder-checkout.server";
+import {
   CAPTURE_CHECKOUT_LEAD_INTENT,
   captureCheckoutLead,
   getBuilderShopFromRequest,
@@ -83,6 +89,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       { message: "Impossible de continuer pour le moment. Réessayez.", ok: false },
       400,
     );
+  }
+
+  const checkoutBody = parseCreateBuilderCheckoutBody(payload);
+  if (checkoutBody?.intent === CREATE_BUILDER_CHECKOUT_INTENT) {
+    const input = parseCreateBuilderCheckoutInput(checkoutBody);
+    if (!input) {
+      return jsonResponse(
+        { message: "Impossible de préparer votre panier. Réessayez.", ok: false },
+        400,
+      );
+    }
+
+    const result = await createBuilderStorefrontCheckout({ input, shop });
+    return jsonResponse(result, result.ok ? 200 : 400);
   }
 
   const body = parseCaptureCheckoutLeadBody(payload);

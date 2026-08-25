@@ -1,5 +1,8 @@
 export const CAPTURE_CHECKOUT_LEAD_INTENT = "capture_checkout_lead";
 
+/** App-proxy intent: Storefront Cart create + buyerIdentity email → checkoutUrl. */
+export const CREATE_BUILDER_CHECKOUT_INTENT = "create_builder_checkout";
+
 export const BUILDER_EMAIL_MAX_LENGTH = 254;
 
 export const BUILDER_EMAIL_ERROR = {

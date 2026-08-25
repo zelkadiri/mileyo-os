@@ -141,7 +141,12 @@ const runSuite = () => {
     Boolean(mealsClickMatch?.[0].includes("/cart/add.js")),
   );
   ctx.assertTrue(
-    "cart add exists for recap checkout",
+    "storefront checkout exists for recap",
+    clientSource.includes("createBuilderCheckout") &&
+      clientSource.includes("CREATE_CHECKOUT_INTENT"),
+  );
+  ctx.assertFalse(
+    "ajax cart add removed from checkout path",
     clientSource.includes('fetch("/cart/add.js"'),
   );
 
@@ -258,24 +263,23 @@ const runSuite = () => {
 
   ctx.scenario("F. Cart payload unchanged — no email/promo properties");
   ctx.assertTrue(
-    "selling_plan still set",
-    clientSource.includes("selling_plan: sellingPlanId"),
+    "sellingPlanId sent to storefront checkout",
+    clientSource.includes("sellingPlanId: selectedBox.sellingPlanId"),
   );
   ctx.assertTrue(
-    "delivery technical property",
-    clientSource.includes('"_mileyo_delivery_date": selectedScheduledDeliveryDate'),
+    "delivery date sent to storefront checkout",
+    clientSource.includes(
+      "scheduledDeliveryDate: selectedScheduledDeliveryDate",
+    ),
   );
-  const propertiesMatch = clientSource.match(
-    /var properties = \{[\s\S]*?\n {4}\};/,
+  ctx.assertTrue(
+    "meals payload built from meal.title",
+    clientSource.includes("title: meal.title") &&
+      clientSource.includes("quantity: quantity"),
   );
-  ctx.assertTrue("cart properties block exists", Boolean(propertiesMatch));
   ctx.assertFalse(
-    "email not in cart properties",
-    Boolean(propertiesMatch?.[0].toLowerCase().includes("email")),
-  );
-  ctx.assertFalse(
-    "promo not in cart properties",
-    Boolean(propertiesMatch?.[0].toLowerCase().includes("promo")),
+    "ajax cart properties block removed",
+    /var properties = \{/.test(clientSource),
   );
 
   ctx.scenario("G. App Proxy lead capture");
