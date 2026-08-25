@@ -1,5 +1,5 @@
 /**
- * Admin email observability (EMAIL-6G-A) — read-only types.
+ * Admin email observability (EMAIL-6G-A / EMAIL-6G-B) — shared types.
  */
 
 import type {
@@ -8,6 +8,22 @@ import type {
 } from "../../constants/emailEvent";
 
 export const EMAIL_ADMIN_PAGE_SIZE = 25;
+
+/** POST intent for safe manual retry of a failed EmailEvent. */
+export const RETRY_EMAIL_EVENT_INTENT = "retryEmailEvent" as const;
+
+export type EmailsActionData = {
+  eventId: string | null;
+  message: string;
+  ok: boolean;
+  status:
+    | "sent"
+    | "failed"
+    | "cancelled"
+    | "not_eligible"
+    | "not_found"
+    | "invalid_request";
+};
 
 export const EMAIL_ADMIN_PERIODS = ["24h", "7d", "30d", "all"] as const;
 export type EmailAdminPeriod = (typeof EMAIL_ADMIN_PERIODS)[number];

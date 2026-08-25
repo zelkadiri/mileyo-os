@@ -1,10 +1,17 @@
 /**
- * Admin email observability (EMAIL-6G-A) — read-only UI.
- * No retry / cancel / delete / write actions.
+ * Admin email observability (EMAIL-6G-A / EMAIL-6G-B).
+ * List + detail read-only; manual retry only for failed events in the drawer.
  */
 
-import type { ReactNode } from "react";
-import { Form, Link, useLoaderData, useSearchParams } from "react-router";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  Form,
+  Link,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 
 import {
   EMAIL_EVENT_STATUSES,
@@ -54,6 +61,7 @@ import {
   mutedStyle,
   pageShellStyle,
   paginationRowStyle,
+  primaryButtonStyle,
   providerCellStyle,
   rowOpenStyle,
   secondaryButtonStyle,
@@ -75,8 +83,11 @@ import {
   truncateCellStyle,
   warningBannerStyle,
 } from "./emails-styles";
-import type { EmailAdminListItem } from "./emails-types";
-import { EMAIL_ADMIN_PERIODS } from "./emails-types";
+import type { EmailAdminListItem, EmailsActionData } from "./emails-types";
+import {
+  EMAIL_ADMIN_PERIODS,
+  RETRY_EMAIL_EVENT_INTENT,
+} from "./emails-types";
 
 type PageData = Awaited<ReturnType<typeof loadEmailsPageData>>;
 
@@ -118,6 +129,36 @@ const StatusBadge = ({ event }: { event: EmailAdminListItem }) => {
   );
 };
 
+const actionBannerStyle = (ok: boolean) =>
+  ({
+    background: ok ? "#ecfdf5" : "#fef2f2",
+    border: `1px solid ${ok ? "#a7f3d0" : "#fecaca"}`,
+    borderRadius: "10px",
+    color: ok ? "#065f46" : "#991b1b",
+    fontSize: "0.9rem",
+    margin: "0 0 0.75rem",
+    padding: "0.65rem 0.85rem",
+  }) as const;
+
+const confirmNoteStyle = {
+  color: "#6b7280",
+  fontSize: "0.8rem",
+  margin: "0.5rem 0 0",
+} as const;
+
+const confirmCopyStyle = {
+  color: "#374151",
+  fontSize: "0.9rem",
+  margin: "0.35rem 0 0",
+} as const;
+
+const confirmActionsStyle = {
+  display: "flex",
+  flexWrap: "wrap" as const,
+  gap: "0.5rem",
+  marginTop: "0.75rem",
+} as const;
+
 export default function EmailsPage() {
   const {
     detail,
@@ -128,7 +169,18 @@ export default function EmailsPage() {
     totalCount,
     totalPages,
   } = useLoaderData<PageData>();
+  const actionData = useActionData<EmailsActionData>();
+  const navigation = useNavigation();
   const [searchParams] = useSearchParams();
+  const [confirmRetry, setConfirmRetry] = useState(false);
+
+  const isRetrySubmitting =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") === RETRY_EMAIL_EVENT_INTENT;
+
+  useEffect(() => {
+    setConfirmRetry(false);
+  }, [detail?.id, actionData]);
 
   const hasActiveFilters =
     filters.status !== "all" ||
@@ -152,6 +204,12 @@ export default function EmailsPage() {
   const successRateLabel = formatSuccessRatePercent(metrics.successRate24h);
   const successRateEmpty = metrics.successRate24h == null;
 
+  const showActionFeedback =
+    actionData != null &&
+    (actionData.eventId == null ||
+      detail == null ||
+      actionData.eventId === detail.id);
+
   return (
     <s-page heading="Emails">
       <div style={pageShellStyle}>
@@ -161,7 +219,10 @@ export default function EmailsPage() {
               <p style={introStyle}>
                 Suivez l’état des emails transactionnels Mileyo.
               </p>
-              <p style={introSubStyle}>Données en lecture seule.</p>
+              <p style={introSubStyle}>
+                Observabilité en lecture seule — retry manuel possible sur les
+                échecs.
+              </p>
             </div>
 
             <div style={summaryGridStyle}>
@@ -466,6 +527,12 @@ export default function EmailsPage() {
             </div>
 
             <div style={detailGridStyle}>
+              {showActionFeedback && actionData ? (
+                <p style={actionBannerStyle(actionData.ok)}>
+                  {actionData.message}
+                </p>
+              ) : null}
+
               <section style={detailSectionStyle}>
                 <h3 style={detailSectionTitleStyle}>État</h3>
                 <DetailField
@@ -599,9 +666,79 @@ export default function EmailsPage() {
                 </ol>
               </section>
 
-              <p style={{ ...introSubStyle, marginTop: "0.25rem" }}>
-                Lecture seule — aucun retry.
-              </p>
+              {detail.status === "failed" ? (
+                <section style={detailSectionStyle}>
+                  <h3 style={detailSectionTitleStyle}>Actions</h3>
+                  {!confirmRetry ? (
+                    <>
+                      <button
+                        disabled={isRetrySubmitting}
+                        onClick={() => setConfirmRetry(true)}
+                        style={{
+                          ...primaryButtonStyle,
+                          opacity: isRetrySubmitting ? 0.6 : 1,
+                        }}
+                        type="button"
+                      >
+                        Réessayer l’envoi
+                      </button>
+                      <p style={confirmNoteStyle}>
+                        À utiliser après avoir vérifié la cause de l’échec.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ ...detailValueStyle, fontWeight: 600 }}>
+                        Réessayer cet email ?
+                      </p>
+                      <p style={confirmCopyStyle}>
+                        Une nouvelle tentative d’envoi sera effectuée
+                        immédiatement avec la même clé d’idempotence.
+                      </p>
+                      <p style={confirmNoteStyle}>
+                        À utiliser après avoir vérifié la cause de l’échec.
+                      </p>
+                      <div style={confirmActionsStyle}>
+                        <button
+                          disabled={isRetrySubmitting}
+                          onClick={() => setConfirmRetry(false)}
+                          style={secondaryButtonStyle}
+                          type="button"
+                        >
+                          Annuler
+                        </button>
+                        <Form
+                          action={buildFilterHref(searchParams, {
+                            event: detail.id,
+                          })}
+                          method="post"
+                        >
+                          <input
+                            name="intent"
+                            type="hidden"
+                            value={RETRY_EMAIL_EVENT_INTENT}
+                          />
+                          <input
+                            name="eventId"
+                            type="hidden"
+                            value={detail.id}
+                          />
+                          <button
+                            disabled={isRetrySubmitting}
+                            style={{
+                              ...primaryButtonStyle,
+                              opacity: isRetrySubmitting ? 0.6 : 1,
+                            }}
+                            type="submit"
+                          >
+                            {isRetrySubmitting ? "Envoi…" : "Réessayer"}
+                          </button>
+                        </Form>
+                      </div>
+                    </>
+                  )}
+                </section>
+              ) : null}
             </div>
           </aside>
         </>

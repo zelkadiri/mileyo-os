@@ -1,6 +1,6 @@
 /**
- * Admin email observability (EMAIL-6G-A) — read-only Prisma loader.
- * Never mutates EmailEvent.
+ * Admin email observability (EMAIL-6G-A) — Prisma loader (read-only).
+ * Mutations live in emails-actions.server.ts (EMAIL-6G-B).
  */
 
 import {

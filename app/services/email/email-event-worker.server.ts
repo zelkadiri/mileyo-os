@@ -11,6 +11,7 @@ import {
   EMAIL_EVENT_PROCESSING_BATCH_LIMIT,
   EMAIL_EVENT_PROCESSING_STALE_AFTER_MINUTES,
   EMAIL_EVENT_RETRY_DELAY_MINUTES,
+  EMAIL_EVENT_STATUS,
   EMAIL_EVENT_WORKER_MAX_ERRORS,
 } from "../../constants/emailEvent";
 import {
@@ -26,6 +27,7 @@ import {
 import {
   cancelEmailEvent,
   claimEmailEvent,
+  claimFailedEmailEventForManualRetry,
   getEmailEventById,
   listDueEmailEvents,
   markEmailEventFailed,
@@ -105,6 +107,49 @@ export type ProcessEmailEventByIdOptions = {
   now?: Date;
 };
 
+export type ManualRetryEmailEventResult =
+  | {
+      attemptCount: number;
+      eventId: string;
+      eventType: string;
+      providerId?: string | null;
+      status: "sent";
+    }
+  | {
+      attemptCount: number;
+      errorCode?: string;
+      eventId: string;
+      eventType: string;
+      message?: string;
+      status: "failed";
+    }
+  | {
+      attemptCount: number;
+      eventId: string;
+      eventType: string;
+      status: "cancelled";
+    }
+  | {
+      eventId: string;
+      reason?: string;
+      status: "not_eligible";
+    }
+  | {
+      eventId: string;
+      status: "not_found";
+    };
+
+export type ManualRetryEmailEventOptions = {
+  client?: EmailEventDb;
+  eventId: string;
+  handlers?: EmailEventHandlerRegistry;
+  now?: Date;
+  shop: string;
+};
+
+/** How retryable handler failures are applied after a claim. */
+type EmailEventFailureMode = "automatic" | "manual";
+
 type AppliedHandlerOutcome =
   | { kind: "sent"; providerId?: string }
   | { kind: "cancelled" }
@@ -170,11 +215,13 @@ const safeErrorMessage = (error: unknown): string => {
 const applyHandlerResult = async ({
   client,
   event,
+  failureMode,
   now,
   result,
 }: {
   client?: EmailEventDb;
   event: EmailEventRecord;
+  failureMode: EmailEventFailureMode;
   now: Date;
   result: EmailEventHandlerResult;
 }): Promise<AppliedHandlerOutcome> => {
@@ -213,7 +260,11 @@ const applyHandlerResult = async ({
   const errorCode = result.errorCode ?? "retryable_failure";
   const message = result.message ?? "retryable failure";
 
-  if (event.attemptCount >= EMAIL_EVENT_MAX_ATTEMPTS) {
+  // Manual retry = one explicit attempt. Never reopen an automatic retry chain.
+  if (
+    failureMode === "manual" ||
+    event.attemptCount >= EMAIL_EVENT_MAX_ATTEMPTS
+  ) {
     await markEmailEventFailed({
       client,
       eventId: event.id,
@@ -234,16 +285,19 @@ const applyHandlerResult = async ({
 };
 
 /**
- * Shared post-claim processing for batch worker and processEmailEventById.
+ * Shared post-claim processing for batch worker, processEmailEventById,
+ * and manual admin retry.
  */
 const processClaimedEvent = async ({
   client,
   event,
+  failureMode,
   handlers,
   now,
 }: {
   client?: EmailEventDb;
   event: EmailEventRecord;
+  failureMode: EmailEventFailureMode;
   handlers: EmailEventHandlerRegistry;
   now: Date;
 }): Promise<AppliedHandlerOutcome> => {
@@ -272,7 +326,7 @@ const processClaimedEvent = async ({
     };
   }
 
-  return applyHandlerResult({ client, event, now, result });
+  return applyHandlerResult({ client, event, failureMode, now, result });
 };
 
 const recordClaimedOutcomeInSummary = ({
@@ -365,6 +419,7 @@ export const processEmailEventById = async (
     const outcome = await processClaimedEvent({
       client,
       event: claimResult.event,
+      failureMode: "automatic",
       handlers,
       now,
     });
@@ -405,6 +460,116 @@ export const processEmailEventById = async (
     return {
       errorCode: "worker_transition_error",
       eventId,
+      message,
+      status: "failed",
+    };
+  }
+};
+
+/**
+ * Operator-triggered retry for a failed EmailEvent (EMAIL-6G-B).
+ *
+ * Claims failed → processing (shop-scoped, may exceed automatic max attempts),
+ * then runs the same handler path. Retryable failures become terminal failed
+ * (no pending +60min automatic chain).
+ */
+export const manualRetryEmailEvent = async (
+  options: ManualRetryEmailEventOptions,
+): Promise<ManualRetryEmailEventResult> => {
+  const now = options.now ?? new Date();
+  const handlers = options.handlers ?? EMAIL_EVENT_HANDLER_REGISTRY;
+  const { client, eventId, shop } = options;
+
+  const existing = await getEmailEventById({ client, eventId });
+
+  if (!existing) {
+    return { eventId, status: "not_found" };
+  }
+
+  // Shop isolation before claim (claim also guards shop+status atomically).
+  if (existing.shop !== shop) {
+    return {
+      eventId,
+      reason: "wrong_shop",
+      status: "not_eligible",
+    };
+  }
+
+  if (existing.status !== EMAIL_EVENT_STATUS.FAILED) {
+    return {
+      eventId,
+      reason: existing.status,
+      status: "not_eligible",
+    };
+  }
+
+  const claimResult = await claimFailedEmailEventForManualRetry({
+    client,
+    eventId,
+    now,
+    shop,
+  });
+
+  if (!claimResult.claimed) {
+    return {
+      eventId,
+      reason: "not_failed_anymore",
+      status: "not_eligible",
+    };
+  }
+
+  const claimed = claimResult.event;
+
+  try {
+    const outcome = await processClaimedEvent({
+      client,
+      event: claimed,
+      failureMode: "manual",
+      handlers,
+      now,
+    });
+
+    if (outcome.kind === "sent") {
+      return {
+        attemptCount: claimed.attemptCount,
+        eventId,
+        eventType: claimed.eventType,
+        providerId: outcome.providerId ?? null,
+        status: "sent",
+      };
+    }
+
+    if (outcome.kind === "cancelled") {
+      return {
+        attemptCount: claimed.attemptCount,
+        eventId,
+        eventType: claimed.eventType,
+        status: "cancelled",
+      };
+    }
+
+    return {
+      attemptCount: claimed.attemptCount,
+      errorCode: outcome.errorCode,
+      eventId,
+      eventType: claimed.eventType,
+      message: outcome.message,
+      status: "failed",
+    };
+  } catch (error) {
+    const message = safeErrorMessage(error);
+    console.log("[emailEventWorker] manualRetryEmailEvent transition error", {
+      attemptCount: claimed.attemptCount,
+      eventId,
+      eventType: claimed.eventType,
+      message,
+      shop,
+    });
+    return {
+      attemptCount: claimed.attemptCount,
+      errorCode: "worker_transition_error",
+      eventId,
+      eventType: claimed.eventType,
       message,
       status: "failed",
     };
@@ -481,6 +646,7 @@ export const processDueEmailEvents = async (
         const outcome = await processClaimedEvent({
           client,
           event: claimResult.event,
+          failureMode: "automatic",
           handlers,
           now,
         });

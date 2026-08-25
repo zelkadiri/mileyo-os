@@ -47,16 +47,6 @@ const readRepoFile = (relativePath: string) =>
 const countOccurrences = (source: string, pattern: RegExp): number =>
   (source.match(pattern) || []).length;
 
-const FORBIDDEN_WRITE_ACTIONS = [
-  "Retry",
-  "Resend",
-  "Cancel",
-  "Reset",
-  "Delete",
-  "method=\"post\"",
-  "method='post'",
-];
-
 const FORBIDDEN_MIGRATION_TOUCH = [
   'prisma migrate',
   "schema.prisma",
@@ -106,38 +96,32 @@ const runSuite = async () => {
     1,
   );
 
-  ctx.scenario("B. Read-only — aucune action write dans UI / data");
+  ctx.scenario("B. Observabilité — liste lecture seule ; retry uniquement drawer failed");
   const render = readRepoFile("app/features/emails/emails-render.tsx");
   const dataServer = readRepoFile("app/features/emails/emails-data.server.ts");
 
-  for (const token of FORBIDDEN_WRITE_ACTIONS) {
-    if (token.startsWith("method=")) {
-      ctx.assertFalse(
-        `Render n'utilise pas ${token}`,
-        render.toLowerCase().includes(token),
-      );
-    } else {
-      // Allow words in explanatory copy like "aucun retry" but forbid action buttons.
-      const buttonish = new RegExp(
-        `>(\\s*${token}\\s*)<|type=["']submit["'][^>]*>\\s*${token}`,
-        "i",
-      );
-      ctx.assertFalse(
-        `Pas de bouton d'action ${token}`,
-        buttonish.test(render) ||
-          render.includes(`>${token}<`) ||
-          render.includes(`"${token}"`),
-      );
-    }
+  // Table remains read-only (no row-level write actions).
+  const tableStart = render.indexOf("<table");
+  const tableEnd = render.indexOf("</table>");
+  ctx.assertTrue("table présente", tableStart >= 0 && tableEnd > tableStart);
+  const tableChunk = render.slice(tableStart, tableEnd);
+  for (const token of ["Retry", "Resend", "Cancel", "Delete", "Réessayer"]) {
+    ctx.assertFalse(
+      `Table sans action ${token}`,
+      tableChunk.includes(token),
+    );
   }
+  ctx.assertFalse(
+    "Table sans form POST",
+    tableChunk.toLowerCase().includes('method="post"') ||
+      tableChunk.toLowerCase().includes("method='post'"),
+  );
 
   ctx.assertTrue(
-    "Copy explicite lecture seule / aucun retry",
-    (render.includes("Lecture seule") ||
-      render.includes("lecture seule") ||
-      render.includes("aucun retry")) &&
-      !/>\s*Retry\s*</.test(render) &&
-      !/>\s*Resend\s*</.test(render),
+    "Intro opérateur + retry manuel sur échecs",
+    render.includes("Suivez l’état des emails transactionnels Mileyo.") &&
+      (render.includes("lecture seule") ||
+        render.includes("Observabilité en lecture seule")),
   );
 
   ctx.assertFalse(
@@ -485,7 +469,8 @@ const runSuite = async () => {
   ctx.assertTrue(
     "Intro simplifiée opérateur",
     render.includes("Suivez l’état des emails transactionnels Mileyo.") &&
-      render.includes("Données en lecture seule.") &&
+      (render.includes("Données en lecture seule.") ||
+        render.includes("Observabilité en lecture seule")) &&
       !render.includes("Observabilité des EmailEvent Resend") &&
       !render.includes("indépendamment du tableau paginé"),
   );
@@ -553,11 +538,19 @@ const runSuite = async () => {
     /width:\s*"min\(4[2-8]0px,\s*100vw\)"/.test(styles),
   );
   ctx.assertTrue(
-    "Read-only garanti (pas de write actions)",
-    !render.includes("method=\"post\"") &&
-      !/>\s*Retry\s*</.test(render) &&
-      !/>\s*Cancel\s*</.test(render) &&
+    "Liste / table sans write actions (retry drawer only)",
+    !/>\s*Retry\s*</.test(render) &&
       !/>\s*Delete\s*</.test(render),
+  );
+  const tableOnlyStart = render.indexOf("<table");
+  const tableOnlyEnd = render.indexOf("</table>");
+  const tableOnly =
+    tableOnlyStart >= 0 && tableOnlyEnd > tableOnlyStart
+      ? render.slice(tableOnlyStart, tableOnlyEnd)
+      : "";
+  ctx.assertFalse(
+    "Table sans method=post",
+    tableOnly.toLowerCase().includes('method="post"'),
   );
 
   const exitCode = finishSuite("76-email-admin-observability", ctx);

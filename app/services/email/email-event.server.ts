@@ -276,6 +276,55 @@ export const claimEmailEvent = async ({
   return { claimed: true, event };
 };
 
+/**
+ * Manual admin retry claim (EMAIL-6G-B).
+ *
+ * Atomically: failed → processing for one shop-scoped event.
+ * - Does NOT reset attemptCount (increments normally).
+ * - Does NOT enforce EMAIL_EVENT_MAX_ATTEMPTS (operator may exceed automatic cap).
+ * - Skips pending so the automatic worker cannot race-claim the row.
+ * - lastError* left intact until the handler outcome updates them.
+ */
+export const claimFailedEmailEventForManualRetry = async ({
+  client,
+  eventId,
+  now = new Date(),
+  shop,
+}: {
+  client?: EmailEventDb;
+  eventId: string;
+  now?: Date;
+  shop: string;
+}): Promise<ClaimEmailEventResult> => {
+  const emailEvent = resolveDb(client).emailEvent;
+
+  const updateResult = await emailEvent.updateMany({
+    data: {
+      attemptCount: { increment: 1 },
+      lastAttemptAt: now,
+      nextAttemptAt: null,
+      processingStartedAt: now,
+      status: EMAIL_EVENT_STATUS.PROCESSING,
+    },
+    where: {
+      id: eventId,
+      shop,
+      status: EMAIL_EVENT_STATUS.FAILED,
+    },
+  });
+
+  if (updateResult.count !== 1) {
+    return { claimed: false };
+  }
+
+  const event = await emailEvent.findUnique({ where: { id: eventId } });
+  if (!event) {
+    return { claimed: false };
+  }
+
+  return { claimed: true, event };
+};
+
 export const markEmailEventSent = async ({
   client,
   eventId,
