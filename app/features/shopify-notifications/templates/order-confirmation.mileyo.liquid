@@ -396,7 +396,7 @@
     {% endfor%}
   {% endif %}
 
-            {% if order_status_url %}
+            {% if shop.url %}
               {% if shop_app_tracking_url and shop_app_tracking_button_variant_key %}
                 {% if shop_app_tracking_button_variant_key == "track_with_shop" %}
                 <table class="row actions">
@@ -409,7 +409,7 @@
       <table class="actions-buttons" cellpadding="0" cellspacing="0" border="0" align="center">
         <tr>
           <td class="button__cell button__cell--primary" align="center">
-            <a href="{{ order_status_url }}" class="button__text">Voir ma commande</a>
+            <a href="{{ shop.url }}/apps/box-builder/portal" class="button__text">Accéder à mon espace Mileyo</a>
           </td>
         </tr>
         <tr>
@@ -422,13 +422,11 @@
         </tr>
       </table>
         <div class="actions__group">
-        {% if shop.url %}
     <table class="link secondary-action-cell mileyo-store-link" align="center">
       <tr>
         <td class="link__cell" align="center"><a href="{{ shop.url }}">Visiter la boutique</a></td>
       </tr>
     </table>
-{% endif %}
 
         </div>
     </td>
@@ -446,7 +444,7 @@
       <table class="actions-buttons" cellpadding="0" cellspacing="0" border="0" align="center">
         <tr>
           <td class="button__cell button__cell--primary" align="center">
-            <a href="{{ order_status_url }}" class="button__text">Voir ma commande</a>
+            <a href="{{ shop.url }}/apps/box-builder/portal" class="button__text">Accéder à mon espace Mileyo</a>
           </td>
         </tr>
         <tr>
@@ -459,13 +457,11 @@
         </tr>
       </table>
         <div class="actions__group">
-        {% if shop.url %}
     <table class="link secondary-action-cell mileyo-store-link" align="center">
       <tr>
         <td class="link__cell" align="center"><a href="{{ shop.url }}">Visiter la boutique</a></td>
       </tr>
     </table>
-{% endif %}
 
         </div>
     </td>
@@ -482,36 +478,19 @@
     <td class="actions__cell" align="center">
       <table class="button main-action-cell" cellpadding="0" cellspacing="0" border="0" align="center">
         <tr>
-          <td class="button__cell" align="center"><a href="{{ order_status_url }}" class="button__text">Voir ma commande</a></td>
+          <td class="button__cell" align="center"><a href="{{ shop.url }}/apps/box-builder/portal" class="button__text">Accéder à mon espace Mileyo</a></td>
         </tr>
       </table>
-      {% if shop.url %}
     <table class="link secondary-action-cell mileyo-store-link" align="center" style="margin-top: 12px;">
       <tr>
         <td class="link__cell" align="center"><a href="{{ shop.url }}">Visiter la boutique</a></td>
       </tr>
     </table>
-{% endif %}
     </td>
   </tr>
 </table>
 
               {% endif %}
-            {% else %}
-              {% if shop.url %}
-    <table class="row actions">
-      <tr>
-        <td class="actions__cell" align="center">
-          <table class="link secondary-action-cell mileyo-store-link" align="center">
-            <tr>
-              <td class="link__cell" align="center"><a href="{{ shop.url }}">Visiter la boutique</a></td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-{% endif %}
-
             {% endif %}
 
             </td>

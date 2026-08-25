@@ -346,13 +346,13 @@ const runSuite = async () => {
   const paymentRecovered = renders[4]!;
   ctx.assertTrue(
     "PaymentRecovered CTA",
-    paymentRecovered.html.includes("Voir mon abonnement"),
+    paymentRecovered.html.includes("Accéder à mon espace Mileyo"),
   );
 
   const created = renders[0]!;
   ctx.assertTrue(
     "SubscriptionCreated CTA",
-    created.html.includes("Gérer mon abonnement"),
+    created.html.includes("Accéder à mon espace Mileyo"),
   );
   ctx.assertTrue(
     "SubscriptionCreated preheader",
@@ -384,7 +384,7 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "Upcoming CTA",
-    upcoming.html.includes("Voir mon abonnement"),
+    upcoming.html.includes("Voir mes prochaines livraisons"),
   );
   ctx.assertFalse(
     "Upcoming sans fallback lien long",

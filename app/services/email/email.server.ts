@@ -194,6 +194,15 @@ export {
   SUBSCRIPTION_PORTAL_PATH,
 } from "./subscription-email.server";
 export {
+  buildMileyoPortalLoginUrl,
+  getMileyoPortalUrl,
+  isAllowedMileyoPortalReturnPath,
+  MILEYO_CUSTOMER_LOGIN_PATH,
+  MILEYO_PORTAL_CTA_LABEL,
+  MILEYO_PORTAL_LIQUID_HREF,
+  MILEYO_PORTAL_PATH,
+} from "../../constants/mileyoPortal";
+export {
   buildMealSelectionConfirmedEmailData,
   buildMealSelectionConfirmedEmailDataFromSelection,
   buildMealSelectionReminderEmailData,

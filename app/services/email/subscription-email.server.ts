@@ -5,6 +5,10 @@
  * Eligibility helpers are pure (no Resend / no DB). Transport stays in sendEmail.
  */
 
+import {
+  getMileyoPortalUrl,
+  MILEYO_PORTAL_PATH,
+} from "../../constants/mileyoPortal";
 import { SUBSCRIPTION_CYCLE_TIMEZONE } from "../../constants/subscriptionCycle";
 import db from "../../db.server";
 import { isMileyoTransactionalEmailEnabled } from "./email-client.server";
@@ -21,8 +25,8 @@ import {
   type ResolvedPaymentEmailRecipient,
 } from "./payment-email.server";
 
-/** App proxy path for the customer portal (relative to shop domain). */
-export const SUBSCRIPTION_PORTAL_PATH = "/apps/box-builder/portal";
+/** @deprecated Prefer MILEYO_PORTAL_PATH from app/constants/mileyoPortal. */
+export const SUBSCRIPTION_PORTAL_PATH = MILEYO_PORTAL_PATH;
 
 export const SUBSCRIPTION_PAUSE_CAUSES_V1 = [
   "user_voluntary",
@@ -59,26 +63,9 @@ export const isAllowedSubscriptionPauseCause = (
 /**
  * Build an absolute portal URL from the shop domain, or use a caller override.
  * Returns null when neither shop nor override is available.
+ * @see getMileyoPortalUrl — canonical helper
  */
-export const buildSubscriptionPortalUrl = ({
-  shop,
-  portalUrl,
-}: {
-  shop?: string | null;
-  portalUrl?: string | null;
-} = {}): string | null => {
-  const override = portalUrl?.trim();
-  if (override) {
-    return override;
-  }
-
-  const normalizedShop = shop?.trim();
-  if (!normalizedShop) {
-    return null;
-  }
-
-  return `https://${normalizedShop}${SUBSCRIPTION_PORTAL_PATH}`;
-};
+export const buildSubscriptionPortalUrl = getMileyoPortalUrl;
 
 export const formatSubscriptionEmailDeliveryDate = (
   value: string | null | undefined,

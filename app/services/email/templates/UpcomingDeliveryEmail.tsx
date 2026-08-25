@@ -64,7 +64,7 @@ export const UpcomingDeliveryEmail = ({
       <MileyoMealList meals={selectedMeals} heading="Repas prévus" />
       {portalUrl ? (
         <MileyoEmailButton href={portalUrl}>
-          Voir mon abonnement
+          Voir mes prochaines livraisons
         </MileyoEmailButton>
       ) : null}
     </MileyoEmailLayout>

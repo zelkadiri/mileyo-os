@@ -351,7 +351,7 @@
             {% endif %}
 
 
-            {% if fulfillment.tracking_url or order_status_url %}
+            {% if fulfillment.tracking_url or shop.url %}
               {% if shop_app_tracking_url and shop_app_tracking_button_variant_key %}
                 {% if shop_app_tracking_button_variant_key == "track_with_shop" %}
                 <table class="row actions">
@@ -366,8 +366,8 @@
           <td class="button__cell button__cell--primary" align="center">
             {% if fulfillment.tracking_url %}
               <a href="{{ fulfillment.tracking_url }}" class="button__text">Suivre ma livraison</a>
-            {% elsif order_status_url %}
-              <a href="{{ order_status_url }}" class="button__text">Voir ma commande</a>
+            {% elsif shop.url %}
+              <a href="{{ shop.url }}/apps/box-builder/portal" class="button__text">Accéder à mon espace Mileyo</a>
             {% endif %}
           </td>
         </tr>
@@ -381,10 +381,10 @@
         </tr>
       </table>
         <div class="actions__group">
-        {% if fulfillment.tracking_url and order_status_url %}
+        {% if fulfillment.tracking_url and shop.url %}
     <table class="link secondary-action-cell mileyo-secondary-link" align="center">
       <tr>
-        <td class="link__cell" align="center"><a href="{{ order_status_url }}">Voir ma commande</a></td>
+        <td class="link__cell" align="center"><a href="{{ shop.url }}/apps/box-builder/portal">Accéder à mon espace Mileyo</a></td>
       </tr>
     </table>
 {% elsif shop.url %}
@@ -413,8 +413,8 @@
           <td class="button__cell button__cell--primary" align="center">
             {% if fulfillment.tracking_url %}
               <a href="{{ fulfillment.tracking_url }}" class="button__text">Suivre ma livraison</a>
-            {% elsif order_status_url %}
-              <a href="{{ order_status_url }}" class="button__text">Voir ma commande</a>
+            {% elsif shop.url %}
+              <a href="{{ shop.url }}/apps/box-builder/portal" class="button__text">Accéder à mon espace Mileyo</a>
             {% endif %}
           </td>
         </tr>
@@ -428,10 +428,10 @@
         </tr>
       </table>
         <div class="actions__group">
-        {% if fulfillment.tracking_url and order_status_url %}
+        {% if fulfillment.tracking_url and shop.url %}
     <table class="link secondary-action-cell mileyo-secondary-link" align="center">
       <tr>
-        <td class="link__cell" align="center"><a href="{{ order_status_url }}">Voir ma commande</a></td>
+        <td class="link__cell" align="center"><a href="{{ shop.url }}/apps/box-builder/portal">Accéder à mon espace Mileyo</a></td>
       </tr>
     </table>
 {% elsif shop.url %}
@@ -460,16 +460,16 @@
           <td class="button__cell" align="center">
             {% if fulfillment.tracking_url %}
               <a href="{{ fulfillment.tracking_url }}" class="button__text">Suivre ma livraison</a>
-            {% elsif order_status_url %}
-              <a href="{{ order_status_url }}" class="button__text">Voir ma commande</a>
+            {% elsif shop.url %}
+              <a href="{{ shop.url }}/apps/box-builder/portal" class="button__text">Accéder à mon espace Mileyo</a>
             {% endif %}
           </td>
         </tr>
       </table>
-      {% if fulfillment.tracking_url and order_status_url %}
+      {% if fulfillment.tracking_url and shop.url %}
     <table class="link secondary-action-cell mileyo-secondary-link" align="center" style="margin-top: 12px;">
       <tr>
-        <td class="link__cell" align="center"><a href="{{ order_status_url }}">Voir ma commande</a></td>
+        <td class="link__cell" align="center"><a href="{{ shop.url }}/apps/box-builder/portal">Accéder à mon espace Mileyo</a></td>
       </tr>
     </table>
 {% elsif shop.url %}
@@ -484,21 +484,6 @@
 </table>
 
               {% endif %}
-            {% else %}
-              {% if shop.url %}
-    <table class="row actions">
-      <tr>
-        <td class="actions__cell" align="center">
-          <table class="link secondary-action-cell mileyo-store-link" align="center">
-            <tr>
-              <td class="link__cell" align="center"><a href="{{ shop.url }}">Visiter la boutique</a></td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-{% endif %}
-
             {% endif %}
 
 

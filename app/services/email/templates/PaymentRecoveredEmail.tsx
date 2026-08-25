@@ -37,7 +37,7 @@ export const PaymentRecoveredEmail = ({
       </MileyoEmailText>
       {portalUrl ? (
         <MileyoEmailButton href={portalUrl}>
-          Voir mon abonnement
+          Accéder à mon espace Mileyo
         </MileyoEmailButton>
       ) : null}
     </MileyoEmailLayout>

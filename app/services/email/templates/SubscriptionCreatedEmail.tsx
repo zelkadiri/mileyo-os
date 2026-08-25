@@ -55,7 +55,7 @@ export const SubscriptionCreatedEmail = ({
       {portalUrl ? (
         <>
           <MileyoEmailButton href={portalUrl}>
-            Gérer mon abonnement
+            Accéder à mon espace Mileyo
           </MileyoEmailButton>
           <MileyoEmailText style={{ ...mileyoEmailMutedStyle, marginTop: 16 }}>
             Vous pourrez modifier vos repas, gérer vos prochaines livraisons ou

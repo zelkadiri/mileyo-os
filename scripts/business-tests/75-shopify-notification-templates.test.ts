@@ -329,7 +329,19 @@ const runSuite = async () => {
       !/font-family:\s*Georgia/i.test(mileyo),
   );
   ctx.assertTrue("contact@mileyo.fr", mileyo.includes("contact@mileyo.fr"));
-  ctx.assertTrue("CTA français", mileyo.includes("Voir ma commande"));
+  ctx.assertTrue("CTA français portal", mileyo.includes("Accéder à mon espace Mileyo"));
+  ctx.assertTrue(
+    "CTA portal path",
+    mileyo.includes("/apps/box-builder/portal"),
+  );
+  ctx.assertFalse(
+    "Pas de CTA Voir ma commande (remplacé portal)",
+    mileyo.includes("Voir ma commande"),
+  );
+  ctx.assertFalse(
+    "Pas de order_status_url CTA (portal)",
+    mileyo.includes("order_status_url"),
+  );
   ctx.assertTrue(
     "Shop tracking secondaire (Suivre avec)",
     mileyo.includes("Suivre avec") && mileyo.includes("button__cell--shop-app"),
@@ -438,7 +450,10 @@ const runSuite = async () => {
       mileyo.includes("'local'") &&
       mileyo.includes("'shipping'"),
   );
-  ctx.assertTrue("order_status_url", mileyo.includes("order_status_url"));
+  ctx.assertTrue(
+    "CTA portal (shop.url + path)",
+    mileyo.includes("{{ shop.url }}/apps/box-builder/portal"),
+  );
   ctx.assertTrue("order_name", mileyo.includes("order_name"));
   ctx.assertTrue("transactions", mileyo.includes("transactions"));
   ctx.assertTrue("shipping_address", mileyo.includes("shipping_address"));
@@ -467,14 +482,14 @@ const runSuite = async () => {
   ctx.assertEqual("if/endif Mileyo cohérents", ifCount, endifCount);
   ctx.assertEqual("for/endfor Mileyo cohérents", forCount, endforCount);
   ctx.assertEqual(
-    "if count = original +1 (prénom titre)",
+    "if count = original -3 (portal CTA simplifie nest + prénom titre)",
     ifCount,
-    origIf + 1,
+    origIf - 3,
   );
   ctx.assertEqual(
-    "endif count = original +1 (prénom titre)",
+    "endif count = original -3 (portal CTA simplifie nest + prénom titre)",
     endifCount,
-    origEndif + 1,
+    origEndif - 3,
   );
   ctx.assertEqual("for count ≈ original", forCount, origFor);
   ctx.assertEqual("endfor count ≈ original", endforCount, origEndfor);
@@ -649,8 +664,15 @@ const runSuite = async () => {
       shippingMileyo.includes("Only .mileyo-main-card is the white surface"),
   );
   ctx.assertTrue(
-    "Shipping CTA Suivre ma livraison",
-    shippingMileyo.includes("Suivre ma livraison"),
+    "Shipping CTA tracking + portal fallback",
+    shippingMileyo.includes("Suivre ma livraison") &&
+      shippingMileyo.includes("Accéder à mon espace Mileyo") &&
+      shippingMileyo.includes("/apps/box-builder/portal"),
+  );
+  ctx.assertFalse(
+    "Shipping sans Voir ma commande / order_status_url",
+    shippingMileyo.includes("Voir ma commande") ||
+      shippingMileyo.includes("order_status_url"),
   );
   ctx.assertTrue(
     "Shipping ETA block",
@@ -870,6 +892,16 @@ const runSuite = async () => {
     shippingUpdateMileyo.includes("Voir le suivi mis à jour"),
   );
   ctx.assertTrue(
+    "Shipping update portal fallback CTA",
+    shippingUpdateMileyo.includes("Accéder à mon espace Mileyo") &&
+      shippingUpdateMileyo.includes("/apps/box-builder/portal"),
+  );
+  ctx.assertFalse(
+    "Shipping update sans Voir ma commande / order_status_url",
+    shippingUpdateMileyo.includes("Voir ma commande") ||
+      shippingUpdateMileyo.includes("order_status_url"),
+  );
+  ctx.assertTrue(
     "Shipping update articles section",
     shippingUpdateMileyo.includes("Articles concernés"),
   );
@@ -1073,9 +1105,16 @@ const runSuite = async () => {
       outMileyo.includes("fulfillment.estimated_delivery_at"),
   );
   ctx.assertTrue(
-    "Out for delivery CTA Suivre ma livraison",
+    "Out for delivery CTA tracking + portal fallback",
     outMileyo.includes("Suivre ma livraison") &&
-      outMileyo.includes("Suivre ma commande"),
+      outMileyo.includes("Accéder à mon espace Mileyo") &&
+      outMileyo.includes("/apps/box-builder/portal"),
+  );
+  ctx.assertFalse(
+    "Out for delivery sans Voir/Suivre ma commande Shopify",
+    outMileyo.includes("Voir ma commande") ||
+      outMileyo.includes("Suivre ma commande") ||
+      outMileyo.includes("order_status_url"),
   );
   ctx.assertTrue(
     "Out for delivery articles section",

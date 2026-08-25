@@ -107,7 +107,7 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "created html contient CTA",
-    createdRendered.html.includes("Gérer mon abonnement"),
+    createdRendered.html.includes("Accéder à mon espace Mileyo"),
   );
   ctx.assertTrue("created text non vide", createdRendered.text.length > 0);
 

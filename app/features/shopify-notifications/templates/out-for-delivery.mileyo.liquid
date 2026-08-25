@@ -351,7 +351,7 @@
             {% endif %}
 
 
-            {% if fulfillment.tracking_url or order_status_url %}
+            {% if fulfillment.tracking_url or shop.url %}
                 <table class="row actions">
   <tr>
     <td class="empty-line">&nbsp;</td>
@@ -363,8 +363,8 @@
           <td class="button__cell button__cell--primary" align="center">
             {% if fulfillment.tracking_url %}
               <a href="{{ fulfillment.tracking_url }}" class="button__text">Suivre ma livraison</a>
-            {% elsif order_status_url %}
-              <a href="{{ order_status_url }}" class="button__text">Suivre ma commande</a>
+            {% elsif shop.url %}
+              <a href="{{ shop.url }}/apps/box-builder/portal" class="button__text">Accéder à mon espace Mileyo</a>
             {% endif %}
           </td>
         </tr>
@@ -372,21 +372,6 @@
     </td>
   </tr>
 </table>
-
-            {% else %}
-              {% if shop.url %}
-    <table class="row actions">
-      <tr>
-        <td class="actions__cell" align="center">
-          <table class="link secondary-action-cell mileyo-store-link" align="center">
-            <tr>
-              <td class="link__cell" align="center"><a href="{{ shop.url }}">Visiter la boutique</a></td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-{% endif %}
 
             {% endif %}
 

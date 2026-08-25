@@ -70,7 +70,7 @@ export const SHOPIFY_NOTIFICATION_TEMPLATES: ShopifyNotificationTemplateDefiniti
       mileyoTemplateFile: "order-confirmation.mileyo.liquid",
       name: "Confirmation de commande",
       notes:
-        "Owner Shopify. Snapshot Admin DEV verrouillé. Subject Admin à coller séparément : « Récapitulatif de votre commande Mileyo ». Diffs Mileyo = branding/UX + correctifs dump documentés.",
+        "Owner Shopify. Snapshot Admin DEV verrouillé. Subject Admin à coller séparément : « Récapitulatif de votre commande Mileyo ». CTA primaire → espace Mileyo ({{ shop.url }}/apps/box-builder/portal), pas order_status_url.",
       originalSnapshotProvenance: "store_dump_locked",
       originalTemplateFile: "order-confirmation.shopify-original.liquid",
       owner: "shopify",
@@ -426,6 +426,7 @@ export const PAYMENT_METHOD_UPDATE_CHECKLIST = [
 /**
  * Liquid tokens that must exist in BOTH the locked store dump and the Mileyo variant.
  * Used by suite 75 — not a full Liquid parser.
+ * Portal CTA uses shop.url + /apps/box-builder/portal (not order_status_url).
  */
 export const ORDER_CONFIRMATION_CRITICAL_LIQUID_TOKENS = [
   "delivery_method_types",
@@ -436,7 +437,6 @@ export const ORDER_CONFIRMATION_CRITICAL_LIQUID_TOKENS = [
   "payment_charged_on_fulfillment",
   "delivery_instructions",
   "consolidated_estimated_delivery_time",
-  "order_status_url",
   "shop_app_tracking_url",
   "nested_line_child",
   "line_item_groups",
@@ -452,6 +452,7 @@ export const ORDER_CONFIRMATION_CRITICAL_LIQUID_TOKENS = [
 /**
  * Liquid tokens that must exist in BOTH shipping confirmation original + Mileyo.
  * Used by suite 75 — not a full Liquid parser.
+ * Generic commande CTA → portal; tracking URLs unchanged.
  */
 export const SHIPPING_CONFIRMATION_CRITICAL_LIQUID_TOKENS = [
   "fulfillment.item_count",
@@ -459,7 +460,6 @@ export const SHIPPING_CONFIRMATION_CRITICAL_LIQUID_TOKENS = [
   "fulfillment_status",
   "fulfilled",
   "fulfillment.estimated_delivery_at",
-  "order_status_url",
   "shop_app_tracking_url",
   "shop_app_tracking_button_variant_key",
   "track_with_shop",
@@ -481,7 +481,6 @@ export const SHIPPING_CONFIRMATION_CRITICAL_LIQUID_TOKENS = [
  * Note: email_emphasis is original-only (undefined capture in Shopify dump).
  */
 export const SHIPPING_UPDATE_CRITICAL_LIQUID_TOKENS = [
-  "order_status_url",
   "shop_app_tracking_url",
   "shop_app_tracking_button_variant_key",
   "track_with_shop",
@@ -501,6 +500,7 @@ export const SHIPPING_UPDATE_CRITICAL_LIQUID_TOKENS = [
 /**
  * Liquid tokens that must exist in BOTH out-for-delivery original + Mileyo.
  * No Shop App tokens — absent from this Shopify template.
+ * Fallback CTA → portal (tracking preserved when present).
  */
 export const OUT_FOR_DELIVERY_CRITICAL_LIQUID_TOKENS = [
   "fulfillment.item_count",
@@ -508,7 +508,6 @@ export const OUT_FOR_DELIVERY_CRITICAL_LIQUID_TOKENS = [
   "fulfillment_status",
   "fulfilled",
   "fulfillment.estimated_delivery_at",
-  "order_status_url",
   "fulfillment.tracking_numbers",
   "fulfillment.tracking_url",
   "fulfillment.tracking_urls",

@@ -122,7 +122,7 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "recovered html contient CTA",
-    recoveredRendered.html.includes("Voir mon abonnement"),
+    recoveredRendered.html.includes("Accéder à mon espace Mileyo"),
   );
   ctx.assertTrue(
     "recovered text non vide",

@@ -99,6 +99,7 @@ const BUSINESS_SUITES = [
   "76-email-admin-observability.test.ts",
   "77-email-manual-retry.test.ts",
   "78-email-cron-health.test.ts",
+  "79-mileyo-portal-url-auth.test.ts",
 ];
 
 const LEGACY_SUITES = [

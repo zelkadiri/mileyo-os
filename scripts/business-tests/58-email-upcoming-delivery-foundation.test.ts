@@ -427,8 +427,8 @@ const runSuite = async () => {
     renderedWithName.html.includes(portalUrl),
   );
   ctx.assertTrue(
-    "CTA Voir mon abonnement",
-    renderedWithName.html.includes("Voir mon abonnement"),
+    "CTA Voir mes prochaines livraisons",
+    renderedWithName.html.includes("Voir mes prochaines livraisons"),
   );
   ctx.assertTrue(
     "support affiché si fourni",

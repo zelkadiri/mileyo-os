@@ -1,3 +1,7 @@
+import {
+  buildMileyoPortalLoginUrl,
+  MILEYO_PORTAL_PATH,
+} from "../../constants/mileyoPortal";
 import { escapeHtml, scriptJson } from "../../utils/html";
 import { renderMileyoLogoImg } from "../../utils/mileyoLogo";
 import {
@@ -26,6 +30,8 @@ import type {
   PortalTerminalSelection,
   PortalBoxProduct,
 } from "./portal-types";
+
+const portalLoginHref = buildMileyoPortalLoginUrl(MILEYO_PORTAL_PATH);
 
 const htmlResponse = (html: string) =>
   new Response(html, {
@@ -78,7 +84,7 @@ export const renderMessage = (message: string, options?: { loginLink?: boolean }
       <p>${escapeHtml(message)}</p>
       ${
         options?.loginLink
-          ? `<p><a class="portal-button" href="/account/login">Se connecter</a></p>`
+          ? `<p><a class="portal-button" href="${escapeHtml(portalLoginHref)}">Se connecter</a></p>`
           : ""
       }
     </section>
