@@ -98,6 +98,7 @@ const BUSINESS_SUITES = [
   "75-shopify-notification-templates.test.ts",
   "76-email-admin-observability.test.ts",
   "77-email-manual-retry.test.ts",
+  "78-email-cron-health.test.ts",
 ];
 
 const LEGACY_SUITES = [

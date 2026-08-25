@@ -1,5 +1,12 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
+import {
+  completeEmailCronRunFailure,
+  completeEmailCronRunSuccess,
+  safeCronErrorMessage,
+  startEmailCronRun,
+  type EmailCronRunDb,
+} from "../services/email/email-cron-run.server";
 import { processDueEmailEvents } from "../services/email/email-event-worker.server";
 import { resolveCronShop } from "../utils/cronShop.server";
 
@@ -43,23 +50,33 @@ const validateCronShop = (): { shop: string } | Response => {
 };
 
 type ProcessEmailRetriesDeps = {
-  processDueEmailEvents: typeof processDueEmailEvents;
-};
-
-const defaultDeps: ProcessEmailRetriesDeps = {
-  processDueEmailEvents,
+  completeEmailCronRunFailure?: typeof completeEmailCronRunFailure;
+  completeEmailCronRunSuccess?: typeof completeEmailCronRunSuccess;
+  cronRunClient?: EmailCronRunDb;
+  processDueEmailEvents?: typeof processDueEmailEvents;
+  startEmailCronRun?: typeof startEmailCronRun;
 };
 
 /**
  * Dedicated EmailEvent retry cron — isolated from billing / reminder / upcoming.
  * Empty EmailEvent table is a valid success (summary.scanned = 0).
  *
+ * EMAIL-6G-C: persists EmailCronRun for admin health. Monitoring is fail-open —
+ * persistence failures never block processDueEmailEvents.
+ *
  * @internal deps injectable for business regression tests only.
  */
 export const runProcessEmailRetriesCron = async (
   request: Request,
-  deps: ProcessEmailRetriesDeps = defaultDeps,
+  deps: ProcessEmailRetriesDeps = {},
 ) => {
+  const processFn = deps.processDueEmailEvents ?? processDueEmailEvents;
+  const startRun = deps.startEmailCronRun ?? startEmailCronRun;
+  const completeSuccess =
+    deps.completeEmailCronRunSuccess ?? completeEmailCronRunSuccess;
+  const completeFailure =
+    deps.completeEmailCronRunFailure ?? completeEmailCronRunFailure;
+
   const authError = validateCronSecret(request);
 
   if (authError) {
@@ -72,24 +89,75 @@ export const runProcessEmailRetriesCron = async (
     return shopConfig;
   }
 
+  const shop = shopConfig.shop;
+  const startedAt = new Date();
+  const cronRun = await startRun({
+    client: deps.cronRunClient,
+    now: startedAt,
+    shop,
+  });
+  const runId = cronRun?.id ?? null;
+
   try {
-    const summary = await deps.processDueEmailEvents({
-      shop: shopConfig.shop,
+    const summary = await processFn({
+      shop,
+    });
+
+    const completedAt = new Date();
+    const durationMs = Math.max(0, completedAt.getTime() - startedAt.getTime());
+
+    if (runId) {
+      await completeSuccess({
+        client: deps.cronRunClient,
+        now: completedAt,
+        runId,
+        startedAt,
+        summary,
+      });
+    }
+
+    console.log("[cron/process-email-retries] completed", {
+      durationMs,
+      failed: summary.failed,
+      processed: summary.claimed,
+      reclaimed: summary.reclaimed,
+      requeued: summary.retried,
+      runId,
+      sent: summary.sent,
+      shop,
+      status: "success",
     });
 
     return Response.json({
-      shop: shopConfig.shop,
+      runId,
+      shop,
       ...summary,
     });
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Email event retry cron failed unexpectedly.";
+    const message = safeCronErrorMessage(error);
+    const completedAt = new Date();
+    const durationMs = Math.max(0, completedAt.getTime() - startedAt.getTime());
 
-    console.error("[cron/process-email-retries]", message, error);
+    if (runId) {
+      await completeFailure({
+        client: deps.cronRunClient,
+        errorCode: "cron_exception",
+        errorMessage: message,
+        now: completedAt,
+        runId,
+        startedAt,
+      });
+    }
 
-    return Response.json({ error: message }, { status: 500 });
+    console.error("[cron/process-email-retries]", {
+      durationMs,
+      message,
+      runId,
+      shop,
+      status: "failed",
+    });
+
+    return Response.json({ error: message, runId }, { status: 500 });
   }
 };
 

@@ -217,3 +217,24 @@ model EmailEvent {
   @@index([eventType, createdAt])
   @@index([referenceType, referenceId])
 }
+
+// EMAIL-6G-C — cron run health (operator monitoring). No PII / no EmailEvent coupling.
+model EmailCronRun {
+  id              String    @id @default(cuid())
+  shop            String
+  status          String
+  startedAt       DateTime
+  completedAt     DateTime?
+  durationMs      Int?
+  processedCount  Int?
+  sentCount       Int?
+  failedCount     Int?
+  requeuedCount   Int?
+  reclaimedCount  Int?
+  errorCode       String?
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+
+  @@index([shop, startedAt])
+  @@index([shop, status, startedAt])
+}

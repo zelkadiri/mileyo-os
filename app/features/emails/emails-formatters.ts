@@ -3,6 +3,7 @@
  * No Prisma / no EmailEvent writes.
  */
 
+import type { EmailCronHealthLevel } from "../../constants/emailCron";
 import {
   EMAIL_EVENT_MAX_ATTEMPTS,
   EMAIL_EVENT_PROCESSING_STALE_AFTER_MINUTES,
@@ -452,4 +453,40 @@ export const formatSafeMetaValue = (key: string, value: string): string => {
     }
   }
   return value;
+};
+
+const CRON_RUN_STATUS_LABELS_FR: Record<string, string> = {
+  failed: "Échoué",
+  running: "En cours",
+  success: "Succès",
+};
+
+const CRON_HEALTH_LABELS_FR: Record<EmailCronHealthLevel, string> = {
+  attention: "Attention",
+  incident: "Incident",
+  ok: "OK",
+};
+
+export const formatEmailCronRunStatusLabel = (status: string): string =>
+  CRON_RUN_STATUS_LABELS_FR[status] ?? status;
+
+export const formatEmailCronHealthLevelLabel = (
+  level: EmailCronHealthLevel,
+): string => CRON_HEALTH_LABELS_FR[level] ?? level;
+
+export const formatDurationMs = (
+  durationMs: number | null | undefined,
+): string => {
+  if (durationMs == null || !Number.isFinite(durationMs)) return "—";
+  if (durationMs < 1000) return `${Math.round(durationMs)} ms`;
+  const seconds = durationMs / 1000;
+  if (seconds < 60) return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)} s`;
+  const minutes = Math.floor(seconds / 60);
+  const rem = Math.round(seconds % 60);
+  return `${minutes} min ${rem} s`;
+};
+
+export const formatCronCount = (value: number | null | undefined): string => {
+  if (value == null) return "—";
+  return String(value);
 };

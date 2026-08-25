@@ -3,10 +3,73 @@
  * Dense ops UI; matches existing admin chrome (cards / badges / banners).
  */
 
+/**
+ * Responsive overrides (media queries can't live in React style objects).
+ * Table minWidth must not widen the page — contain + overflow on the shell.
+ */
+export const emailsLayoutCss = `
+.emails-page-shell {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  width: 100%;
+}
+.emails-page-shell > * {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+}
+.emails-metrics-grid,
+.emails-cron-meta-grid {
+  box-sizing: border-box;
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+}
+.emails-cron-meta-grid {
+  gap: 0.65rem;
+}
+.emails-table-wrap {
+  box-sizing: border-box;
+  contain: inline-size;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  width: 100%;
+}
+@media (min-width: 900px) {
+  .emails-metrics-grid,
+  .emails-cron-meta-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .emails-metrics-grid,
+  .emails-cron-meta-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 360px) {
+  .emails-metrics-grid,
+  .emails-cron-meta-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+`;
+
 export const pageShellStyle = {
+  boxSizing: "border-box" as const,
+  display: "grid",
+  gap: "24px",
+  margin: "0 auto",
   maxWidth: "100%",
   minWidth: 0,
-  overflowX: "hidden" as const,
+  overflowX: "auto" as const,
+  width: "100%",
 } as const;
 
 export const introStyle = {
@@ -20,18 +83,24 @@ export const introSubStyle = {
   margin: "0.35rem 0 0",
 } as const;
 
-/** ~4 cards on wide desktop, wraps to 3/2/1 as viewport shrinks. */
+/**
+ * Column count lives in emailsLayoutCss (media queries).
+ * Inline styles only set box model — avoid overriding MQ with gridTemplateColumns.
+ */
 export const summaryGridStyle = {
-  display: "grid",
-  gap: "0.85rem",
-  gridTemplateColumns: "repeat(auto-fit, minmax(158px, 1fr))",
+  boxSizing: "border-box" as const,
+  maxWidth: "100%",
+  minWidth: 0,
+  width: "100%",
 } as const;
 
 export const summaryCardStyle = {
   background: "#f9fafb",
   border: "1px solid #e5e7eb",
   borderRadius: "12px",
+  boxSizing: "border-box" as const,
   minWidth: 0,
+  overflow: "hidden" as const,
   padding: "0.9rem 1rem",
 } as const;
 
@@ -47,6 +116,8 @@ export const summaryLabelStyle = {
   fontWeight: 600,
   lineHeight: 1.3,
   margin: 0,
+  overflow: "hidden" as const,
+  textOverflow: "ellipsis",
   whiteSpace: "nowrap" as const,
 } as const;
 
@@ -135,6 +206,10 @@ export const secondaryButtonStyle = {
 export const tableWrapStyle = {
   border: "1px solid #e5e7eb",
   borderRadius: "12px",
+  boxSizing: "border-box" as const,
+  contain: "inline-size" as const,
+  maxWidth: "100%",
+  minWidth: 0,
   overflowX: "auto" as const,
   width: "100%",
 } as const;
@@ -436,4 +511,126 @@ export const monoStyle = {
   fontFamily:
     'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
   fontSize: "0.8rem",
+} as const;
+
+/** EMAIL-6G-C — compact cron health + alerts */
+export const healthPanelStyle = {
+  background: "#f9fafb",
+  border: "1px solid #e5e7eb",
+  borderRadius: "12px",
+  boxSizing: "border-box" as const,
+  display: "grid",
+  gap: "0.85rem",
+  maxWidth: "100%",
+  minWidth: 0,
+  overflow: "hidden" as const,
+  padding: "0.9rem 1rem",
+  width: "100%",
+} as const;
+
+export const healthHeaderRowStyle = {
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap" as const,
+  gap: "0.65rem",
+  justifyContent: "space-between",
+  maxWidth: "100%",
+  minWidth: 0,
+  width: "100%",
+} as const;
+
+export const healthTitleStyle = {
+  fontSize: "0.95rem",
+  fontWeight: 700,
+  margin: 0,
+  minWidth: 0,
+} as const;
+
+export const healthMetaGridStyle = {
+  boxSizing: "border-box" as const,
+  maxWidth: "100%",
+  minWidth: 0,
+  width: "100%",
+} as const;
+
+export const healthMetaLabelStyle = {
+  color: "#6b7280",
+  fontSize: "0.7rem",
+  fontWeight: 600,
+  margin: 0,
+} as const;
+
+export const healthMetaValueStyle = {
+  fontSize: "0.85rem",
+  fontWeight: 600,
+  margin: "0.15rem 0 0",
+} as const;
+
+export const healthLevelBadgeStyle = (
+  level: "ok" | "attention" | "incident",
+) =>
+  ({
+    background:
+      level === "ok"
+        ? "#f0fdf4"
+        : level === "attention"
+          ? "#fffbeb"
+          : "#fef2f2",
+    border:
+      level === "ok"
+        ? "1px solid #bbf7d0"
+        : level === "attention"
+          ? "1px solid #fde68a"
+          : "1px solid #fecaca",
+    borderRadius: "999px",
+    color:
+      level === "ok"
+        ? "#15803d"
+        : level === "attention"
+          ? "#a16207"
+          : "#b91c1c",
+    display: "inline-block",
+    flexShrink: 0,
+    fontSize: "0.75rem",
+    fontWeight: 700,
+    padding: "0.2rem 0.65rem",
+    whiteSpace: "nowrap" as const,
+  }) as const;
+
+export const alertsListStyle = {
+  display: "grid",
+  gap: "0.4rem",
+  margin: 0,
+  padding: 0,
+} as const;
+
+export const alertItemStyle = (severity: "attention" | "incident") =>
+  ({
+    background: severity === "incident" ? "#fef2f2" : "#fffbeb",
+    border: `1px solid ${severity === "incident" ? "#fecaca" : "#fde68a"}`,
+    borderRadius: "8px",
+    color: severity === "incident" ? "#991b1b" : "#92400e",
+    fontSize: "0.8rem",
+    fontWeight: 600,
+    listStyle: "none",
+    margin: 0,
+    padding: "0.45rem 0.65rem",
+  }) as const;
+
+export const alertLinkStyle = {
+  color: "inherit",
+  textDecoration: "underline",
+} as const;
+
+export const noAlertStyle = {
+  color: "#6b7280",
+  fontSize: "0.8rem",
+  margin: 0,
+} as const;
+
+export const cronHistoryTableStyle = {
+  borderCollapse: "collapse" as const,
+  fontSize: "0.8rem",
+  minWidth: "520px",
+  width: "100%",
 } as const;

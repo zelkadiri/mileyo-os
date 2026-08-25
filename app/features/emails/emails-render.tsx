@@ -1,6 +1,6 @@
 /**
- * Admin email observability (EMAIL-6G-A / EMAIL-6G-B).
- * List + detail read-only; manual retry only for failed events in the drawer.
+ * Admin email observability (EMAIL-6G-A / EMAIL-6G-B / EMAIL-6G-C).
+ * List + detail; manual retry for failed events; cron health read-only.
  */
 
 import { useEffect, useState, type ReactNode } from "react";
@@ -22,6 +22,10 @@ import {
   formatAdminDateTime,
   formatAdminDateTimeCompact,
   formatAttemptCountLabel,
+  formatCronCount,
+  formatDurationMs,
+  formatEmailCronHealthLevelLabel,
+  formatEmailCronRunStatusLabel,
   formatEmailEventStatusLabel,
   formatEmailEventTypeLabel,
   formatEmailNextOrSentLabel,
@@ -34,6 +38,10 @@ import {
   truncateForTable,
 } from "./emails-formatters";
 import {
+  alertItemStyle,
+  alertLinkStyle,
+  alertsListStyle,
+  cronHistoryTableStyle,
   detailGridStyle,
   detailKeyStyle,
   detailRowStyle,
@@ -49,16 +57,25 @@ import {
   emptyStateStyle,
   errorCellStyle,
   errorPanelStyle,
+  emailsLayoutCss,
   filterControlStyle,
   filterFieldStyle,
   filterLabelStyle,
   filterSubmitButtonStyle,
   filtersFormStyle,
+  healthHeaderRowStyle,
+  healthLevelBadgeStyle,
+  healthMetaGridStyle,
+  healthMetaLabelStyle,
+  healthMetaValueStyle,
+  healthPanelStyle,
+  healthTitleStyle,
   introStyle,
   introSubStyle,
   metaPairStyle,
   monoStyle,
   mutedStyle,
+  noAlertStyle,
   pageShellStyle,
   paginationRowStyle,
   primaryButtonStyle,
@@ -161,6 +178,7 @@ const confirmActionsStyle = {
 
 export default function EmailsPage() {
   const {
+    cronHealth,
     detail,
     events,
     filters,
@@ -212,7 +230,8 @@ export default function EmailsPage() {
 
   return (
     <s-page heading="Emails">
-      <div style={pageShellStyle}>
+      <style>{emailsLayoutCss}</style>
+      <div className="emails-page-shell" style={pageShellStyle}>
         <s-section>
           <s-stack gap="base">
             <div>
@@ -225,7 +244,7 @@ export default function EmailsPage() {
               </p>
             </div>
 
-            <div style={summaryGridStyle}>
+            <div className="emails-metrics-grid" style={summaryGridStyle}>
               <div style={summaryCardStyle}>
                 <p style={summaryLabelStyle}>Envoyés</p>
                 <p style={summaryValueStyle}>{metrics.sentLast24h}</p>
@@ -266,6 +285,160 @@ export default function EmailsPage() {
                   <p style={summarySubLabelStyle}>24 h</p>
                 ) : null}
               </div>
+            </div>
+          </s-stack>
+        </s-section>
+
+        <s-section heading="Santé du cron email">
+          <s-stack gap="base">
+            <div style={healthPanelStyle}>
+              <div style={healthHeaderRowStyle}>
+                <p style={healthTitleStyle}>État</p>
+                <span style={healthLevelBadgeStyle(cronHealth.healthLevel)}>
+                  {formatEmailCronHealthLevelLabel(cronHealth.healthLevel)}
+                </span>
+              </div>
+
+              <div className="emails-cron-meta-grid" style={healthMetaGridStyle}>
+                <div>
+                  <p style={healthMetaLabelStyle}>Dernier run</p>
+                  <p style={healthMetaValueStyle}>
+                    {formatAdminDateTimeCompact(cronHealth.lastRun?.startedAt) ??
+                      "—"}
+                    {cronHealth.lastRun
+                      ? ` · ${formatEmailCronRunStatusLabel(cronHealth.lastRun.status)}`
+                      : ""}
+                  </p>
+                </div>
+                <div>
+                  <p style={healthMetaLabelStyle}>Dernier succès</p>
+                  <p style={healthMetaValueStyle}>
+                    {formatAdminDateTimeCompact(
+                      cronHealth.lastSuccess?.startedAt,
+                    ) ?? "—"}
+                  </p>
+                </div>
+                <div>
+                  <p style={healthMetaLabelStyle}>Dernier échec</p>
+                  <p style={healthMetaValueStyle}>
+                    {formatAdminDateTimeCompact(
+                      cronHealth.lastFailed?.startedAt,
+                    ) ?? "—"}
+                  </p>
+                </div>
+                <div>
+                  <p style={healthMetaLabelStyle}>Durée dernier run</p>
+                  <p style={healthMetaValueStyle}>
+                    {formatDurationMs(cronHealth.lastRun?.durationMs)}
+                  </p>
+                </div>
+                <div>
+                  <p style={healthMetaLabelStyle}>Traités</p>
+                  <p style={healthMetaValueStyle}>
+                    {formatCronCount(cronHealth.lastRun?.processedCount)}
+                  </p>
+                </div>
+                <div>
+                  <p style={healthMetaLabelStyle}>Envoyés</p>
+                  <p style={healthMetaValueStyle}>
+                    {formatCronCount(cronHealth.lastRun?.sentCount)}
+                  </p>
+                </div>
+                <div>
+                  <p style={healthMetaLabelStyle}>Échoués</p>
+                  <p style={healthMetaValueStyle}>
+                    {formatCronCount(cronHealth.lastRun?.failedCount)}
+                  </p>
+                </div>
+              </div>
+
+              {cronHealth.lastRun?.isStuckRunning ? (
+                <p style={warningBannerStyle}>
+                  Run potentiellement interrompu
+                </p>
+              ) : null}
+            </div>
+
+            <div>
+              <p style={healthTitleStyle}>Alertes</p>
+              {cronHealth.alerts.length === 0 ? (
+                <p style={noAlertStyle}>Aucune anomalie détectée.</p>
+              ) : (
+                <ul style={alertsListStyle}>
+                  {cronHealth.alerts.map((alert) => (
+                    <li key={alert.id} style={alertItemStyle(alert.severity)}>
+                      {alert.href ? (
+                        <Link style={alertLinkStyle} to={alert.href}>
+                          {alert.message}
+                        </Link>
+                      ) : (
+                        alert.message
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div>
+              <p style={{ ...healthTitleStyle, marginBottom: "0.5rem" }}>
+                Derniers runs
+              </p>
+              {cronHealth.recentRuns.length === 0 ? (
+                <p style={noAlertStyle}>Aucun run observé pour le moment.</p>
+              ) : (
+                <div className="emails-table-wrap" style={tableWrapStyle}>
+                  <table style={cronHistoryTableStyle}>
+                    <thead>
+                      <tr>
+                        <th style={thStyle}>Date</th>
+                        <th style={thStyle}>Status</th>
+                        <th style={thStyle}>Durée</th>
+                        <th style={thStyle}>Traités</th>
+                        <th style={thStyle}>Envoyés</th>
+                        <th style={thStyle}>Échoués</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cronHealth.recentRuns.map((run) => (
+                        <tr key={run.id}>
+                          <td style={tdStyle}>
+                            {formatAdminDateTimeCompact(run.startedAt) ?? "—"}
+                            {run.errorMessage ? (
+                              <p
+                                style={mutedStyle}
+                                title={run.errorMessage}
+                              >
+                                {truncateErrorMessage(run.errorMessage, 60)}
+                              </p>
+                            ) : null}
+                            {run.isStuckRunning ? (
+                              <p style={warningBannerStyle}>
+                                Run potentiellement interrompu
+                              </p>
+                            ) : null}
+                          </td>
+                          <td style={tdStyle}>
+                            {formatEmailCronRunStatusLabel(run.status)}
+                          </td>
+                          <td style={tdStyle}>
+                            {formatDurationMs(run.durationMs)}
+                          </td>
+                          <td style={tdStyle}>
+                            {formatCronCount(run.processedCount)}
+                          </td>
+                          <td style={tdStyle}>
+                            {formatCronCount(run.sentCount)}
+                          </td>
+                          <td style={tdStyle}>
+                            {formatCronCount(run.failedCount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </s-stack>
         </s-section>
@@ -348,7 +521,7 @@ export default function EmailsPage() {
               <div style={emptyStateStyle}>{emptyCopy}</div>
             ) : (
               <>
-                <div style={tableWrapStyle}>
+                <div className="emails-table-wrap" style={tableWrapStyle}>
                   <table style={tableStyle}>
                     <thead>
                       <tr>

@@ -1,5 +1,5 @@
 /**
- * Admin email observability (EMAIL-6G-A) — Prisma loader (read-only).
+ * Admin email observability (EMAIL-6G-A / EMAIL-6G-C) — Prisma loader (read-only).
  * Mutations live in emails-actions.server.ts (EMAIL-6G-B).
  */
 
@@ -22,6 +22,7 @@ import {
   parseEmailEventSafeMeta,
   periodToCreatedAtGte,
 } from "./emails-formatters";
+import { loadEmailCronHealth } from "./emails-cron-health.server";
 import type {
   EmailAdminDetail,
   EmailAdminFilters,
@@ -232,7 +233,7 @@ export const loadEmailsPageData = async (
 
   const skip = (filters.page - 1) * EMAIL_ADMIN_PAGE_SIZE;
 
-  const [metrics, totalCount, rows, detailRow] = await Promise.all([
+  const [metrics, totalCount, rows, detailRow, cronHealth] = await Promise.all([
     loadMetrics({ now, shop }),
     db.emailEvent.count({ where }),
     db.emailEvent.findMany({
@@ -246,6 +247,7 @@ export const loadEmailsPageData = async (
           where: { id: selectedId, shop },
         })
       : Promise.resolve(null),
+    loadEmailCronHealth({ now, shop }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / EMAIL_ADMIN_PAGE_SIZE));
@@ -254,6 +256,7 @@ export const loadEmailsPageData = async (
   const events = (rows as EmailEventRow[]).map((row) => mapListItem(row, now));
 
   return {
+    cronHealth,
     detail: detailRow
       ? mapDetail(detailRow as EmailEventRow, now)
       : null,

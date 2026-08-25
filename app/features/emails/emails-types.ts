@@ -1,7 +1,8 @@
 /**
- * Admin email observability (EMAIL-6G-A / EMAIL-6G-B) — shared types.
+ * Admin email observability (EMAIL-6G-A / EMAIL-6G-B / EMAIL-6G-C) — shared types.
  */
 
+import type { EmailCronHealthLevel } from "../../constants/emailCron";
 import type {
   EmailEventStatus,
   EmailEventType,
@@ -88,6 +89,7 @@ export type EmailAdminDetail = EmailAdminListItem & {
 };
 
 export type EmailAdminPageData = {
+  cronHealth: EmailAdminCronHealth;
   detail: EmailAdminDetail | null;
   events: EmailAdminListItem[];
   filters: EmailAdminFilters;
@@ -96,4 +98,39 @@ export type EmailAdminPageData = {
   shop: string;
   totalCount: number;
   totalPages: number;
+};
+
+export type EmailAdminCronRunSummary = {
+  completedAt: string | null;
+  durationMs: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  failedCount: number | null;
+  id: string;
+  isStuckRunning: boolean;
+  processedCount: number | null;
+  reclaimedCount: number | null;
+  requeuedCount: number | null;
+  sentCount: number | null;
+  startedAt: string;
+  status: string;
+};
+
+export type EmailAdminAlert = {
+  href: string | null;
+  id: string;
+  message: string;
+  severity: "attention" | "incident";
+};
+
+export type EmailAdminCronHealth = {
+  alerts: EmailAdminAlert[];
+  healthLevel: EmailCronHealthLevel;
+  isSilent: boolean;
+  lastFailed: EmailAdminCronRunSummary | null;
+  lastRun: EmailAdminCronRunSummary | null;
+  lastSuccess: EmailAdminCronRunSummary | null;
+  recentRuns: EmailAdminCronRunSummary[];
+  serverNow: string;
+  staleProcessingCount: number;
 };
