@@ -222,6 +222,17 @@ export const ensureEmailEvent = async (
   }
 };
 
+export const getEmailEventById = async ({
+  client,
+  eventId,
+}: {
+  client?: EmailEventDb;
+  eventId: string;
+}): Promise<EmailEventRecord | null> => {
+  const emailEvent = resolveDb(client).emailEvent;
+  return emailEvent.findUnique({ where: { id: eventId } });
+};
+
 /**
  * Atomically claim a pending due event for processing.
  * Succeeds only when status=pending, due (nextAttemptAt null|<=now),

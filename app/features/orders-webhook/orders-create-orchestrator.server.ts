@@ -21,8 +21,14 @@ import { closeRecoveryOnSuccessfulOrder } from "../../services/subscriptionPayme
 import {
   markMealSelectionExplicitForCurrentDelivery,
   resetSubscriptionPausedEmailSentAt,
-  trySendSubscriptionCreatedEmail,
 } from "../../services/email/email.server";
+import { EMAIL_EVENT_TYPE } from "../../constants/emailEvent";
+import {
+  backfillSubscriptionCreatedStampFromSentEvent,
+  buildSubscriptionCreatedEmailEventIdempotencyKey,
+  EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+  ensureAndProcessEmailEventImmediately,
+} from "../../services/email/email-outbox-event-driven.server";
 import {
   convertCheckoutLead,
   shouldConvertCheckoutLead,
@@ -499,11 +505,25 @@ export const handleOrdersCreateWebhook = async ({
       }
 
       try {
-        await trySendSubscriptionCreatedEmail({
-          selectionId: linkedSelection.id,
+        await ensureAndProcessEmailEventImmediately({
+          backfillStamp: (event) =>
+            backfillSubscriptionCreatedStampFromSentEvent({
+              event,
+              selectionId: linkedSelection.id,
+            }),
+          input: {
+            eventType: EMAIL_EVENT_TYPE.SUBSCRIPTION_CREATED,
+            idempotencyKey: buildSubscriptionCreatedEmailEventIdempotencyKey(
+              linkedSelection.id,
+            ),
+            metaJson: null,
+            referenceId: linkedSelection.id,
+            referenceType: EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+            shop,
+          },
         });
       } catch (error) {
-        console.log("[ORDERS_CREATE] subscription-created email failed", {
+        console.log("[ORDERS_CREATE] subscription-created EmailEvent failed", {
           error: error instanceof Error ? error.message : error,
           selectionId: linkedSelection.id,
           shopifyOrderId,
@@ -616,11 +636,25 @@ export const handleOrdersCreateWebhook = async ({
 
     if (isFirstOrderReplay) {
       try {
-        await trySendSubscriptionCreatedEmail({
-          selectionId: matchedSelection.id,
+        await ensureAndProcessEmailEventImmediately({
+          backfillStamp: (event) =>
+            backfillSubscriptionCreatedStampFromSentEvent({
+              event,
+              selectionId: matchedSelection.id,
+            }),
+          input: {
+            eventType: EMAIL_EVENT_TYPE.SUBSCRIPTION_CREATED,
+            idempotencyKey: buildSubscriptionCreatedEmailEventIdempotencyKey(
+              matchedSelection.id,
+            ),
+            metaJson: null,
+            referenceId: matchedSelection.id,
+            referenceType: EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+            shop,
+          },
         });
       } catch (error) {
-        console.log("[ORDERS_CREATE] subscription-created email failed", {
+        console.log("[ORDERS_CREATE] subscription-created EmailEvent failed", {
           error: error instanceof Error ? error.message : error,
           selectionId: matchedSelection.id,
           shopifyOrderId,

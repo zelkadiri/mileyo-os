@@ -88,6 +88,12 @@ const BUSINESS_SUITES = [
   "65-email-event-retry-cron.test.ts",
   "66-email-outbox-meal-reminder.test.ts",
   "67-email-outbox-upcoming-delivery.test.ts",
+  "68-email-outbox-payment-failed.test.ts",
+  "69-email-outbox-payment-recovered.test.ts",
+  "70-email-outbox-subscription-created.test.ts",
+  "71-email-outbox-subscription-paused.test.ts",
+  "72-email-outbox-meal-selection-confirmed.test.ts",
+  "73-email-event-immediate-processing.test.ts",
 ];
 
 const LEGACY_SUITES = [

@@ -43,13 +43,13 @@ const runSuite = async () => {
     subscriptionEmailSource.includes("trySendSubscriptionCreatedEmail"),
   );
   ctx.assertTrue(
-    "create_first_subscription appelle trySend",
-    createFirstBlock.includes("trySendSubscriptionCreatedEmail"),
+    "create_first_subscription appelle ensureAndProcess",
+    createFirstBlock.includes("ensureAndProcessEmailEventImmediately"),
   );
   ctx.assertTrue(
-    "trySend après reconcile pending contract",
+    "ensureAndProcess après reconcile pending contract",
     createFirstBlock.indexOf("reconcilePendingContractForSelection") <
-      createFirstBlock.indexOf("trySendSubscriptionCreatedEmail"),
+      createFirstBlock.indexOf("ensureAndProcessEmailEventImmediately"),
   );
   ctx.assertTrue(
     "template subscription-created utilisé",
@@ -76,17 +76,17 @@ const runSuite = async () => {
 
   ctx.scenario("B. Replay first order — contrat tardif");
   ctx.assertTrue(
-    "isFirstOrderReplay appelle trySend",
+    "isFirstOrderReplay appelle ensureAndProcess",
     ordersSource.includes("if (isFirstOrderReplay)") &&
-      ordersSource.includes("trySendSubscriptionCreatedEmail"),
+      ordersSource.includes("ensureAndProcessEmailEventImmediately"),
   );
   ctx.assertTrue(
-    "renewal seul ne branche pas trySend directement",
-    !/if \(isRenewal && matchedSelection\)[\s\S]*?trySendSubscriptionCreatedEmail[\s\S]*?if \(isFirstOrderReplay\)/.test(
+    "renewal seul ne branche pas ensureAndProcess directement",
+    !/if \(isRenewal && matchedSelection\)[\s\S]*?ensureAndProcessEmailEventImmediately[\s\S]*?if \(isFirstOrderReplay\)/.test(
       ordersSource,
     ) ||
       ordersSource.indexOf("if (isFirstOrderReplay)") <
-        ordersSource.lastIndexOf("trySendSubscriptionCreatedEmail"),
+        ordersSource.lastIndexOf("ensureAndProcessEmailEventImmediately"),
   );
 
   ctx.scenario("C. Eligibility — première commande + contrat lié");

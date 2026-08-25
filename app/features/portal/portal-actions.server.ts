@@ -20,11 +20,23 @@ import {
   resolvePaymentUpdateEligibility,
   sendPaymentUpdateEmailForSelection,
 } from "../../services/subscriptionPaymentRecovery.server";
-import { trySendSubscriptionPausedEmail, resetSubscriptionPausedEmailSentAt } from "../../services/email/email.server";
+import { resetSubscriptionPausedEmailSentAt } from "../../services/email/email.server";
 import {
   markMealSelectionExplicitForCurrentDelivery,
-  trySendMealSelectionConfirmedEmail,
+  resolveMealSelectionCycle,
 } from "../../services/email/meal-selection-email.server";
+import { EMAIL_EVENT_TYPE } from "../../constants/emailEvent";
+import {
+  backfillMealSelectionConfirmedStampFromSentEvent,
+  backfillSubscriptionPausedStampFromSentEvent,
+  buildCampaignEmailEventMetaJson,
+  buildMealSelectionConfirmedEmailEventIdempotencyKey,
+  buildSubscriptionPausedEmailEventIdempotencyKey,
+  buildSubscriptionPausedEmailEventMetaJson,
+  EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+  ensureAndProcessEmailEventImmediately,
+  ensureSubscriptionPauseEmailEpisode,
+} from "../../services/email/email-outbox-event-driven.server";
 import {
   fetchSubscriptionContractCurrentVariantId,
   updateSubscriptionContractBoxViaDraft,
@@ -344,12 +356,31 @@ const handlePauseSubscriptionAction = async ({
     await archiveResumeAttemptOnPause(selection.id);
 
     try {
-      await trySendSubscriptionPausedEmail({
-        pauseCause: "user_voluntary",
-        selectionId: selection.id,
+      const episodeId = await ensureSubscriptionPauseEmailEpisode(selection.id);
+      await ensureAndProcessEmailEventImmediately({
+        backfillStamp: (event) =>
+          backfillSubscriptionPausedStampFromSentEvent({
+            episodeId,
+            event,
+            selectionId: selection.id,
+          }),
+        input: {
+          eventType: EMAIL_EVENT_TYPE.SUBSCRIPTION_PAUSED,
+          idempotencyKey: buildSubscriptionPausedEmailEventIdempotencyKey(
+            selection.id,
+            episodeId,
+          ),
+          metaJson: buildSubscriptionPausedEmailEventMetaJson({
+            cause: "user_voluntary",
+            episodeId,
+          }),
+          referenceId: selection.id,
+          referenceType: EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+          shop,
+        },
       });
     } catch (error) {
-      console.log("[PORTAL] subscription-paused email failed", {
+      console.log("[PORTAL] subscription-paused EmailEvent failed", {
         error: error instanceof Error ? error.message : error,
         selectionId: selection.id,
       });
@@ -1347,10 +1378,15 @@ const handleUpdateFutureMealSelectionAction = async ({
     where: { id: selection.id },
   });
 
+  let effectiveDeliveryDate: string | null = null;
+
   try {
-    await markMealSelectionExplicitForCurrentDelivery({
+    const markResult = await markMealSelectionExplicitForCurrentDelivery({
       selectionId: selection.id,
     });
+    if (markResult.ok && !markResult.skipped) {
+      effectiveDeliveryDate = markResult.effectiveDeliveryDate;
+    }
   } catch (error) {
     console.log("[portal] meal selection explicit tracking failed", {
       error: error instanceof Error ? error.message : error,
@@ -1360,11 +1396,33 @@ const handleUpdateFutureMealSelectionAction = async ({
   }
 
   try {
-    await trySendMealSelectionConfirmedEmail({
-      selectionId: selection.id,
-    });
+    if (!effectiveDeliveryDate) {
+      effectiveDeliveryDate =
+        resolveMealSelectionCycle(selection).effectiveDeliveryDate;
+    }
+    if (effectiveDeliveryDate) {
+      await ensureAndProcessEmailEventImmediately({
+        backfillStamp: (event) =>
+          backfillMealSelectionConfirmedStampFromSentEvent({
+            deliveryDate: effectiveDeliveryDate!,
+            event,
+            selectionId: selection.id,
+          }),
+        input: {
+          eventType: EMAIL_EVENT_TYPE.MEAL_SELECTION_CONFIRMED,
+          idempotencyKey: buildMealSelectionConfirmedEmailEventIdempotencyKey(
+            selection.id,
+            effectiveDeliveryDate,
+          ),
+          metaJson: buildCampaignEmailEventMetaJson(effectiveDeliveryDate),
+          referenceId: selection.id,
+          referenceType: EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+          shop,
+        },
+      });
+    }
   } catch (error) {
-    console.log("[portal] meal-selection-confirmed email failed", {
+    console.log("[portal] meal-selection-confirmed EmailEvent failed", {
       error: error instanceof Error ? error.message : error,
       intent: "updateFutureMealSelection",
       selectionId: selection.id,

@@ -440,7 +440,7 @@ export const trySendSubscriptionPausedEmail = async ({
 
 /**
  * Clear pause-email idempotence after a resume is persisted locally as active.
- * Enables a future pause to send a fresh confirmation email.
+ * Enables a future pause to send a fresh confirmation email (new episode).
  */
 export const resetSubscriptionPausedEmailSentAt = async ({
   selectionId,
@@ -448,12 +448,18 @@ export const resetSubscriptionPausedEmailSentAt = async ({
   selectionId: string;
 }) => {
   const updateResult = await db.subscriptionMealSelection.updateMany({
-    data: { subscriptionPausedEmailSentAt: null },
+    data: {
+      subscriptionPauseEmailEpisodeId: null,
+      subscriptionPausedEmailSentAt: null,
+    },
     where: {
       active: true,
       id: selectionId,
       status: "active",
-      subscriptionPausedEmailSentAt: { not: null },
+      OR: [
+        { subscriptionPausedEmailSentAt: { not: null } },
+        { subscriptionPauseEmailEpisodeId: { not: null } },
+      ],
     },
   });
 

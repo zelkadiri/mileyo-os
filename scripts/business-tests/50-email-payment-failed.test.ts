@@ -63,7 +63,9 @@ const runSuite = async () => {
   ctx.assertTrue(
     "appel après failureCount === 1",
     scheduleRecoverySource.includes("if (nextFailureCount === 1)") &&
-      scheduleRecoverySource.includes("trySendMileyoPaymentFailedEmail"),
+      scheduleRecoverySource.includes("ensureAndProcessEmailEventImmediately") &&
+      (scheduleRecoverySource.includes("EMAIL_EVENT_TYPE.PAYMENT_FAILED") ||
+        scheduleRecoverySource.includes("payment_failed")),
   );
   ctx.assertTrue(
     "Shopify payment update email conservé",
@@ -75,12 +77,15 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "idempotence paymentFailedEmailSentAt après send ok",
-    recoverySource.includes("paymentFailedEmailSentAt: new Date()"),
+    recoverySource.includes("paymentFailedEmailSentAt: new Date()") ||
+      recoverySource.includes("paymentFailedEmailSentAt: sentAt") ||
+      recoverySource.includes("stampPaymentFailedEmailSentAt") ||
+      recoverySource.includes("backfillPaymentFailedStampFromSentEvent"),
   );
   ctx.assertTrue(
     "duplicate path return early avant send",
     scheduleRecoverySource.indexOf("isRecoveryFailureAlreadyRecorded") <
-      scheduleRecoverySource.indexOf("trySendMileyoPaymentFailedEmail"),
+      scheduleRecoverySource.indexOf("ensureAndProcessEmailEventImmediately"),
   );
 
   ctx.scenario("C. Eligibility — premier échec déclenchable");

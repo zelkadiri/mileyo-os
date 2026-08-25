@@ -380,9 +380,9 @@ const runSuite = async () => {
       3,
     );
     ctx.assertEqual(
-      "production registry campaign handlers",
+      "production registry 7 transactional handlers",
       Object.keys(EMAIL_EVENT_HANDLER_REGISTRY).length,
-      2,
+      7,
     );
 
     for (let i = 0; i < 5; i += 1) {

@@ -10,6 +10,7 @@ import {
   type PaymentUpdateUnavailableReason,
   type RecoveryStatus,
 } from "../constants/subscriptionPaymentRecovery";
+import { EMAIL_EVENT_TYPE } from "../constants/emailEvent";
 import db from "../db.server";
 import {
   buildPaymentFailedEmailData,
@@ -20,8 +21,21 @@ import {
   sendEmail,
   shouldSendPaymentFailedEmail,
   shouldSendPaymentRecoveredEmail,
-  trySendSubscriptionPausedEmail,
 } from "./email/email.server";
+import {
+  backfillPaymentFailedStampFromSentEvent,
+  backfillPaymentRecoveredStampFromSentEvent,
+  backfillSubscriptionPausedStampFromSentEvent,
+  buildPaymentFailedEmailEventIdempotencyKey,
+  buildPaymentRecoveredEmailEventIdempotencyKey,
+  buildPaymentRecoveredEmailEventMetaJson,
+  buildSubscriptionPausedEmailEventIdempotencyKey,
+  buildSubscriptionPausedEmailEventMetaJson,
+  EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_PAYMENT_RECOVERY,
+  EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+  ensureAndProcessEmailEventImmediately,
+  ensureSubscriptionPauseEmailEpisode,
+} from "./email/email-outbox-event-driven.server";
 import { computeNextSubscriptionCycleRetryAt } from "../utils/subscriptionCycleBilling";
 import {
   fetchShopifyBillingAttempt,
@@ -595,7 +609,32 @@ const scheduleRecoveryAfterFailure = async ({
 
   if (nextFailureCount === 1) {
     await sendPaymentUpdateEmailForSelection({ admin, selection });
-    await trySendMileyoPaymentFailedEmail({ recovery, selection });
+    try {
+      await ensureAndProcessEmailEventImmediately({
+        backfillStamp: (event) =>
+          backfillPaymentFailedStampFromSentEvent({
+            event,
+            recoveryId: recovery.id,
+          }),
+        input: {
+          eventType: EMAIL_EVENT_TYPE.PAYMENT_FAILED,
+          idempotencyKey: buildPaymentFailedEmailEventIdempotencyKey(
+            recovery.id,
+          ),
+          metaJson: null,
+          referenceId: recovery.id,
+          referenceType:
+            EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_PAYMENT_RECOVERY,
+          shop: selection.shop,
+        },
+      });
+    } catch (error) {
+      console.log("[paymentRecovery] payment-failed EmailEvent failed", {
+        error: error instanceof Error ? error.message : error,
+        recoveryId: recovery.id,
+        selectionId: selection.id,
+      });
+    }
   }
 
   if (nextFailureCount >= MAX_RECOVERY_FAILURES && selection.subscriptionContractId) {
@@ -629,12 +668,33 @@ const scheduleRecoveryAfterFailure = async ({
 
     if (!pauseResult.error) {
       try {
-        await trySendSubscriptionPausedEmail({
-          pauseCause: "payment_final_failure",
-          selectionId: selection.id,
+        const episodeId = await ensureSubscriptionPauseEmailEpisode(
+          selection.id,
+        );
+        await ensureAndProcessEmailEventImmediately({
+          backfillStamp: (event) =>
+            backfillSubscriptionPausedStampFromSentEvent({
+              episodeId,
+              event,
+              selectionId: selection.id,
+            }),
+          input: {
+            eventType: EMAIL_EVENT_TYPE.SUBSCRIPTION_PAUSED,
+            idempotencyKey: buildSubscriptionPausedEmailEventIdempotencyKey(
+              selection.id,
+              episodeId,
+            ),
+            metaJson: buildSubscriptionPausedEmailEventMetaJson({
+              cause: "payment_final_failure",
+              episodeId,
+            }),
+            referenceId: selection.id,
+            referenceType: EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+            shop: selection.shop,
+          },
         });
       } catch (error) {
-        console.log("[paymentRecovery] subscription-paused email failed", {
+        console.log("[paymentRecovery] subscription-paused EmailEvent failed", {
           error: error instanceof Error ? error.message : error,
           selectionId: selection.id,
         });
@@ -1005,11 +1065,42 @@ export const closeRecoveryOnSuccessfulOrder = async ({
     return;
   }
 
-  await trySendMileyoPaymentRecoveredEmail({
-    orderId,
-    recoveries: openRecoveries,
-    selectionId,
-  });
+  const closedRecoveryIds = openRecoveries.map((recovery) => recovery.id);
+  const shop = openRecoveries[0]?.shop;
+
+  if (!shop) {
+    return;
+  }
+
+  try {
+    await ensureAndProcessEmailEventImmediately({
+      backfillStamp: (event) =>
+        backfillPaymentRecoveredStampFromSentEvent({
+          event,
+          recoveryIds: closedRecoveryIds,
+        }),
+      input: {
+        eventType: EMAIL_EVENT_TYPE.PAYMENT_RECOVERED,
+        idempotencyKey: buildPaymentRecoveredEmailEventIdempotencyKey(
+          selectionId,
+          orderId,
+        ),
+        metaJson: buildPaymentRecoveredEmailEventMetaJson({
+          orderId,
+          recoveryIds: closedRecoveryIds,
+        }),
+        referenceId: selectionId,
+        referenceType: EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+        shop,
+      },
+    });
+  } catch (error) {
+    console.log("[paymentRecovery] payment-recovered EmailEvent failed", {
+      error: error instanceof Error ? error.message : error,
+      orderId,
+      selectionId,
+    });
+  }
 };
 
 const trySendMileyoPaymentRecoveredEmail = async ({

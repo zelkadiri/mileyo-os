@@ -109,17 +109,19 @@ const runSuite = async () => {
       createFirstBlock.indexOf("markMealSelectionExplicitForCurrentDelivery"),
   );
   ctx.assertTrue(
-    "mark avant trySendSubscriptionCreatedEmail",
+    "mark avant ensureAndProcess / SUBSCRIPTION_CREATED",
     createFirstBlock.indexOf("markMealSelectionExplicitForCurrentDelivery") <
-      createFirstBlock.indexOf("trySendSubscriptionCreatedEmail"),
+      createFirstBlock.indexOf("ensureAndProcessEmailEventImmediately") &&
+      createFirstBlock.includes("EMAIL_EVENT_TYPE.SUBSCRIPTION_CREATED"),
   );
   ctx.assertFalse(
     "Builder n'appelle pas trySendMealSelectionConfirmedEmail",
     createFirstBlock.includes("trySendMealSelectionConfirmedEmail"),
   );
   ctx.assertTrue(
-    "Builder conserve SubscriptionCreatedEmail",
-    createFirstBlock.includes("trySendSubscriptionCreatedEmail"),
+    "Builder conserve SubscriptionCreatedEmail via ensureAndProcess",
+    createFirstBlock.includes("ensureAndProcessEmailEventImmediately") &&
+      createFirstBlock.includes("EMAIL_EVENT_TYPE.SUBSCRIPTION_CREATED"),
   );
 
   ctx.scenario("C. Portal updateFutureMealSelection — ordre persist → track → email");
@@ -129,9 +131,9 @@ const runSuite = async () => {
       updateFutureBlock.indexOf("markMealSelectionExplicitForCurrentDelivery"),
   );
   ctx.assertTrue(
-    "updateFuture appelle trySend après mark",
+    "updateFuture appelle ensureAndProcess après mark",
     updateFutureBlock.indexOf("markMealSelectionExplicitForCurrentDelivery") <
-      updateFutureBlock.indexOf("trySendMealSelectionConfirmedEmail"),
+      updateFutureBlock.indexOf("ensureAndProcessEmailEventImmediately"),
   );
   ctx.assertTrue(
     "updateFuture intent loggé",

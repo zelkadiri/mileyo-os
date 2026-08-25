@@ -46,9 +46,9 @@ const runSuite = async () => {
     recoverySource.includes("trySendMileyoPaymentRecoveredEmail"),
   );
   ctx.assertTrue(
-    "closeRecovery appelle trySend après transition",
+    "closeRecovery appelle ensureAndProcess après transition",
     closeRecoverySource.includes("updateResult.count") &&
-      closeRecoverySource.includes("trySendMileyoPaymentRecoveredEmail"),
+      closeRecoverySource.includes("ensureAndProcessEmailEventImmediately"),
   );
   ctx.assertTrue(
     "template payment-recovered utilisé",

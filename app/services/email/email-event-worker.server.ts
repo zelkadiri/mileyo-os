@@ -1,7 +1,8 @@
 /**
- * Generic EmailEvent worker (EMAIL-6D).
+ * Generic EmailEvent worker (EMAIL-6D / EMAIL-6F).
  *
  * Reclaim → list due → claim → handler → transition.
+ * processEmailEventById shares the same claim/handler/transition core (no reclaim).
  * No domain email knowledge, no Resend, no trySend*, no template content.
  */
 
@@ -25,6 +26,7 @@ import {
 import {
   cancelEmailEvent,
   claimEmailEvent,
+  getEmailEventById,
   listDueEmailEvents,
   markEmailEventFailed,
   markEmailEventSent,
@@ -62,6 +64,53 @@ export type ProcessDueEmailEventsOptions = {
   now?: Date;
   shop?: string;
 };
+
+export type ProcessEmailEventByIdResult =
+  | {
+      eventId: string;
+      providerId?: string | null;
+      status: "sent";
+    }
+  | {
+      errorCode?: string;
+      eventId: string;
+      message?: string;
+      status: "queued_for_retry";
+    }
+  | {
+      eventId: string;
+      reason?: string;
+      status: "cancelled";
+    }
+  | {
+      errorCode?: string;
+      eventId: string;
+      message?: string;
+      status: "failed";
+    }
+  | {
+      eventId: string;
+      reason?: string;
+      status: "not_claimed";
+    }
+  | {
+      eventId: string;
+      status: "not_found";
+    };
+
+export type ProcessEmailEventByIdOptions = {
+  client?: EmailEventDb;
+  eventId: string;
+  handlers?: EmailEventHandlerRegistry;
+  now?: Date;
+};
+
+type AppliedHandlerOutcome =
+  | { kind: "sent"; providerId?: string }
+  | { kind: "cancelled" }
+  | { kind: "failed"; errorCode?: string; message?: string }
+  | { kind: "queued_for_retry"; errorCode?: string; message?: string }
+  | { kind: "unsupported"; errorCode: string; message: string };
 
 const minutesToMs = (minutes: number): number => minutes * 60_000;
 
@@ -123,14 +172,12 @@ const applyHandlerResult = async ({
   event,
   now,
   result,
-  summary,
 }: {
   client?: EmailEventDb;
   event: EmailEventRecord;
   now: Date;
   result: EmailEventHandlerResult;
-  summary: ProcessDueEmailEventsSummary;
-}): Promise<void> => {
+}): Promise<AppliedHandlerOutcome> => {
   if (result.outcome === "sent") {
     await markEmailEventSent({
       client,
@@ -138,8 +185,7 @@ const applyHandlerResult = async ({
       providerId: result.providerId ?? "",
       sentAt: now,
     });
-    summary.sent += 1;
-    return;
+    return { kind: "sent", providerId: result.providerId };
   }
 
   if (result.outcome === "cancelled") {
@@ -148,8 +194,7 @@ const applyHandlerResult = async ({
       client,
       eventId: event.id,
     });
-    summary.cancelled += 1;
-    return;
+    return { kind: "cancelled" };
   }
 
   if (result.outcome === "permanent_failure") {
@@ -161,15 +206,7 @@ const applyHandlerResult = async ({
       lastErrorCode: errorCode,
       lastErrorMessage: message,
     });
-    summary.failed += 1;
-    pushWorkerError({
-      errorCode,
-      eventId: event.id,
-      eventType: event.eventType,
-      message,
-      summary,
-    });
-    return;
+    return { kind: "failed", errorCode, message };
   }
 
   // retryable_failure
@@ -183,15 +220,7 @@ const applyHandlerResult = async ({
       lastErrorCode: errorCode,
       lastErrorMessage: message,
     });
-    summary.failed += 1;
-    pushWorkerError({
-      errorCode,
-      eventId: event.id,
-      eventType: event.eventType,
-      message,
-      summary,
-    });
-    return;
+    return { kind: "failed", errorCode, message };
   }
 
   await requeueEmailEventAfterFailure({
@@ -201,29 +230,23 @@ const applyHandlerResult = async ({
     lastErrorMessage: message,
     nextAttemptAt: computeEmailEventRetryAt(now),
   });
-  summary.retried += 1;
-  pushWorkerError({
-    errorCode,
-    eventId: event.id,
-    eventType: event.eventType,
-    message,
-    summary,
-  });
+  return { kind: "queued_for_retry", errorCode, message };
 };
 
+/**
+ * Shared post-claim processing for batch worker and processEmailEventById.
+ */
 const processClaimedEvent = async ({
   client,
   event,
   handlers,
   now,
-  summary,
 }: {
   client?: EmailEventDb;
   event: EmailEventRecord;
   handlers: EmailEventHandlerRegistry;
   now: Date;
-  summary: ProcessDueEmailEventsSummary;
-}): Promise<void> => {
+}): Promise<AppliedHandlerOutcome> => {
   const handler = getEmailEventHandler(event.eventType, handlers);
 
   if (!handler) {
@@ -235,16 +258,7 @@ const processClaimedEvent = async ({
       lastErrorCode: errorCode,
       lastErrorMessage: message,
     });
-    summary.unsupported += 1;
-    summary.failed += 1;
-    pushWorkerError({
-      errorCode,
-      eventId: event.id,
-      eventType: event.eventType,
-      message,
-      summary,
-    });
-    return;
+    return { kind: "unsupported", errorCode, message };
   }
 
   let result: EmailEventHandlerResult;
@@ -258,7 +272,143 @@ const processClaimedEvent = async ({
     };
   }
 
-  await applyHandlerResult({ client, event, now, result, summary });
+  return applyHandlerResult({ client, event, now, result });
+};
+
+const recordClaimedOutcomeInSummary = ({
+  event,
+  outcome,
+  summary,
+}: {
+  event: EmailEventRecord;
+  outcome: AppliedHandlerOutcome;
+  summary: ProcessDueEmailEventsSummary;
+}): void => {
+  if (outcome.kind === "sent") {
+    summary.sent += 1;
+    return;
+  }
+
+  if (outcome.kind === "cancelled") {
+    summary.cancelled += 1;
+    return;
+  }
+
+  if (outcome.kind === "queued_for_retry") {
+    summary.retried += 1;
+    pushWorkerError({
+      errorCode: outcome.errorCode,
+      eventId: event.id,
+      eventType: event.eventType,
+      message: outcome.message ?? "retryable failure",
+      summary,
+    });
+    return;
+  }
+
+  if (outcome.kind === "unsupported") {
+    summary.unsupported += 1;
+    summary.failed += 1;
+    pushWorkerError({
+      errorCode: outcome.errorCode,
+      eventId: event.id,
+      eventType: event.eventType,
+      message: outcome.message,
+      summary,
+    });
+    return;
+  }
+
+  // failed
+  summary.failed += 1;
+  pushWorkerError({
+    errorCode: outcome.errorCode,
+    eventId: event.id,
+    eventType: event.eventType,
+    message: outcome.message ?? "permanent failure",
+    summary,
+  });
+};
+
+/**
+ * Claim + process a single EmailEvent by id (immediate path for event-driven emails).
+ * Does not reclaim stuck processing rows — that remains a cron batch responsibility.
+ */
+export const processEmailEventById = async (
+  options: ProcessEmailEventByIdOptions,
+): Promise<ProcessEmailEventByIdResult> => {
+  const now = options.now ?? new Date();
+  const handlers = options.handlers ?? EMAIL_EVENT_HANDLER_REGISTRY;
+  const { client, eventId } = options;
+
+  const existing = await getEmailEventById({ client, eventId });
+
+  if (!existing) {
+    return { eventId, status: "not_found" };
+  }
+
+  const claimResult = await claimEmailEvent({
+    client,
+    eventId,
+    now,
+  });
+
+  if (!claimResult.claimed) {
+    return {
+      eventId,
+      reason: existing.status,
+      status: "not_claimed",
+    };
+  }
+
+  try {
+    const outcome = await processClaimedEvent({
+      client,
+      event: claimResult.event,
+      handlers,
+      now,
+    });
+
+    if (outcome.kind === "sent") {
+      return {
+        eventId,
+        providerId: outcome.providerId ?? null,
+        status: "sent",
+      };
+    }
+
+    if (outcome.kind === "cancelled") {
+      return { eventId, status: "cancelled" };
+    }
+
+    if (outcome.kind === "queued_for_retry") {
+      return {
+        errorCode: outcome.errorCode,
+        eventId,
+        message: outcome.message,
+        status: "queued_for_retry",
+      };
+    }
+
+    return {
+      errorCode: outcome.errorCode,
+      eventId,
+      message: outcome.message,
+      status: "failed",
+    };
+  } catch (error) {
+    const message = safeErrorMessage(error);
+    console.log("[emailEventWorker] processEmailEventById transition error", {
+      eventId,
+      message,
+    });
+    return {
+      errorCode: "worker_transition_error",
+      eventId,
+      message,
+      status: "failed",
+    };
+  }
 };
 
 /**
@@ -328,11 +478,15 @@ export const processDueEmailEvents = async (
       summary.claimed += 1;
 
       try {
-        await processClaimedEvent({
+        const outcome = await processClaimedEvent({
           client,
           event: claimResult.event,
           handlers,
           now,
+        });
+        recordClaimedOutcomeInSummary({
+          event: claimResult.event,
+          outcome,
           summary,
         });
         return { outcome: "success" };

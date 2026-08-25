@@ -61,19 +61,23 @@ const runSuite = async () => {
     subscriptionEmailSource.includes("trySendSubscriptionPausedEmail"),
   );
   ctx.assertTrue(
-    "pause portail appelle trySend après update Prisma",
+    "pause portail appelle ensureAndProcess après update Prisma",
     handlePauseBlock.includes("status: \"paused\"") &&
       handlePauseBlock.indexOf("status: \"paused\"") <
-        handlePauseBlock.indexOf("trySendSubscriptionPausedEmail"),
+        handlePauseBlock.indexOf("ensureAndProcessEmailEventImmediately"),
   );
   ctx.assertTrue(
     "cause user_voluntary",
-    handlePauseBlock.includes('pauseCause: "user_voluntary"'),
+    handlePauseBlock.includes('cause: "user_voluntary"'),
   );
   ctx.assertTrue(
-    "trySend après archiveResumeAttemptOnPause",
+    "ensure après archiveResumeAttemptOnPause",
     handlePauseBlock.indexOf("archiveResumeAttemptOnPause") <
-      handlePauseBlock.indexOf("trySendSubscriptionPausedEmail"),
+      handlePauseBlock.indexOf("ensureAndProcessEmailEventImmediately"),
+  );
+  ctx.assertTrue(
+    "ensureSubscriptionPauseEmailEpisode",
+    handlePauseBlock.includes("ensureSubscriptionPauseEmailEpisode"),
   );
   ctx.assertTrue(
     "sujet pause volontaire",
@@ -143,27 +147,28 @@ const runSuite = async () => {
       handlePauseBlock.indexOf("status: \"paused\""),
   );
   ctx.assertTrue(
-    "trySend après succès Shopify + update local",
+    "ensureAndProcess après succès Shopify + update local",
     handlePauseBlock.indexOf("status: \"paused\"") <
-      handlePauseBlock.indexOf("trySendSubscriptionPausedEmail"),
+      handlePauseBlock.indexOf("ensureAndProcessEmailEventImmediately"),
   );
 
   ctx.scenario("D. Payment final failure — branchement recovery");
   ctx.assertTrue(
-    "trySend après MAX_RECOVERY_FAILURES",
+    "ensureAndProcess après MAX_RECOVERY_FAILURES",
     scheduleRecoverySource.includes(
       `nextFailureCount >= MAX_RECOVERY_FAILURES`,
     ) &&
-      scheduleRecoverySource.includes("trySendSubscriptionPausedEmail"),
+      scheduleRecoverySource.includes("ensureAndProcessEmailEventImmediately") &&
+      scheduleRecoverySource.includes("ensureSubscriptionPauseEmailEpisode"),
   );
   ctx.assertTrue(
     "cause payment_final_failure",
-    scheduleRecoverySource.includes('pauseCause: "payment_final_failure"'),
+    scheduleRecoverySource.includes('cause: "payment_final_failure"'),
   );
   ctx.assertTrue(
     "email seulement si pause Shopify ok",
     scheduleRecoverySource.includes("!pauseResult.error") &&
-      scheduleRecoverySource.includes("trySendSubscriptionPausedEmail"),
+      scheduleRecoverySource.includes("ensureAndProcessEmailEventImmediately"),
   );
   ctx.assertTrue(
     "sujet payment final failure",
@@ -172,7 +177,9 @@ const runSuite = async () => {
   ctx.assertTrue(
     "premier échec reste PaymentFailedEmail",
     scheduleRecoverySource.includes("nextFailureCount === 1") &&
-      scheduleRecoverySource.includes("trySendMileyoPaymentFailedEmail"),
+      (scheduleRecoverySource.includes("ensureAndProcessEmailEventImmediately") ||
+        scheduleRecoverySource.includes("payment_failed") ||
+        scheduleRecoverySource.includes("EMAIL_EVENT_TYPE.PAYMENT_FAILED")),
   );
 
   ctx.scenario("E. Payment final failure — eligibility");

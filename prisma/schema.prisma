@@ -124,6 +124,7 @@ model SubscriptionMealSelection {
   nextScheduledDeliveryDate               String?   @db.VarChar(10)
   subscriptionCreatedEmailSentAt          DateTime?
   subscriptionPausedEmailSentAt           DateTime?
+  subscriptionPauseEmailEpisodeId         String?
   mealSelectionLastExplicitDeliveryDate   String?   @db.VarChar(10)
   mealSelectionConfirmedEmailSentAt       DateTime?
   mealSelectionConfirmedDeliveryDate      String?   @db.VarChar(10)

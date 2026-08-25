@@ -1,7 +1,6 @@
 /**
- * EmailEvent handler registry (EMAIL-6D).
+ * EmailEvent handler registry (EMAIL-6D / EMAIL-6E / EMAIL-6F).
  *
- * Production registry starts empty — domain handlers are wired in 6E/6F.
  * The generic worker looks up handlers by eventType only.
  */
 
@@ -41,13 +40,24 @@ export type EmailEventHandlerRegistry = Readonly<
 >;
 
 import { EMAIL_EVENT_TYPE } from "../../constants/emailEvent";
+import { mealSelectionConfirmedEmailEventHandler } from "./meal-selection-confirmed-email-event-handler.server";
 import { mealSelectionReminderEmailEventHandler } from "./meal-selection-reminder-email-event-handler.server";
+import { paymentFailedEmailEventHandler } from "./payment-failed-email-event-handler.server";
+import { paymentRecoveredEmailEventHandler } from "./payment-recovered-email-event-handler.server";
+import { subscriptionCreatedEmailEventHandler } from "./subscription-created-email-event-handler.server";
+import { subscriptionPausedEmailEventHandler } from "./subscription-paused-email-event-handler.server";
 import { upcomingDeliveryEmailEventHandler } from "./upcoming-delivery-email-event-handler.server";
 
 /**
- * Production handler map. EMAIL-6E wires scheduled campaign emails only.
+ * Production handler map — all 7 transactional EmailEvent types.
  */
 export const EMAIL_EVENT_HANDLER_REGISTRY: EmailEventHandlerRegistry = {
+  [EMAIL_EVENT_TYPE.PAYMENT_FAILED]: paymentFailedEmailEventHandler,
+  [EMAIL_EVENT_TYPE.PAYMENT_RECOVERED]: paymentRecoveredEmailEventHandler,
+  [EMAIL_EVENT_TYPE.SUBSCRIPTION_CREATED]: subscriptionCreatedEmailEventHandler,
+  [EMAIL_EVENT_TYPE.SUBSCRIPTION_PAUSED]: subscriptionPausedEmailEventHandler,
+  [EMAIL_EVENT_TYPE.MEAL_SELECTION_CONFIRMED]:
+    mealSelectionConfirmedEmailEventHandler,
   [EMAIL_EVENT_TYPE.MEAL_SELECTION_REMINDER]:
     mealSelectionReminderEmailEventHandler,
   [EMAIL_EVENT_TYPE.UPCOMING_DELIVERY]: upcomingDeliveryEmailEventHandler,
