@@ -111,6 +111,7 @@ const BUSINESS_SUITES = [
   "88-portal-account-address-payment-logout.test.ts",
   "89-portal-multi-subscription.test.ts",
   "90-billing-contract-sync-fail-closed.test.ts",
+  "91-billing-recovery-contract-sync-fail-closed.test.ts",
 ];
 
 const LEGACY_SUITES = [

@@ -126,7 +126,7 @@ Le contrat disparaît des candidats cron (`terminal_contract`) et ne peut plus �
 |---|---|
 | GraphQL | `status: FAILED` |
 | Local | `status: failed`, `active: false`, `nextBillingDate: null` |
-| Recovery locale | peut exister historiquement mais ne doit **pas** relancer de facturation si local = `failed` (voir audit § recovery) |
+| Recovery locale | peut exister historiquement mais ne doit **pas** relancer de facturation si local = `failed` ; depuis PROD-HARDENING-2A, `processDueRecoveryRetries` synchronise Shopify avant toute nouvelle tentative et fail-closed sur terminal / sync error |
 | Cron | `terminal_contract`, jamais `processed` pour ce contrat |
 | Webhook | `subscription_contracts/fail` traité ; sync via GraphQL, pas le payload seul |
 | Contrôle négatif recovery | un contrat en recovery (`paused` + recovery ouverte) doit rester `paused`, **pas** `failed`, tant que Shopify n’est pas `FAILED` |

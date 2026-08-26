@@ -47,6 +47,7 @@ import {
   type ShopifyAdminGraphql,
   type TriggerBillingAttemptResult,
 } from "./subscriptionBillingWorker.server";
+import { syncSubscriptionContractState } from "./subscriptionContractSync.server";
 
 export {
   isOpenRecoveryStatus,
@@ -804,6 +805,7 @@ export const processBillingAttemptFailure = async ({
 };
 
 export type RecoveryDiagnosticBranch =
+  | "contract_sync_error"
   | "normal_skip"
   | "pending"
   | "recovered"
@@ -814,9 +816,10 @@ export type RecoveryDiagnosticBranch =
   | "terminal_contract"
   | "terminal_failure";
 
-export type RecoverySkipReason = "terminal_contract";
+export type RecoverySkipReason = "contract_sync_error" | "terminal_contract";
 
 const EMPTY_RECOVERY_SKIP_REASONS = (): Record<RecoverySkipReason, number> => ({
+  contract_sync_error: 0,
   terminal_contract: 0,
 });
 
@@ -1660,14 +1663,108 @@ export const processDueRecoveryRetries = async (
         continue;
       }
 
+      // PROD-HARDENING-2A: verify Shopify before any new recovery charge.
+      // Do not reuse getSelectionSkipReason — PAUSED must still allow dunning retries.
+      let billableSelection = selection;
+
+      try {
+        const syncResult = await syncSubscriptionContractState({
+          admin,
+          shop,
+          source: "cron",
+          subscriptionContractId: selection.subscriptionContractId,
+        });
+
+        if (
+          syncResult.action === "error" ||
+          (syncResult.action === "skipped" &&
+            syncResult.reason === "unsupported_shopify_status")
+        ) {
+          console.log(
+            "[PAYMENT_RECOVERY] recovery retry blocked — contract sync failed",
+            {
+              error: syncResult.reason,
+              recoveryId: workingRecovery.id,
+              selectionId: selection.id,
+              shop,
+              skipReason: "contract_sync_error",
+              subscriptionContractId: selection.subscriptionContractId,
+              syncAction: syncResult.action,
+            },
+          );
+          pushRecoveryDiagnostic(summary, {
+            ...diagnosticBase,
+            branch: "contract_sync_error",
+          });
+          summary.skipped += 1;
+          summary.skipReasons.contract_sync_error += 1;
+          continue;
+        }
+
+        if (syncResult.selection) {
+          billableSelection = syncResult.selection;
+        }
+      } catch (error) {
+        console.log(
+          "[PAYMENT_RECOVERY] recovery retry blocked — contract sync failed",
+          {
+            error: error instanceof Error ? error.message : error,
+            recoveryId: workingRecovery.id,
+            selectionId: selection.id,
+            shop,
+            skipReason: "contract_sync_error",
+            subscriptionContractId: selection.subscriptionContractId,
+          },
+        );
+        pushRecoveryDiagnostic(summary, {
+          ...diagnosticBase,
+          branch: "contract_sync_error",
+        });
+        summary.skipped += 1;
+        summary.skipReasons.contract_sync_error += 1;
+        continue;
+      }
+
+      if (isTerminalSubscriptionSelectionStatus(billableSelection.status)) {
+        console.log("[PAYMENT_RECOVERY] skipped terminal contract", {
+          recoveryId: workingRecovery.id,
+          selectionId: billableSelection.id,
+          skipReason: "terminal_contract",
+          source: "post_sync",
+          status: billableSelection.status,
+          subscriptionContractId: billableSelection.subscriptionContractId,
+        });
+        pushRecoveryDiagnostic(summary, {
+          ...diagnosticBase,
+          branch: "terminal_contract",
+        });
+        summary.skipped += 1;
+        summary.skipReasons.terminal_contract += 1;
+        continue;
+      }
+
+      if (!billableSelection.subscriptionContractId) {
+        console.log("[paymentRecovery] skipped resume flow", {
+          selectionId: billableSelection.id,
+          source: "post_sync_missing_contract",
+        });
+        pushRecoveryDiagnostic(summary, {
+          ...diagnosticBase,
+          branch: "skipped_resume",
+        });
+        summary.skipped += 1;
+        continue;
+      }
+
       console.log("[paymentRecovery] retry starting", {
         failureCount: workingRecovery.failureCount,
+        localStatus: billableSelection.status,
         newAttemptNumber: nextAttemptNumber,
         newIdempotencyKey: nextIdempotencyKey,
         previousAttemptId,
         previousAttemptStatus,
         recoveryId: workingRecovery.id,
-        selectionId: selection.id,
+        selectionId: billableSelection.id,
       });
       pushRecoveryDiagnostic(summary, {
         ...diagnosticBase,
@@ -1685,8 +1782,8 @@ export const processDueRecoveryRetries = async (
       const billingResult = await triggerSubscriptionBillingAttempt({
         admin,
         idempotencyKey: nextIdempotencyKey,
-        selectionId: selection.id,
-        subscriptionContractId: selection.subscriptionContractId,
+        selectionId: billableSelection.id,
+        subscriptionContractId: billableSelection.subscriptionContractId,
       });
 
       summary.retried += 1;
