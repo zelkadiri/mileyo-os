@@ -2187,7 +2187,11 @@ export const processDueSubscriptionBillings = async (
           subscriptionContractId: currentSelection.subscriptionContractId,
         });
 
-        if (syncResult.action === "error") {
+        if (
+          syncResult.action === "error" ||
+          (syncResult.action === "skipped" &&
+            syncResult.reason === "unsupported_shopify_status")
+        ) {
           contractSyncFailed = true;
           console.log(
             "[SUBSCRIPTION_CONTRACT_SYNC] cron billing blocked — contract sync failed",
@@ -2197,6 +2201,7 @@ export const processDueSubscriptionBillings = async (
               shop,
               source: "cron",
               subscriptionContractId: currentSelection.subscriptionContractId,
+              syncAction: syncResult.action,
             },
           );
         } else if (syncResult.selection) {

@@ -168,13 +168,31 @@ Vérifier que la sync ne corrompt pas l’état local quand Shopify est injoigna
 | Base | `status`, `active`, `nextBillingDate` **identiques** à avant |
 | Pas de passage terminal | local ne doit pas passer à `cancelled` / `expired` / `failed` par défaut |
 
-### Comportement cron attendu (à valider explicitement)
+### Comportement cron attendu (fail-closed — implémenté)
 
-**État actuel Patch 1 :** si la sync retourne `action: 'error'` sans exception, le cron peut encore tenter une facturation sur l’état local inchangé.  
-**Comportement cible pré-prod :** documenter le résultat observé :
+**Code (depuis `b56df6d`, confirmé PROD-HARDENING-1) :** si la sync retourne `action: 'error'` (GraphQL / réseau / status indisponible), le cron **ne facture pas**.
 
-- Si facturation déclenchée malgré sync en erreur → **gap à traiter avant prod** (bloquer `processed` quand `syncResult.action === 'error'`).
-- Si Shopify rejette la tentative → pas de commande créée, mais noter que `subscriptionBillingAttemptCreate` a quand même été appelé.
+Flux réel :
+
+```text
+syncSubscriptionContractState
+→ action: "error" (ou statut Shopify non supporté)
+→ contractSyncFailed
+→ skipReasons.contract_sync_error += 1
+→ continue
+→ aucun applyPendingSubscriptionBoxChangeForBilling
+→ aucun subscriptionBillingAttemptCreate / triggerSubscriptionBillingAttempt
+```
+
+Conséquences :
+
+- l’état local (`status`, `active`, `nextBillingDate`) reste inchangé ;
+- le prochain cron horaire peut retenter la sync ; si succès et toujours due → billing normal ;
+- aucune manipulation artificielle de `nextBillingDate` pour masquer la dette.
+
+**Statut Shopify inconnu** (`action: "skipped"`, `reason: "unsupported_shopify_status"`) : même fail-closed (`contract_sync_error`) — Mileyo ne facture pas un état qu’elle ne comprend pas.
+
+**Preuve automatique (non-régression) :** suite business `90-billing-contract-sync-fail-closed` (ordre sync → gate → continue avant BOX-CHANGE / billing). Preuve live optionnelle : `scripts/dev-patch11-hardening-tests.ts` scénario 3 (token invalide).
 
 ### Restauration
 
@@ -183,7 +201,8 @@ Remettre le token valide / réseau, relancer sync ; l’état doit converger ver
 ### Critère de succès minimal (Patch 1)
 
 - État local **jamais** dégradé arbitrairement vers terminal lors d’une erreur GraphQL.
-- Log `[SUBSCRIPTION_CONTRACT_SYNC]` exploitable pour alerting.
+- Log `[SUBSCRIPTION_CONTRACT_SYNC]` exploitable pour alerting (`cron billing blocked — contract sync failed`).
+- Aucune billing attempt créée après sync error / statut non supporté.
 
 ---
 
@@ -192,7 +211,7 @@ Remettre le token valide / réseau, relancer sync ; l’état doit converger ver
 - [ ] Tests pause / reprise / cancel / idempotence (dev) — validés
 - [ ] EXPIRED réel
 - [ ] FAILED terminal réel (distinct recovery)
-- [ ] Erreur GraphQL documentée + décision sur blocage cron
+- [x] Erreur GraphQL — fail-closed cron **implémenté dans le code** (+ suite `90`) ; validation LIVE Shopify encore à exécuter si besoin d’observabilité ops
 - [ ] Webhooks enregistrés via `shopify app deploy --config shopify.app.production.toml` uniquement
 - [ ] Contrat `25688637580` intact après tous les tests
 - [ ] Aucune nouvelle `SubscriptionMealSelection` sur les scénarios terminal

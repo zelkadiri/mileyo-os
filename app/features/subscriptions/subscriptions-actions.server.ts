@@ -23,10 +23,21 @@ import {
 const ADMIN_BILLING_NOT_READY_MESSAGE =
   "Ce cycle n’est pas encore prêt à être facturé. Utilisez le flow de billing normal ou ajustez explicitement les données DEV.";
 
+const ADMIN_BILLING_CONTRACT_SYNC_FAILED_MESSAGE =
+  "Impossible de vérifier l’état Shopify de cet abonnement. Facturation refusée.";
+
 const redirectWithBillingError = (message: string) =>
   redirect(
     `/app/subscriptions?billingError=${encodeURIComponent(message)}`,
   );
+
+const isUnreliableContractSyncResult = (syncResult: {
+  action: string;
+  reason: string;
+}) =>
+  syncResult.action === "error" ||
+  (syncResult.action === "skipped" &&
+    syncResult.reason === "unsupported_shopify_status");
 
 export const handleSubscriptionsAction = async (request: Request) => {
   const { admin, session } = await authenticate.admin(request);
@@ -71,12 +82,39 @@ export const handleSubscriptionsAction = async (request: Request) => {
       );
     }
 
-    const syncResult = await syncSubscriptionContractState({
-      admin,
-      shop,
-      source: "admin_action",
-      subscriptionContractId: selection.subscriptionContractId,
-    });
+    let syncResult;
+
+    try {
+      syncResult = await syncSubscriptionContractState({
+        admin,
+        shop,
+        source: "admin_action",
+        subscriptionContractId: selection.subscriptionContractId,
+      });
+    } catch (error) {
+      console.log("[ADMIN_BILLING] contract sync failed", {
+        error: error instanceof Error ? error.message : error,
+        selectionId: selection.id,
+        source: "admin_action",
+        subscriptionContractId: selection.subscriptionContractId,
+      });
+      return redirectWithBillingError(
+        ADMIN_BILLING_CONTRACT_SYNC_FAILED_MESSAGE,
+      );
+    }
+
+    if (isUnreliableContractSyncResult(syncResult)) {
+      console.log("[ADMIN_BILLING] contract sync unreliable — billing blocked", {
+        reason: syncResult.reason,
+        selectionId: selection.id,
+        source: "admin_action",
+        subscriptionContractId: selection.subscriptionContractId,
+        syncAction: syncResult.action,
+      });
+      return redirectWithBillingError(
+        ADMIN_BILLING_CONTRACT_SYNC_FAILED_MESSAGE,
+      );
+    }
 
     if (
       syncResult.selection &&

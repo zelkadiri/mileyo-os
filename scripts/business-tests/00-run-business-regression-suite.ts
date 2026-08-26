@@ -109,6 +109,8 @@ const BUSINESS_SUITES = [
   "86-subscription-box-change-forecast.test.ts",
   "87-renewal-delivery-cycle-mapping.test.ts",
   "88-portal-account-address-payment-logout.test.ts",
+  "89-portal-multi-subscription.test.ts",
+  "90-billing-contract-sync-fail-closed.test.ts",
 ];
 
 const LEGACY_SUITES = [
