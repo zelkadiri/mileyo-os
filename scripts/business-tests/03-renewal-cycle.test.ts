@@ -29,9 +29,24 @@ const runSuite = () => {
   });
   ctx.when("le renouvellement est calculé");
   ctx.assertEqual(
-    "renewal uses projected active delivery",
+    "renewal uses projected catch-up when stored date is past",
     renewalSchedule?.scheduledDeliveryDate,
     "2026-07-23",
+  );
+
+  ctx.scenario("BOX-CHANGE-7H — premature renewal uses billing-target");
+  ctx.given("nextScheduledDeliveryDate encore future (3 sept) et order le 18 août");
+  const prematureRenewal = resolveRenewalDeliveryScheduleFromSelection({
+    orderCreatedAt: new Date("2026-08-18T11:49:37.000Z"),
+    selection: {
+      nextScheduledDeliveryDate: "2026-09-03",
+      preferredDeliveryWeekday: 4,
+    },
+  });
+  ctx.assertEqual(
+    "premature renewal targets next unpaid cycle 10 sept",
+    prematureRenewal?.scheduledDeliveryDate,
+    "2026-09-10",
   );
   ctx.assertEqual(
     "renewal does not reschedule from payment date",

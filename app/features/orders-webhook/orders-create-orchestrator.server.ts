@@ -42,6 +42,7 @@ import { unauthenticated } from "../../shopify.server";
 import {
   alignFirstOrderBillingWithDeliverySchedule,
   alignRenewalBillingWithDeliverySchedule,
+  findRenewalDeliveryCycleCollision,
   logDeliveryScheduleEvent,
   resolveFirstOrderDeliverySchedule,
   resolveRenewalDeliveryScheduleFromSelection,
@@ -299,7 +300,7 @@ export const handleOrdersCreateWebhook = async ({
       })
     : null;
 
-  const renewalDeliverySchedule =
+  let renewalDeliverySchedule =
     isRenewal && matchedSelection
       ? resolveRenewalDeliveryScheduleFromSelection({
           orderCreatedAt,
@@ -312,6 +313,29 @@ export const handleOrdersCreateWebhook = async ({
           shopifyOrderId,
         })
       : null;
+
+  // BOX-CHANGE-7H: distinct Shopify order must not steal an already-paid cycle.
+  // Replay of the same shopifyOrderId is excluded by the collision query.
+  if (isRenewal && matchedSelection && renewalDeliverySchedule) {
+    const cycleCollision = await findRenewalDeliveryCycleCollision({
+      scheduledDeliveryDate: renewalDeliverySchedule.scheduledDeliveryDate,
+      shop,
+      shopifyOrderId,
+      subscriptionSelectionId: matchedSelection.id,
+    });
+
+    if (cycleCollision) {
+      console.log("[DELIVERY] renewal_cycle_collision fail-closed", {
+        collidingBoxOrderId: cycleCollision.id,
+        collidingShopifyOrderId: cycleCollision.shopifyOrderId,
+        collidingShopifyOrderName: cycleCollision.shopifyOrderName,
+        scheduledDeliveryDate: renewalDeliverySchedule.scheduledDeliveryDate,
+        selectionId: matchedSelection.id,
+        shopifyOrderId,
+      });
+      renewalDeliverySchedule = null;
+    }
+  }
 
   const deliverySchedule = isRenewal
     ? renewalDeliverySchedule

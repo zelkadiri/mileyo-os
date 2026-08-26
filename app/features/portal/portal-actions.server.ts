@@ -25,6 +25,7 @@ import {
   markMealSelectionExplicitForCurrentDelivery,
   resolveMealSelectionCycle,
 } from "../../services/email/meal-selection-email.server";
+import { applyCurrentDeliveryMealSelectionUpdate } from "../../services/subscriptionCurrentDeliveryMeals.server";
 import { EMAIL_EVENT_TYPE } from "../../constants/emailEvent";
 import {
   backfillMealSelectionConfirmedStampFromSentEvent,
@@ -41,6 +42,18 @@ import {
   fetchSubscriptionContractCurrentVariantId,
   updateSubscriptionContractBoxViaDraft,
 } from "../../services/subscriptionContractBoxChange.server";
+import {
+  BOX_CHANGE_EFFECT,
+  BOX_CHANGE_IMMEDIATE_PAUSED_SUCCESS_MESSAGE,
+  BOX_CHANGE_IMMEDIATE_SUCCESS_MESSAGE,
+  BOX_CHANGE_RECOVERY_BLOCK_MESSAGE,
+  buildBoxChangePendingSuccessMessage,
+} from "../../constants/subscriptionBoxChange";
+import {
+  isRecoveryBlockingBoxChange,
+  requestSubscriptionBoxChange,
+  resolveCurrentDeliveryCoverage,
+} from "../../services/subscriptionBoxChange.server";
 import { getCutoffNow } from "../../services/deliveryCutoff.server";
 import {
   getPortalModificationBlockMessage,
@@ -1132,12 +1145,9 @@ const handleChangeSubscriptionBoxAction = async ({
   shop,
 }: PortalActionContext) => {
     const productVariantId = String(formData.get("productVariantId") ?? "").trim();
+    // selectedMeals: unpaid → current selection; locked → pending toSelectedMeals only
+    // (never written onto SubscriptionMealSelection for the current delivery).
     const selectedMealsRaw = String(formData.get("selectedMeals") ?? "");
-    const parsedQuantities = parseMealQuantities(selectedMealsRaw);
-
-    if ("error" in parsedQuantities) {
-      return renderMessage(parsedQuantities.error);
-    }
 
     if (!productVariantId) {
       return renderMessage("Veuillez sélectionner une box.");
@@ -1173,17 +1183,38 @@ const handleChangeSubscriptionBoxAction = async ({
     }
 
     const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
-    const blockedResponse = await getPortalModificationBlockResponse({
-      actionKind: "modification",
-      customerShopifyId,
-      intent: "changeSubscriptionBox",
-      recoveryRecord,
-      selection,
-      shop,
-    });
 
-    if (blockedResponse) {
-      return blockedResponse;
+    // BOX-CHANGE SoT: any open recovery blocks box-size change (not meal edits).
+    if (isRecoveryBlockingBoxChange(recoveryRecord?.status)) {
+      const portalData = await loadPortalData({ customerShopifyId, shop });
+
+      if (!portalData) {
+        return renderMessage("Configuration incomplète.");
+      }
+
+      return renderPortal({
+        ...portalData,
+        errorMessage: BOX_CHANGE_RECOVERY_BLOCK_MESSAGE,
+      });
+    }
+
+    const blockReason = getPortalModificationBlockReason(
+      selection,
+      recoveryRecord,
+      getCutoffNow(),
+    );
+
+    // billing_processing is NOT a hard block for box change: coverage routes it to
+    // pending next-cycle (billing_in_flight). Cutoff / resume / missing_contract stay.
+    if (blockReason && blockReason !== "billing_processing") {
+      return renderPortalModificationBlocked({
+        actionKind: "modification",
+        blockReason,
+        customerShopifyId,
+        intent: "changeSubscriptionBox",
+        selectionId: selection.id,
+        shop,
+      });
     }
 
     const [catalog, mealCatalog] = await Promise.all([
@@ -1231,6 +1262,81 @@ const handleChangeSubscriptionBoxAction = async ({
         errorMessage:
           "Vous avez déjà cette box. Choisissez une autre taille pour continuer.",
       });
+    }
+
+    const { coverage, locked } = await resolveCurrentDeliveryCoverage({
+      selection,
+    });
+
+    // Paid / in-flight / ambiguous → pending only. Validate target meals against the
+    // NEW box size, store them on SubscriptionBoxChange.toSelectedMeals. Do not mutate
+    // Shopify, selection.mealsCount, or selection.selectedMeals (current delivery).
+    if (locked) {
+      if (!selection.nextBillingDate) {
+        return renderMessage(
+          "Impossible d’enregistrer le changement de box : date de prochain prélèvement introuvable.",
+        );
+      }
+
+      const parsedQuantities = parseMealQuantities(selectedMealsRaw);
+
+      if ("error" in parsedQuantities) {
+        return renderMessage(parsedQuantities.error);
+      }
+
+      const meals = getPortalMealsForObjective(mealCatalog, currentBox.objective);
+      const validation = validateMealSelection({
+        meals,
+        mealsCount: selectedBox.mealCount,
+        objective: currentBox.objective,
+        quantities: parsedQuantities.quantities,
+      });
+
+      if ("error" in validation) {
+        return renderMessage(validation.error);
+      }
+
+      await requestSubscriptionBoxChange({
+        effectiveBillingDate: selection.nextBillingDate,
+        fromProductVariantId: currentBox.variantId,
+        shop,
+        subscriptionContractId: selection.subscriptionContractId,
+        subscriptionMealSelectionId: selection.id,
+        toMealsCount: selectedBox.mealCount,
+        toProductVariantId: selectedBox.variantId,
+        toSelectedMeals: validation.titles,
+        toSellingPlanId: selectedBox.sellingPlanId,
+      });
+
+      const portalData = await loadPortalData({ customerShopifyId, shop });
+
+      if (!portalData) {
+        return renderMessage("Configuration incomplète.");
+      }
+
+      console.log("[portal] subscription box change deferred to next cycle", {
+        coverage,
+        intent: "changeSubscriptionBox",
+        selectionId: selection.id,
+        toMealsCount: selectedBox.mealCount,
+        toProductVariantId: selectedBox.variantId,
+        toSelectedMealsCount: validation.titles.length,
+      });
+
+      return renderPortal({
+        ...portalData,
+        boxChangeEffect: BOX_CHANGE_EFFECT.NEXT_CYCLE,
+        successMessage: buildBoxChangePendingSuccessMessage(
+          selectedBox.mealCount,
+        ),
+      });
+    }
+
+    // unpaid → immediate (existing behavior)
+    const parsedQuantities = parseMealQuantities(selectedMealsRaw);
+
+    if ("error" in parsedQuantities) {
+      return renderMessage(parsedQuantities.error);
     }
 
     const meals = getPortalMealsForObjective(mealCatalog, currentBox.objective);
@@ -1288,10 +1394,11 @@ const handleChangeSubscriptionBoxAction = async ({
 
     return renderPortal({
       ...portalData,
+      boxChangeEffect: BOX_CHANGE_EFFECT.IMMEDIATE,
       successMessage:
         selection.status === "paused"
-          ? "Votre nouvelle box et vos plats ont été enregistrés. Vous pourrez reprendre l’abonnement quand vous le souhaitez."
-          : "Votre box et vos plats ont été modifiés pour votre prochaine commande.",
+          ? BOX_CHANGE_IMMEDIATE_PAUSED_SUCCESS_MESSAGE
+          : BOX_CHANGE_IMMEDIATE_SUCCESS_MESSAGE,
     });
 };
 
@@ -1371,40 +1478,51 @@ const handleUpdateFutureMealSelectionAction = async ({
     return renderMessage(validation.error);
   }
 
-  await prisma.subscriptionMealSelection.update({
-    data: {
-      selectedMeals: validation.titles as Prisma.InputJsonValue,
-    },
-    where: { id: selection.id },
+  // Same cycle key as cutoff / explicit tracking — do not invent a second date.
+  const effectiveDeliveryDate =
+    resolveMealSelectionCycle(selection).effectiveDeliveryDate;
+
+  // BOX-CHANGE-7D: Selection + matching current-delivery BoxOrder in one local
+  // transaction. Fail closed on BoxOrder mealsCount mismatch (no false success).
+  // No BoxOrder (unpaid cycle) → Selection-only. Never mutates mealsCount.
+  const syncResult = await applyCurrentDeliveryMealSelectionUpdate({
+    db: prisma,
+    effectiveDeliveryDate,
+    mealsCount: selection.mealsCount,
+    selectedMeals: validation.titles,
+    shop,
+    subscriptionContractId: selection.subscriptionContractId,
+    subscriptionSelectionId: selection.id,
   });
 
-  let effectiveDeliveryDate: string | null = null;
-
-  try {
-    const markResult = await markMealSelectionExplicitForCurrentDelivery({
-      selectionId: selection.id,
-    });
-    if (markResult.ok && !markResult.skipped) {
-      effectiveDeliveryDate = markResult.effectiveDeliveryDate;
-    }
-  } catch (error) {
-    console.log("[portal] meal selection explicit tracking failed", {
-      error: error instanceof Error ? error.message : error,
+  if (!syncResult.ok) {
+    console.log("[portal] current delivery meals BoxOrder sync refused", {
+      error: syncResult.error,
       intent: "updateFutureMealSelection",
       selectionId: selection.id,
     });
+
+    return renderMessage(
+      syncResult.error === "box_order_meals_count_mismatch"
+        ? "Impossible de mettre à jour les plats : la commande de livraison ne correspond pas à votre box actuelle. Contactez le support."
+        : "Impossible de mettre à jour les plats : plusieurs commandes correspondent à cette livraison. Contactez le support.",
+    );
   }
 
+  console.log("[portal] current delivery meals synced", {
+    boxOrderId: syncResult.boxOrderId,
+    boxOrderSynced: syncResult.boxOrderSynced,
+    effectiveDeliveryDate,
+    intent: "updateFutureMealSelection",
+    selectionId: selection.id,
+  });
+
   try {
-    if (!effectiveDeliveryDate) {
-      effectiveDeliveryDate =
-        resolveMealSelectionCycle(selection).effectiveDeliveryDate;
-    }
     if (effectiveDeliveryDate) {
       await ensureAndProcessEmailEventImmediately({
         backfillStamp: (event) =>
           backfillMealSelectionConfirmedStampFromSentEvent({
-            deliveryDate: effectiveDeliveryDate!,
+            deliveryDate: effectiveDeliveryDate,
             event,
             selectionId: selection.id,
           }),

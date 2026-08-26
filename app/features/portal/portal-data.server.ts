@@ -18,10 +18,16 @@ import {
   getPortalModificationBlockReason,
 } from "../../services/subscriptionModificationBlock.server";
 import { fetchSubscriptionContractCurrentVariantId } from "../../services/subscriptionContractBoxChange.server";
+import {
+  getPendingSubscriptionBoxChange,
+  isRecoveryBlockingBoxChange,
+  resolveCurrentDeliveryCoverage,
+} from "../../services/subscriptionBoxChange.server";
 import { getMerchantSupportContact } from "../../utils/merchantSupport.server";
 import { fetchBuilderBoxOptions } from "../builder/builder-catalog.server";
 import { findBuilderBoxByVariantId } from "../builder/builder-box-selection";
 import type { PaymentUpdateUnavailableReason } from "../../constants/subscriptionPaymentRecovery";
+import { BOX_CHANGE_RECOVERY_BLOCK_MESSAGE } from "../../constants/subscriptionBoxChange";
 import { getCutoffNow } from "../../services/deliveryCutoff.server";
 import { getDeliveryCutoffStatus, projectActiveScheduledDeliveryDate } from "../../utils/deliveryDate";
 import {
@@ -53,6 +59,7 @@ import type {
   PortalForecastCycle,
   PortalHistoryOrder,
   PortalMeal,
+  PortalPendingBoxChange,
   PortalSelection,
   PortalTerminalSelection,
   MerchantSupportContact,
@@ -69,29 +76,49 @@ export type PortalData = {
 
 const FORECAST_CYCLE_COUNT = 3;
 
-const buildForecastCycles = ({
+/**
+ * Upcoming billing previews (read-only).
+ * Starts after `nextBillingDate` (first push is next+interval).
+ *
+ * When an active portal pending exists, cycles whose estimatedBillingDate is
+ * on/after pending.effectiveBillingDate use the pending target box/price/count.
+ * Failed/stale/applying are not passed here — only the DTO from status=pending.
+ */
+export const buildForecastCycles = ({
   billingPolicy,
   boxSubscriptionPrice,
   boxTitle,
   mealsCount,
   nextBillingDate,
+  pendingBoxChange = null,
 }: {
   billingPolicy: { interval: string; intervalCount: number };
   boxSubscriptionPrice: string | null;
   boxTitle: string | null;
   mealsCount: number;
   nextBillingDate: Date;
+  pendingBoxChange?: Pick<
+    PortalPendingBoxChange,
+    "boxSubscriptionPrice" | "boxTitle" | "effectiveBillingDate" | "mealsCount"
+  > | null;
 }): PortalForecastCycle[] => {
   const cycles: PortalForecastCycle[] = [];
   let cursor = nextBillingDate;
 
   for (let index = 0; index < FORECAST_CYCLE_COUNT; index += 1) {
     cursor = calculateNextBillingDateFromPolicy(cursor, billingPolicy);
+    const estimatedBillingDate = cursor.toISOString();
+    const usePending =
+      pendingBoxChange != null &&
+      estimatedBillingDate >= pendingBoxChange.effectiveBillingDate;
+
     cycles.push({
-      boxSubscriptionPrice,
-      boxTitle,
-      estimatedBillingDate: cursor.toISOString(),
-      mealsCount,
+      boxSubscriptionPrice: usePending
+        ? pendingBoxChange.boxSubscriptionPrice
+        : boxSubscriptionPrice,
+      boxTitle: usePending ? pendingBoxChange.boxTitle : boxTitle,
+      estimatedBillingDate,
+      mealsCount: usePending ? pendingBoxChange.mealsCount : mealsCount,
     });
   }
 
@@ -322,6 +349,52 @@ export const loadPortalData = async ({
           ? getPortalV2BoxTitle(currentBox.mealCount)
           : reconciled.boxTitle;
 
+        const [{ locked: boxChangeAppliesNextCycle }, pendingRecord] =
+          await Promise.all([
+            resolveCurrentDeliveryCoverage({ selection: reconciled }),
+            getPendingSubscriptionBoxChange({
+              shop,
+              subscriptionMealSelectionId: reconciled.id,
+            }),
+          ]);
+
+        let pendingBoxChange: PortalPendingBoxChange | null = null;
+
+        if (pendingRecord) {
+          const targetBox = findBuilderBoxByVariantId(
+            catalog,
+            pendingRecord.toProductVariantId,
+          );
+          pendingBoxChange = {
+            boxSubscriptionPrice: targetBox?.price ?? null,
+            boxTitle: targetBox
+              ? getPortalV2BoxTitle(targetBox.mealCount)
+              : getPortalV2BoxTitle(pendingRecord.toMealsCount),
+            effectiveBillingDate:
+              pendingRecord.effectiveBillingDate.toISOString(),
+            mealsCount: pendingRecord.toMealsCount,
+            productVariantId: pendingRecord.toProductVariantId,
+            selectedMeals: getSelectedMeals(pendingRecord.toSelectedMeals),
+          };
+        }
+
+        const recoveryBlocksBoxChange = isRecoveryBlockingBoxChange(
+          recoveryRecord?.status,
+        );
+        // billing_processing still allows pending next-cycle box change.
+        const hardBoxChangeBlockReason =
+          modificationBlockReason &&
+          modificationBlockReason !== "billing_processing"
+            ? modificationBlockReason
+            : null;
+        const boxChangeBlocked =
+          recoveryBlocksBoxChange || hardBoxChangeBlockReason !== null;
+        const boxChangeBlockedReason = recoveryBlocksBoxChange
+          ? BOX_CHANGE_RECOVERY_BLOCK_MESSAGE
+          : hardBoxChangeBlockReason
+            ? getPortalModificationBlockMessage(hardBoxChangeBlockReason)
+            : null;
+
         let forecastCycles: PortalForecastCycle[] = [];
 
         if (
@@ -341,6 +414,9 @@ export const loadPortalData = async ({
               boxTitle,
               mealsCount: reconciled.mealsCount as number,
               nextBillingDate: reconciled.nextBillingDate,
+              // Active pending DTO only (getPendingSubscriptionBoxChange).
+              // Per-selection — never shared across mappedManageable rows.
+              pendingBoxChange,
             });
           }
         }
@@ -361,10 +437,9 @@ export const loadPortalData = async ({
 
         return {
           selection: {
-            boxChangeBlocked: modificationBlockReason !== null,
-            boxChangeBlockedReason: modificationBlockReason
-              ? getPortalModificationBlockMessage(modificationBlockReason)
-              : null,
+            boxChangeAppliesNextCycle,
+            boxChangeBlocked,
+            boxChangeBlockedReason,
             modificationBlocked: modificationBlockReason !== null,
             modificationBlockedReason: modificationBlockReason
               ? getPortalModificationBlockMessage(modificationBlockReason)
@@ -392,6 +467,7 @@ export const loadPortalData = async ({
             nextBillingDate: reconciled.nextBillingDate?.toISOString() ?? null,
             nextScheduledDeliveryDate:
               effectiveNextScheduledDeliveryDate ?? null,
+            pendingBoxChange,
             portalState,
             recovery: recoveryRecord
               ? {

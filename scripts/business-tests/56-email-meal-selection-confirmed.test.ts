@@ -126,23 +126,28 @@ const runSuite = async () => {
 
   ctx.scenario("C. Portal updateFutureMealSelection — ordre persist → track → email");
   ctx.assertTrue(
-    "updateFuture appelle mark après prisma update selectedMeals",
-    updateFutureBlock.indexOf("selectedMeals: validation.titles") <
-      updateFutureBlock.indexOf("markMealSelectionExplicitForCurrentDelivery"),
+    "updateFuture write-through Selection+BoxOrder après validation",
+    updateFutureBlock.indexOf("validateMealSelection") <
+      updateFutureBlock.indexOf("applyCurrentDeliveryMealSelectionUpdate") &&
+      updateFutureBlock.includes("selectedMeals: validation.titles"),
   );
   ctx.assertTrue(
-    "updateFuture appelle ensureAndProcess après mark",
-    updateFutureBlock.indexOf("markMealSelectionExplicitForCurrentDelivery") <
+    "updateFuture appelle ensureAndProcess après sync locaux",
+    updateFutureBlock.indexOf("applyCurrentDeliveryMealSelectionUpdate") <
       updateFutureBlock.indexOf("ensureAndProcessEmailEventImmediately"),
   );
   ctx.assertTrue(
     "updateFuture intent loggé",
     updateFutureBlock.includes('intent: "updateFutureMealSelection"'),
   );
+  ctx.assertTrue(
+    "updateFuture réutilise resolveMealSelectionCycle avant sync",
+    updateFutureBlock.indexOf("resolveMealSelectionCycle(selection)") <
+      updateFutureBlock.indexOf("applyCurrentDeliveryMealSelectionUpdate"),
+  );
   ctx.assertFalse(
-    "updateFuture sans mark avant validation",
-    updateFutureBlock.indexOf("markMealSelectionExplicitForCurrentDelivery") <
-      updateFutureBlock.indexOf("validateMealSelection"),
+    "updateFuture n'appelle plus mark best-effort séparé",
+    updateFutureBlock.includes("markMealSelectionExplicitForCurrentDelivery"),
   );
 
   ctx.scenario("D. Confirmation email — règles trySend");
@@ -260,19 +265,19 @@ const runSuite = async () => {
 
   ctx.scenario("G. Cutoff / validation — pas de branchement prématuré");
   ctx.assertTrue(
-    "updateFuture blockedResponse avant prisma update",
+    "updateFuture blockedResponse avant sync Selection+BoxOrder",
     updateFutureBlock.indexOf("getPortalModificationBlockResponse") <
-      updateFutureBlock.indexOf("prisma.subscriptionMealSelection.update"),
+      updateFutureBlock.indexOf("applyCurrentDeliveryMealSelectionUpdate"),
   );
   ctx.assertTrue(
-    "validation error avant prisma update",
+    "validation error avant sync Selection+BoxOrder",
     updateFutureBlock.indexOf('if ("error" in validation)') <
-      updateFutureBlock.indexOf("prisma.subscriptionMealSelection.update"),
+      updateFutureBlock.indexOf("applyCurrentDeliveryMealSelectionUpdate"),
   );
-  ctx.assertFalse(
-    "mark absent avant validation",
-    updateFutureBlock.indexOf("markMealSelectionExplicitForCurrentDelivery") <
-      updateFutureBlock.indexOf("validateMealSelection"),
+  ctx.assertTrue(
+    "sync absent avant validation",
+    updateFutureBlock.indexOf("validateMealSelection") <
+      updateFutureBlock.indexOf("applyCurrentDeliveryMealSelectionUpdate"),
   );
 
   ctx.scenario("H. Change box — tracking sans confirmation");

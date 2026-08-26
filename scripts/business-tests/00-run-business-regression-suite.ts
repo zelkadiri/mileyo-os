@@ -100,6 +100,14 @@ const BUSINESS_SUITES = [
   "77-email-manual-retry.test.ts",
   "78-email-cron-health.test.ts",
   "79-mileyo-portal-url-auth.test.ts",
+  "80-subscription-box-change-foundation.test.ts",
+  "81-subscription-box-change-portal-wiring.test.ts",
+  "82-subscription-box-change-pending-meals.test.ts",
+  "83-subscription-box-change-billing-apply.test.ts",
+  "84-subscription-box-change-portal-ux.test.ts",
+  "85-current-meals-boxorder-sync.test.ts",
+  "86-subscription-box-change-forecast.test.ts",
+  "87-renewal-delivery-cycle-mapping.test.ts",
 ];
 
 const LEGACY_SUITES = [

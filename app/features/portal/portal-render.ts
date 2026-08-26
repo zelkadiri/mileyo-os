@@ -2,6 +2,16 @@ import {
   buildMileyoPortalLoginUrl,
   MILEYO_PORTAL_PATH,
 } from "../../constants/mileyoPortal";
+import {
+  BOX_CHANGE_NEXT_CYCLE_NO_EXTRA_CHARGE,
+  BOX_CHANGE_NEXT_CYCLE_STEP1_NOTICE,
+  BOX_CHANGE_NEXT_CYCLE_STEP1_TIMING,
+  BOX_CHANGE_PENDING_CARD_COPY,
+  BOX_CHANGE_PENDING_REPLACE_NOTICE,
+  buildBoxChangeDowngradeNotice,
+  buildBoxChangeFutureMealsNotice,
+  buildCurrentMealEditorPendingNotice,
+} from "../../constants/subscriptionBoxChange";
 import { escapeHtml, scriptJson } from "../../utils/html";
 import { renderMileyoLogoImg } from "../../utils/mileyoLogo";
 import {
@@ -24,6 +34,7 @@ import type {
   PortalForecastCycle,
   PortalHistoryOrder,
   PortalMeal,
+  PortalPendingBoxChange,
   PortalRecovery,
   PortalSelection,
   PortalSubscriptionState,
@@ -293,7 +304,8 @@ const renderSubscriptionSecondary = (selection: PortalSelection) => {
 
   return `<div class="subscription-secondary-facts">
       <div class="subscription-plan-group">
-        <p class="subscription-plan-box">${escapeHtml(selection.boxTitle ?? "Non renseignée")}</p>
+        <p class="subscription-current-label">Box actuelle</p>
+        <p class="subscription-plan-box" data-current-box-meals="${selection.mealsCount}">${selection.mealsCount} repas</p>
         ${
           selection.objectiveLabel
             ? `<p class="subscription-plan-objective">${escapeHtml(selection.objectiveLabel)}</p>`
@@ -311,6 +323,38 @@ const renderSubscriptionSecondary = (selection: PortalSelection) => {
           <span class="subscription-secondary-value">${billingValue}</span>
         </div>
       </div>
+    </div>`;
+};
+
+const renderPendingBoxChangeNotice = (
+  pending: PortalPendingBoxChange,
+  currentMealsCount: number,
+) => {
+  const timingLabel = pending.effectiveBillingDate
+    ? `À partir de votre prochain prélèvement du ${formatFrenchDate(pending.effectiveBillingDate)}`
+    : "À partir du prochain cycle";
+  const explainCopy =
+    pending.mealsCount < currentMealsCount
+      ? buildBoxChangeDowngradeNotice({
+          currentMealsCount,
+          targetMealsCount: pending.mealsCount,
+        })
+      : BOX_CHANGE_PENDING_CARD_COPY;
+
+  return `<div
+      class="pending-box-notice"
+      data-pending-box-meals="${pending.mealsCount}"
+      data-pending-box-variant="${escapeHtml(pending.productVariantId)}"
+    >
+      <p class="pending-box-notice-kicker">Prochaine box</p>
+      <p class="pending-box-notice-meals">${pending.mealsCount} repas</p>
+      <p class="pending-box-notice-timing">${escapeHtml(timingLabel)}</p>
+      ${
+        pending.boxSubscriptionPrice
+          ? `<p class="pending-box-notice-price">Prochain prélèvement : ${escapeHtml(formatOrderPrice(pending.boxSubscriptionPrice))}</p>`
+          : ""
+      }
+      <p class="pending-box-notice-copy">${escapeHtml(explainCopy)}</p>
     </div>`;
 };
 
@@ -336,7 +380,11 @@ const renderNextBoxCard = ({
     ? boxes.filter((box) => box.objective === selection.objective)
     : [];
   const canChangeBox =
-    !isResumeProcessing && !isModificationBlocked && pickerBoxes.length > 0;
+    !isResumeProcessing &&
+    !selection.boxChangeBlocked &&
+    pickerBoxes.length > 0;
+  const pending = selection.pendingBoxChange;
+  const appliesNextCycle = selection.boxChangeAppliesNextCycle;
   const resumeRequiresPayment = selection.resumeRequiresPayment;
   const resumeButtonLabel = resumeRequiresPayment
     ? "Reprendre mon abonnement et payer maintenant"
@@ -353,7 +401,21 @@ const renderNextBoxCard = ({
     ? meals.filter((meal) => meal.objective === selection.objective)
     : meals;
 
-  return `<section class="portal-card selection-card${mealEditorOpenByDefault ? " is-meal-editing" : ""}" data-selection-id="${escapeHtml(selection.id)}">
+  const boxChangeStep1Notices = appliesNextCycle
+    ? `<p class="editor-notice box-change-next-cycle-notice">${escapeHtml(BOX_CHANGE_NEXT_CYCLE_STEP1_NOTICE)}</p>
+          <p class="editor-notice">${escapeHtml(BOX_CHANGE_NEXT_CYCLE_STEP1_TIMING)}</p>
+          <p class="editor-notice">${escapeHtml(BOX_CHANGE_NEXT_CYCLE_NO_EXTRA_CHARGE)}</p>`
+    : `<p class="editor-notice">Ce changement sera appliqué à votre prochaine commande.</p>
+          <p class="editor-notice">Le prix de votre prochain prélèvement sera ajusté selon la box choisie.</p>`;
+
+  const boxChangeStep2Title = appliesNextCycle
+    ? "Choisissez les plats de votre prochaine box"
+    : "Choisissez vos plats pour cette box";
+  const boxChangeStep2Notice = appliesNextCycle
+    ? buildBoxChangeFutureMealsNotice(selection.mealsCount)
+    : "Votre sélection de plats doit être refaite pour cette nouvelle box.";
+
+  return `<section class="portal-card selection-card${mealEditorOpenByDefault ? " is-meal-editing" : ""}" data-selection-id="${escapeHtml(selection.id)}" data-current-box-meals="${selection.mealsCount}"${pending ? ` data-pending-box-meals="${pending.mealsCount}"` : ""}${appliesNextCycle ? ` data-box-change-applies-next-cycle="true"` : ""}>
       <section class="portal-layout">
       <div class="portal-main-column">
       <section class="portal-section next-box-section">
@@ -390,7 +452,7 @@ const renderNextBoxCard = ({
             <div class="meal-week-progress">
               <div class="meal-week-progress-copy">
                 <p class="meal-week-progress-label">Votre semaine</p>
-                <p class="selected-count meal-editor-count" aria-live="polite">0 / ${selection.mealsCount} repas</p>
+                <p class="selected-count meal-editor-count" aria-live="polite" data-current-meal-count="${selection.mealsCount}">0 / ${selection.mealsCount} repas</p>
               </div>
               <div
                 aria-label="Progression de votre semaine"
@@ -406,6 +468,11 @@ const renderNextBoxCard = ({
           </div>
         </div>
         <p class="editor-notice">Vos choix s’appliquent à la prochaine livraison.</p>
+        ${
+          pending
+            ? `<p class="editor-notice meal-editor-pending-notice">${escapeHtml(buildCurrentMealEditorPendingNotice(pending.mealsCount))}</p>`
+            : ""
+        }
         ${
           isPaused && !resumeRequiresPayment
             ? `<p class="editor-notice paused-notice">Préparez votre semaine, puis reprenez. Aucun prélèvement immédiat.</p>`
@@ -478,12 +545,50 @@ const renderNextBoxCard = ({
         }
       </div>
       </section>
+      <section class="portal-section box-change-section" data-box-change-host="main">
+      <div
+        class="box-change-editor hidden"
+        data-applies-next-cycle="${appliesNextCycle ? "true" : "false"}"
+        data-current-meals-count="${selection.mealsCount}"
+        ${pending ? `data-has-pending="true"` : ""}
+      >
+        <div class="box-change-step" data-step="1">
+          <h3>Choisir une nouvelle box</h3>
+          ${
+            pending
+              ? `<p class="editor-notice box-change-replace-notice">${escapeHtml(BOX_CHANGE_PENDING_REPLACE_NOTICE)}</p>`
+              : ""
+          }
+          ${boxChangeStep1Notices}
+          <div class="box-grid">${renderBoxPickerCards(pickerBoxes, selection.currentVariantId)}</div>
+          <p class="error box-change-error hidden"></p>
+          <button class="portal-button secondary box-change-cancel" type="button">Annuler</button>
+        </div>
+        <div class="box-change-step hidden" data-step="2">
+          <h3 class="box-change-meal-title">${escapeHtml(boxChangeStep2Title)}</h3>
+          <p class="editor-notice box-change-meal-notice">${escapeHtml(boxChangeStep2Notice)}</p>
+          <p class="box-change-selected-box muted"></p>
+          <p class="selected-count box-change-count" data-box-change-target-count="0">0 / 0 plats sélectionnés</p>
+          <p class="error box-change-error hidden"></p>
+          <div class="meal-grid box-change-meal-grid"></div>
+          <div class="box-change-actions">
+            <button class="portal-button secondary box-change-back" type="button">Retour</button>
+            ${
+              isActive
+                ? `<button class="portal-button box-change-confirm" disabled type="button">Confirmer ma nouvelle box pour la prochaine commande</button>`
+                : `<button class="portal-button box-change-confirm" disabled type="button">Enregistrer ma nouvelle box</button>`
+            }
+          </div>
+        </div>
+      </div>
+      </section>
       </div>
       <aside class="portal-side-column">
       <section class="portal-section subscription-section">
       <div class="subscription-secondary">
         <p class="subscription-secondary-title">Votre formule</p>
         ${renderSubscriptionSecondary(selection)}
+        ${pending ? renderPendingBoxChangeNotice(pending, selection.mealsCount) : ""}
       </div>
       </section>
       ${
@@ -522,7 +627,9 @@ const renderNextBoxCard = ({
           </span>
           <span class="settings-row-chevron" aria-hidden="true"></span>
         </button>`
-            : ""
+            : selection.boxChangeBlocked && selection.boxChangeBlockedReason
+              ? `<p class="muted box-change-blocked" data-box-change-blocked="true">${escapeHtml(selection.boxChangeBlockedReason)}</p>`
+              : ""
         }
         ${
           isActive && !isModificationBlocked
@@ -548,30 +655,6 @@ const renderNextBoxCard = ({
             <a class="portal-button objective-support-contact" href="${escapeHtml(merchantSupport.href)}">Contacter le support</a>
           </div>
         </div>
-        </div>
-      </div>
-      <div class="box-change-editor hidden">
-        <div class="box-change-step" data-step="1">
-          <h3>Choisir une nouvelle box</h3>
-          <p class="editor-notice">Ce changement sera appliqué uniquement à votre prochaine commande.</p>
-          <p class="editor-notice">Le prix de votre prochain prélèvement sera ajusté selon la box choisie.</p>
-          <div class="box-grid">${renderBoxPickerCards(pickerBoxes, selection.currentVariantId)}</div>
-          <p class="error box-change-error hidden"></p>
-          <button class="portal-button secondary box-change-cancel" type="button">Annuler</button>
-        </div>
-        <div class="box-change-step hidden" data-step="2">
-          <h3>Choisir vos plats pour cette box</h3>
-          <p class="editor-notice">Votre sélection de plats doit être refaite pour cette nouvelle box.</p>
-          <p class="box-change-selected-box muted"></p>
-          <p class="selected-count box-change-count">0 / 0 plats sélectionnés</p>
-          <p class="error box-change-error hidden"></p>
-          <div class="meal-grid box-change-meal-grid"></div>
-          <button class="portal-button secondary box-change-back" type="button">Retour</button>
-          ${
-            isActive
-              ? `<button class="portal-button box-change-confirm" disabled type="button">Confirmer ma nouvelle box pour la prochaine commande</button>`
-              : `<button class="portal-button box-change-confirm" disabled type="button">Enregistrer ma nouvelle box</button>`
-          }
         </div>
       </div>
       </section>
@@ -680,6 +763,7 @@ const renderHistoryCard = (order: PortalHistoryOrder) => {
 
 export const renderPortal = ({
   boxes,
+  boxChangeEffect,
   errorMessage,
   historyOrders,
   meals,
@@ -690,6 +774,8 @@ export const renderPortal = ({
   terminalSelections,
 }: {
   boxes: PortalBoxProduct[];
+  /** BOX-CHANGE-3: immediate apply vs pending next-cycle (for BOX-CHANGE-6 UX). */
+  boxChangeEffect?: "immediate" | "next_cycle" | null;
   errorMessage?: string | null;
   historyOrders: PortalHistoryOrder[];
   meals: PortalMeal[];
@@ -728,7 +814,11 @@ export const renderPortal = ({
       ? `<p class="processing-notice">${escapeHtml(processingMessage)}</p>`
       : "",
     successMessage
-      ? `<p class="success">${escapeHtml(successMessage)}</p>`
+      ? `<p class="success"${
+          boxChangeEffect
+            ? ` data-box-change-effect="${escapeHtml(boxChangeEffect)}"`
+            : ""
+        }>${escapeHtml(successMessage)}</p>`
       : "",
     errorMessage
       ? `<p class="error portal-error">${escapeHtml(errorMessage)}</p>`

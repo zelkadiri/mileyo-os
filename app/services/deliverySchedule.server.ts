@@ -5,8 +5,10 @@ import {
   computeNextWeeklyDeliveryDate,
   computeRenewalDeliveryDate,
   getWeekday,
+  parseDeliveryDate,
   projectActiveScheduledDeliveryDate,
   referenceDateFromInstant,
+  resolveBillingTargetDeliveryDate,
   resolveResumeDeliverySchedule,
   scheduleDeliveryDate,
   scheduleWeeklyFirstOrderDeliveryDate,
@@ -577,6 +579,15 @@ export const logDeliveryProjection = ({
   }
 };
 
+/**
+ * BOX-CHANGE-7H — renewal delivery date for a paid billing cycle.
+ *
+ * - Stored nextScheduledDeliveryDate still upcoming (≥ today Paris):
+ *   use resolveBillingTargetDeliveryDate so a premature renewal pays the
+ *   *next* unpaid cycle (e.g. 3 Sept current → 10 Sept), not a duplicate 3 Sept.
+ * - Stored date already past: projectActive catch-up only (do NOT apply
+ *   billing-target again — that would double-advance on Saturday billing).
+ */
 export const resolveRenewalDeliveryScheduleFromSelection = ({
   orderCreatedAt,
   selection,
@@ -608,26 +619,71 @@ export const resolveRenewalDeliveryScheduleFromSelection = ({
     preferredDeliveryWeekday: selection.preferredDeliveryWeekday,
   });
 
+  const storedDate = parseDeliveryDate(selection.nextScheduledDeliveryDate);
+  const todayParis = referenceDateFromInstant(referenceInstant);
+
+  let scheduledDeliveryDate: DeliveryDateString | null = null;
+  let usedBillingTarget = false;
+
+  if (storedDate && storedDate >= todayParis) {
+    // Current cycle still upcoming — renewal pays the billing-target cycle.
+    scheduledDeliveryDate = resolveBillingTargetDeliveryDate({
+      now: referenceInstant,
+      projectedActiveDeliveryDate: storedDate,
+    });
+    usedBillingTarget = true;
+  } else if (projection.effectiveDeliveryDate) {
+    // Stored date past (or missing with weekday fallback) — catch-up only.
+    scheduledDeliveryDate = projection.effectiveDeliveryDate;
+  }
+
   logDeliveryProjection({
-    effectiveDeliveryDate: projection.effectiveDeliveryDate,
+    effectiveDeliveryDate: scheduledDeliveryDate,
     preferredDeliveryWeekday: selection.preferredDeliveryWeekday,
     projectedFromStoredDate: projection.projectedFromStoredDate,
     selectionId,
     shopifyOrderId,
-    wasProjected: projection.wasProjected,
+    wasProjected: usedBillingTarget || projection.wasProjected,
   });
 
-  if (!projection.effectiveDeliveryDate) {
+  if (!scheduledDeliveryDate) {
     return null;
   }
 
   return {
     deliveryRescheduleReason: null,
-    desiredDeliveryDate: projection.effectiveDeliveryDate,
+    desiredDeliveryDate: scheduledDeliveryDate,
     referenceDate,
-    scheduledDeliveryDate: projection.effectiveDeliveryDate,
+    scheduledDeliveryDate,
   };
 };
+
+/** Another non-simulated BoxOrder already owns this selection+delivery cycle. */
+export const findRenewalDeliveryCycleCollision = async ({
+  shop,
+  shopifyOrderId,
+  scheduledDeliveryDate,
+  subscriptionSelectionId,
+}: {
+  shop: string;
+  shopifyOrderId: string;
+  scheduledDeliveryDate: string;
+  subscriptionSelectionId: string;
+}) =>
+  db.boxOrder.findFirst({
+    select: {
+      id: true,
+      shopifyOrderId: true,
+      shopifyOrderName: true,
+    },
+    where: {
+      NOT: { shopifyOrderId },
+      scheduledDeliveryDate,
+      shop,
+      simulated: false,
+      subscriptionSelectionId,
+    },
+  });
 
 export const resolveRenewalDeliverySchedule = ({
   orderCreatedAt,

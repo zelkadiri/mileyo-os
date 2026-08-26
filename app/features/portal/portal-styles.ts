@@ -280,6 +280,19 @@ body {
   display: none;
 }
 
+/* Box-change flow — same main-column host as meal editor (not sidebar) */
+.box-change-section {
+  background: transparent;
+  border: 0;
+  border-radius: 22px;
+  box-shadow: none;
+  padding: 0;
+}
+
+.box-change-section:has(.box-change-editor.hidden) {
+  display: none;
+}
+
 /* Surface premium partagée — blocs secondaires (hors hero) */
 .subscription-section,
 .manage-section,
@@ -2610,12 +2623,96 @@ button:disabled,
 }
 
 .box-change-editor {
-  border-top: 1px solid rgba(220, 194, 240, 0.28);
-  margin-top: 12px;
-  padding-top: 14px;
+  margin-top: 0;
+  padding: 0;
+}
+
+.selection-card.is-box-editing .box-change-section {
+  border: 0;
+  box-shadow: none;
+}
+
+.selection-card.is-box-editing .box-change-editor {
+  background: linear-gradient(
+    180deg,
+    rgba(252, 248, 246, 0.96) 0%,
+    rgba(255, 255, 255, 0.98) 100%
+  );
+  border: 0;
+  border-radius: 18px;
+  margin-top: 0;
+  padding: 18px 16px 16px;
+}
+
+.selection-card.is-box-editing .hero-primary-actions {
+  display: none;
 }
 
 .box-change-step h3 { margin: 0 0 8px; }
+
+.box-change-step .editor-notice + .editor-notice {
+  margin-top: 6px;
+}
+
+.box-change-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.pending-box-notice {
+  background: rgba(124, 201, 167, 0.1);
+  border: 1px solid rgba(124, 201, 167, 0.28);
+  border-radius: 16px;
+  display: grid;
+  gap: 4px;
+  margin-top: 16px;
+  padding: 14px 14px 12px;
+}
+
+.pending-box-notice-kicker {
+  color: var(--mileyo-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.pending-box-notice-meals {
+  color: var(--mileyo-purple-black);
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.pending-box-notice-timing,
+.pending-box-notice-price {
+  color: var(--mileyo-purple-black);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.pending-box-notice-copy {
+  color: var(--mileyo-muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  margin: 4px 0 0;
+}
+
+.subscription-current-label {
+  color: var(--mileyo-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin: 0;
+  text-transform: uppercase;
+}
 
 .box-grid {
   display: grid;
@@ -2670,7 +2767,7 @@ button:disabled,
 
 .box-change-blocked { margin-top: 8px; }
 
-.box-change-step .portal-button { margin-right: 8px; }
+.box-change-step .portal-button { margin-right: 0; }
 
 @media (min-width: 560px) {
   .selection-card {
@@ -3343,17 +3440,24 @@ button:disabled,
     padding: 30px 28px 28px;
   }
 
-  .portal-side-column .subscription-secondary-facts,
-  .portal-side-column .box-grid {
+  .portal-side-column .subscription-secondary-facts {
     grid-template-columns: 1fr;
-  }
-
-  .portal-side-column .meal-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .portal-side-column .subscription-billing-group {
     gap: 12px;
+  }
+
+  .portal-main-column .box-change-editor .box-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .portal-main-column .box-change-editor .meal-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .selection-card.is-box-editing .box-change-editor {
+    padding: 22px 20px 18px;
   }
 
   .hero-meal-preview {
@@ -3373,5 +3477,13 @@ button:disabled,
 @media (min-width: 960px) {
   .meal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .box-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  .portal-main-column .box-change-editor .box-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .portal-main-column .box-change-editor .meal-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 `;

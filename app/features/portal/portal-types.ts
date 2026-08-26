@@ -72,7 +72,22 @@ export type PortalDeliveryCutoffStatus = {
   isPassed: boolean;
 };
 
+/**
+ * Pending next-cycle box change for portal display (BOX-CHANGE-6).
+ * Price comes from the live catalog — never treat a stored local price as SoT.
+ */
+export type PortalPendingBoxChange = {
+  boxSubscriptionPrice: string | null;
+  boxTitle: string;
+  effectiveBillingDate: string;
+  mealsCount: number;
+  productVariantId: string;
+  selectedMeals: string[];
+};
+
 export type PortalSelection = {
+  /** True when a new box change must wait for the next billing cycle. */
+  boxChangeAppliesNextCycle: boolean;
   boxChangeBlocked: boolean;
   boxChangeBlockedReason: string | null;
   modificationBlocked: boolean;
@@ -89,6 +104,8 @@ export type PortalSelection = {
   nextBillingDate: string | null;
   /** ISO date `YYYY-MM-DD` — prochaine livraison planifiée. */
   nextScheduledDeliveryDate: string | null;
+  /** Active pending box change, if any — future state only. */
+  pendingBoxChange: PortalPendingBoxChange | null;
   portalState: PortalSubscriptionState;
   recovery: PortalRecovery | null;
   resumeBlockedMessage: string | null;

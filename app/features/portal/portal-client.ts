@@ -814,6 +814,10 @@ export const portalClientScript = `
     if (boxChangeState.changeBoxButton) {
       boxChangeState.changeBoxButton.classList.remove("hidden");
     }
+    var card = boxChangeState.boxChangeEditor.closest(".selection-card");
+    if (card) {
+      card.classList.remove("is-box-editing");
+    }
     boxChangeState.selectedBox = null;
     boxChangeState.quantities = {};
     boxChangeState.requiredMeals = 0;
@@ -1117,10 +1121,29 @@ export const portalClientScript = `
         var total = selectedTotal(boxChangeState.quantities);
         boxChangeState.counts.forEach(function (node) {
           node.textContent = total + " / " + boxChangeState.requiredMeals + " plats sélectionnés";
+          node.setAttribute("data-box-change-target-count", String(boxChangeState.requiredMeals));
         });
         var isValid = total === boxChangeState.requiredMeals;
         if (boxChangeState.confirmButton) {
           boxChangeState.confirmButton.disabled = !isValid || !boxChangeState.selectedBox;
+        }
+      }
+
+      function updateBoxChangeMealStepCopy(selectedBox) {
+        var appliesNextCycle = boxChangeEditor.getAttribute("data-applies-next-cycle") === "true";
+        var currentMealsCount = Number(boxChangeEditor.getAttribute("data-current-meals-count") || selection.mealsCount || 0);
+        var titleNode = boxChangeEditor.querySelector(".box-change-meal-title");
+        var noticeNode = boxChangeEditor.querySelector(".box-change-meal-notice");
+        if (!selectedBox) return;
+        if (titleNode) {
+          titleNode.textContent = appliesNextCycle
+            ? "Choisissez les " + selectedBox.mealCount + " plats de votre prochaine box"
+            : "Choisissez vos " + selectedBox.mealCount + " plats pour cette box";
+        }
+        if (noticeNode) {
+          noticeNode.textContent = appliesNextCycle
+            ? "Vos " + currentMealsCount + " plats de la livraison actuelle ne seront pas modifiés."
+            : "Votre sélection de plats doit être refaite pour cette nouvelle box.";
         }
       }
 
@@ -1145,7 +1168,7 @@ export const portalClientScript = `
 
       function updateSelectedBoxLabels() {
         var label = boxChangeState.selectedBox
-          ? boxChangeState.selectedBox.title + " · " + boxChangeState.selectedBox.mealCount + " repas · " + formatPrice(boxChangeState.selectedBox.price)
+          ? boxChangeState.selectedBox.title + " · " + boxChangeState.selectedBox.mealCount + " repas · Prochain prélèvement : " + formatPrice(boxChangeState.selectedBox.price)
           : "";
         boxChangeEditor.querySelectorAll(".box-change-selected-box").forEach(function (node) {
           node.textContent = label;
@@ -1167,8 +1190,16 @@ export const portalClientScript = `
         if (editor.editButton) {
           editor.editButton.classList.add("hidden");
         }
+        card.classList.add("is-box-editing");
         boxChangeEditor.classList.remove("hidden");
         showBoxChangeStep(1);
+        if (typeof boxChangeEditor.scrollIntoView === "function") {
+          try {
+            boxChangeEditor.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          } catch (error) {
+            boxChangeEditor.scrollIntoView(false);
+          }
+        }
       });
 
       boxChangeEditor.querySelectorAll(".box-card").forEach(function (boxCard) {
@@ -1196,6 +1227,7 @@ export const portalClientScript = `
             node.classList.toggle("selected", node.getAttribute("data-variant-id") === variantId);
           });
           updateSelectedBoxLabels();
+          updateBoxChangeMealStepCopy(selectedBox);
           setBoxChangeError(boxChangeState, "");
           renderBoxChangeMealGrid();
           updateBoxChangeCounts();

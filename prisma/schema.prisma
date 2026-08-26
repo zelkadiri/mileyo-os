@@ -136,11 +136,44 @@ model SubscriptionMealSelection {
   updatedAt                DateTime  @updatedAt
 
   paymentRecoveries SubscriptionPaymentRecovery[]
+  boxChanges        SubscriptionBoxChange[]
 
   @@unique([shop, shopifyOrderId])
   @@unique([shop, subscriptionContractId])
   @@index([shop, customerShopifyId])
   @@index([shop, subscriptionContractId])
+}
+
+// Intent to change box size on a future billing cycle (BOX-CHANGE-2).
+// Shopify variant.price remains the financial SoT at apply time — no billed price stored here.
+model SubscriptionBoxChange {
+  id                          String    @id @default(cuid())
+  shop                        String
+  subscriptionMealSelectionId String
+  subscriptionContractId      String
+  fromProductVariantId        String
+  toProductVariantId          String
+  toMealsCount                Int
+  /// Future-cycle meal titles (same Json string[] shape as SubscriptionMealSelection.selectedMeals).
+  toSelectedMeals             Json
+  toSellingPlanId             String?
+  status                      String
+  requestedAt                 DateTime  @default(now())
+  /// Next billing instant this change targets (selection.nextBillingDate at request).
+  effectiveBillingDate        DateTime
+  appliedAt                   DateTime?
+  cancelledAt                 DateTime?
+  failedAt                    DateTime?
+  failureReason               String?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  subscriptionMealSelection SubscriptionMealSelection @relation(fields: [subscriptionMealSelectionId], references: [id], onDelete: Cascade)
+
+  @@index([shop, status])
+  @@index([subscriptionMealSelectionId, status])
+  @@index([subscriptionMealSelectionId, effectiveBillingDate, status])
+  @@index([subscriptionContractId, status])
 }
 
 model SubscriptionPaymentRecovery {

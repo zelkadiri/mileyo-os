@@ -7,7 +7,11 @@ import { isTerminalSubscriptionSelectionStatus } from "../../constants/subscript
 import {
   syncSubscriptionContractState,
 } from "../../services/subscriptionContractSync.server";
-import { triggerSubscriptionBillingAttempt } from "../../services/subscriptionBillingWorker.server";
+import {
+  getBillingRunnerDeliveryGate,
+  getSelectionSkipReason,
+  triggerSubscriptionBillingAttempt,
+} from "../../services/subscriptionBillingWorker.server";
 import { processDueRecoveryRetries } from "../../services/subscriptionPaymentRecovery.server";
 import { getSelectedMealsFromJson } from "../../utils/mealSelection";
 
@@ -15,6 +19,9 @@ import {
   isRecoveryDevRetryEnabled,
   isSubscriptionTestActionsEnabled,
 } from "./subscriptions-test.server";
+
+const ADMIN_BILLING_NOT_READY_MESSAGE =
+  "Ce cycle n’est pas encore prêt à être facturé. Utilisez le flow de billing normal ou ajustez explicitement les données DEV.";
 
 const redirectWithBillingError = (message: string) =>
   redirect(
@@ -86,6 +93,49 @@ export const handleSubscriptionsAction = async (request: Request) => {
       return redirectWithBillingError(
         "Cet abonnement n’est pas actif et ne peut pas être facturé.",
       );
+    }
+
+    // Same gates as the cron worker — never create a premature paid Order in DEV.
+    const activeRecovery = await db.subscriptionPaymentRecovery.findFirst({
+      where: {
+        shop,
+        status: {
+          in: [
+            "processing",
+            "retry_scheduled",
+            "payment_method_update_needed",
+            "email_send_failed",
+          ],
+        },
+        subscriptionMealSelectionId: billableSelection.id,
+      },
+    });
+
+    const skipReason = getSelectionSkipReason(
+      billableSelection,
+      activeRecovery,
+    );
+    const deliveryGate = getBillingRunnerDeliveryGate({
+      selection: {
+        nextBillingDate: billableSelection.nextBillingDate,
+        nextScheduledDeliveryDate: billableSelection.nextScheduledDeliveryDate,
+        preferredDeliveryWeekday: billableSelection.preferredDeliveryWeekday,
+      },
+    });
+
+    console.log("[ADMIN_BILLING] gate", {
+      billingReadyAt:
+        deliveryGate.readiness.billingReadyAt?.toISOString() ?? null,
+      billingTargetDeliveryDate:
+        deliveryGate.readiness.billingTargetDeliveryDate,
+      deliveryReady: deliveryGate.readiness.isReady,
+      nextBillingDate: billableSelection.nextBillingDate?.toISOString() ?? null,
+      selectionId: billableSelection.id,
+      skipReason,
+    });
+
+    if (skipReason) {
+      return redirectWithBillingError(ADMIN_BILLING_NOT_READY_MESSAGE);
     }
 
     const idempotencyKey = `mileyo_admin_${billableSelection.id}_${Date.now()}`;

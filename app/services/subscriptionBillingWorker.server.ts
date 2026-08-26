@@ -16,6 +16,7 @@ import {
 } from "./subscriptionPaymentRecovery.server";
 import { alignImmediatePaymentResumeWithDeliverySchedule } from "./deliverySchedule.server";
 import { evaluateDeliveryBillingReadiness } from "../utils/deliveryDate";
+import { markMealSelectionExplicitForCurrentDelivery } from "./email/meal-selection-email.server";
 
 const billingAttemptCreateMutation = `#graphql
   mutation SubscriptionBillingAttemptCreate(
@@ -254,7 +255,8 @@ export type BillingSkipReason =
   | "recent_attempt"
   | "terminal_contract"
   | "contract_sync_error"
-  | "delivery_billing_not_ready";
+  | "delivery_billing_not_ready"
+  | "pending_box_change";
 
 export type BillingAttemptStatus =
   | "success"
@@ -308,6 +310,7 @@ const EMPTY_SKIP_REASONS = (): Record<BillingSkipReason, number> => ({
   next_billing_date_in_future: 0,
   paused_or_inactive: 0,
   payment_recovery: 0,
+  pending_box_change: 0,
   recent_attempt: 0,
   terminal_contract: 0,
 });
@@ -2064,6 +2067,13 @@ export const processDueSubscriptionBillings = async (
     where: { shop },
   });
 
+  // BOX-CHANGE-4/5: load apply helper once per cron run (dynamic import avoids ESM TDZ
+  // cycle: billingWorker → boxChange → modificationBlock → billingWorker).
+  const {
+    applyPendingSubscriptionBoxChangeForBilling,
+    isBillingAllowedAfterBoxChangeApply,
+  } = await import("./subscriptionBoxChange.server");
+
   for (const selection of selections) {
     let currentSelection = selection;
     const activeRecovery =
@@ -2245,6 +2255,34 @@ export const processDueSubscriptionBillings = async (
       summary.skipped += 1;
       summary.skipReasons[deliveryGate.skipReason] += 1;
       continue;
+    }
+
+    // BOX-CHANGE-4/5: apply matching pending before billing attempt.
+    // Never on recovery path (already skipped above via payment_recovery).
+    // Fail-closed: only explicit allowlist outcomes may bill.
+    const boxChangeApply = await applyPendingSubscriptionBoxChangeForBilling({
+      admin,
+      markMealSelectionExplicit: async (selectionId) => {
+        await markMealSelectionExplicitForCurrentDelivery({ selectionId });
+      },
+      selection: currentSelection,
+    });
+
+    if (!isBillingAllowedAfterBoxChangeApply(boxChangeApply)) {
+      console.log("[BOX_CHANGE_APPLY] billing skipped after apply gate", {
+        outcome: boxChangeApply.outcome,
+        pendingId: boxChangeApply.pendingId,
+        reason: boxChangeApply.reason ?? null,
+        selectionId: currentSelection.id,
+        source: "cron",
+      });
+      summary.skipped += 1;
+      summary.skipReasons.pending_box_change += 1;
+      continue;
+    }
+
+    if (boxChangeApply.selection) {
+      currentSelection = boxChangeApply.selection;
     }
 
     summary.processed += 1;
