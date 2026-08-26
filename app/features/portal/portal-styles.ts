@@ -671,7 +671,11 @@ body {
 }
 
 .settings-menu > .settings-row + .objective-support > .settings-row,
-.settings-menu > .objective-support + .settings-row {
+.settings-menu > .objective-support + .settings-row,
+.settings-menu > .settings-address-block + .settings-payment-block,
+.settings-menu > .settings-payment-block + .settings-row,
+.settings-menu > .settings-payment-block + .objective-support > .settings-row,
+.settings-menu > .settings-address-block + .settings-row {
   border-top: 1px solid rgba(220, 194, 240, 0.32);
 }
 
@@ -721,6 +725,152 @@ body {
   letter-spacing: 0.005em;
   line-height: 1.35;
   opacity: 0.92;
+}
+
+.settings-row--static {
+  cursor: default;
+}
+
+.settings-row--static:hover {
+  background: transparent;
+}
+
+.settings-row-action {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--mileyo-lilac-deep, #6b4f8a);
+  cursor: pointer;
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  padding: 6px 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.settings-row-action:hover {
+  color: var(--mileyo-purple-black);
+}
+
+.settings-row-action:focus-visible {
+  border-radius: 8px;
+  outline: 2px solid var(--mileyo-lilac);
+  outline-offset: 2px;
+}
+
+.settings-address-block,
+.settings-payment-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-address-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.settings-address-line {
+  color: var(--mileyo-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.settings-address-blocked {
+  margin: 0;
+  padding: 0 10px 10px;
+}
+
+.settings-address-support {
+  color: var(--mileyo-lilac-deep, #6b4f8a);
+  display: inline-block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin: 0 10px 12px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.settings-address-panel {
+  padding: 4px 10px 14px;
+}
+
+.settings-address-fields {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.settings-address-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.settings-address-field--full {
+  grid-column: 1 / -1;
+}
+
+.settings-address-field input {
+  border: 1px solid rgba(180, 150, 200, 0.45);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 10px 12px;
+}
+
+.settings-address-field input[readonly] {
+  background: rgba(252, 248, 246, 0.92);
+  color: var(--mileyo-muted);
+}
+
+.settings-address-optional {
+  color: var(--mileyo-muted);
+  font-weight: 500;
+}
+
+.settings-address-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.settings-address-error {
+  margin: 8px 0 0;
+}
+
+.settings-logout-row {
+  border-top: 1px solid rgba(220, 194, 240, 0.32);
+  display: flex;
+  justify-content: center;
+  padding: 14px 10px 6px;
+}
+
+.settings-logout-link {
+  color: var(--mileyo-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.settings-logout-link:hover {
+  color: var(--mileyo-purple-black);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.settings-logout-link:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid var(--mileyo-lilac);
+  outline-offset: 2px;
 }
 
 .settings-row-chevron {
@@ -3108,6 +3258,10 @@ button:disabled,
 
   .settings-row-hint {
     font-size: 0.76rem;
+  }
+
+  .settings-address-fields {
+    grid-template-columns: 1fr;
   }
 
   .subscription-plan-box {

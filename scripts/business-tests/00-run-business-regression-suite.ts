@@ -108,6 +108,7 @@ const BUSINESS_SUITES = [
   "85-current-meals-boxorder-sync.test.ts",
   "86-subscription-box-change-forecast.test.ts",
   "87-renewal-delivery-cycle-mapping.test.ts",
+  "88-portal-account-address-payment-logout.test.ts",
 ];
 
 const LEGACY_SUITES = [

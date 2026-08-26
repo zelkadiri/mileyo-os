@@ -24,11 +24,27 @@ const OBJECTIVE_HELP_MESSAGE =
   "Le changement d'objectif nécessite l'aide de notre équipe afin d'adapter votre abonnement. Contactez-nous via le chat.";
 
 const activeSelection = (): PortalSelection => ({
+  boxChangeAppliesNextCycle: false,
   boxChangeBlocked: false,
   boxChangeBlockedReason: null,
   boxSubscriptionPrice: "76.11",
   boxTitle: "Box 8 repas",
   currentVariantId: "gid://shopify/ProductVariant/811",
+  deliveryAddress: {
+    address: {
+      address1: "6 rue d'Armaille",
+      address2: null,
+      city: "Paris",
+      countryCode: "FR",
+      firstName: "Khalid",
+      lastName: "Ramdani",
+      provinceCode: null,
+      zip: "75017",
+    },
+    blockKind: null,
+    blockMessage: null,
+    editable: true,
+  },
   deliveryCutoff: {
     deadlineLabel: null,
     isKnown: false,
@@ -43,6 +59,9 @@ const activeSelection = (): PortalSelection => ({
   nextScheduledDeliveryDate: "2026-08-27",
   objective: SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS,
   objectiveLabel: "Perte de poids",
+  paymentUpdateAvailable: true,
+  paymentUpdateUnavailableReason: null,
+  pendingBoxChange: null,
   portalState: "active",
   recovery: null,
   resumeBlockedMessage: null,

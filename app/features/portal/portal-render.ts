@@ -1,5 +1,6 @@
 import {
   buildMileyoPortalLoginUrl,
+  MILEYO_CUSTOMER_LOGOUT_PATH,
   MILEYO_PORTAL_PATH,
 } from "../../constants/mileyoPortal";
 import {
@@ -12,6 +13,12 @@ import {
   buildBoxChangeFutureMealsNotice,
   buildCurrentMealEditorPendingNotice,
 } from "../../constants/subscriptionBoxChange";
+import {
+  PORTAL_ADDRESS_COUNTRY_LABELS,
+  PORTAL_ADDRESS_FIELD_MAX,
+  PORTAL_PAYMENT_UPDATE_HINT,
+  type PortalAddressSupportedCountryCode,
+} from "../../constants/subscriptionContractAddress";
 import { escapeHtml, scriptJson } from "../../utils/html";
 import { renderMileyoLogoImg } from "../../utils/mileyoLogo";
 import {
@@ -31,6 +38,8 @@ import { portalClientScript } from "./portal-client";
 import { portalStyles } from "./portal-styles";
 import type {
   MerchantSupportContact,
+  PortalDeliveryAddress,
+  PortalDeliveryAddressState,
   PortalForecastCycle,
   PortalHistoryOrder,
   PortalMeal,
@@ -43,11 +52,138 @@ import type {
 } from "./portal-types";
 
 const portalLoginHref = buildMileyoPortalLoginUrl(MILEYO_PORTAL_PATH);
+const portalLogoutHref = MILEYO_CUSTOMER_LOGOUT_PATH;
 
 const htmlResponse = (html: string) =>
   new Response(html, {
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
+
+const formatPortalDeliveryAddressLines = (
+  address: PortalDeliveryAddress,
+): string[] => {
+  const name = [address.firstName, address.lastName].filter(Boolean).join(" ");
+  const street = [address.address1, address.address2].filter(Boolean).join(", ");
+  const cityLine = [address.zip, address.city].filter(Boolean).join(" ");
+  const countryLabel =
+    PORTAL_ADDRESS_COUNTRY_LABELS[
+      address.countryCode as PortalAddressSupportedCountryCode
+    ] ?? address.countryCode;
+
+  return [name, street, cityLine, countryLabel].filter(Boolean);
+};
+
+const renderDeliveryAddressBlock = (
+  addressState: PortalDeliveryAddressState,
+  merchantSupport: MerchantSupportContact,
+) => {
+  const lines = addressState.address
+    ? formatPortalDeliveryAddressLines(addressState.address)
+    : [];
+  const addressHtml =
+    lines.length > 0
+      ? `<div class="settings-address-lines">${lines
+          .map((line) => `<p class="settings-address-line">${escapeHtml(line)}</p>`)
+          .join("")}</div>`
+      : `<p class="settings-row-hint">Adresse non renseignée</p>`;
+
+  const address = addressState.address;
+  const formHtml = addressState.editable
+    ? `<div class="settings-address-panel hidden">
+        <form class="settings-address-form" novalidate>
+          <div class="settings-address-fields">
+            <label class="settings-address-field">
+              <span>Prénom</span>
+              <input autocomplete="given-name" maxlength="${PORTAL_ADDRESS_FIELD_MAX.firstName}" name="firstName" required type="text" value="${escapeHtml(address?.firstName ?? "")}">
+            </label>
+            <label class="settings-address-field">
+              <span>Nom</span>
+              <input autocomplete="family-name" maxlength="${PORTAL_ADDRESS_FIELD_MAX.lastName}" name="lastName" required type="text" value="${escapeHtml(address?.lastName ?? "")}">
+            </label>
+            <label class="settings-address-field settings-address-field--full">
+              <span>Adresse</span>
+              <input autocomplete="address-line1" maxlength="${PORTAL_ADDRESS_FIELD_MAX.address1}" name="address1" required type="text" value="${escapeHtml(address?.address1 ?? "")}">
+            </label>
+            <label class="settings-address-field settings-address-field--full">
+              <span>Complément d’adresse <span class="settings-address-optional">(facultatif)</span></span>
+              <input autocomplete="address-line2" maxlength="${PORTAL_ADDRESS_FIELD_MAX.address2}" name="address2" type="text" value="${escapeHtml(address?.address2 ?? "")}">
+            </label>
+            <label class="settings-address-field">
+              <span>Code postal</span>
+              <input autocomplete="postal-code" inputmode="numeric" maxlength="${PORTAL_ADDRESS_FIELD_MAX.zip}" name="zip" pattern="\\d{5}" required type="text" value="${escapeHtml(address?.zip ?? "")}">
+            </label>
+            <label class="settings-address-field">
+              <span>Ville</span>
+              <input autocomplete="address-level2" maxlength="${PORTAL_ADDRESS_FIELD_MAX.city}" name="city" required type="text" value="${escapeHtml(address?.city ?? "")}">
+            </label>
+            <label class="settings-address-field settings-address-field--full">
+              <span>Pays</span>
+              <input name="countryCode" readonly type="hidden" value="FR">
+              <input aria-readonly="true" readonly tabindex="-1" type="text" value="France">
+            </label>
+          </div>
+          <p class="error settings-address-error hidden"></p>
+          <div class="settings-address-actions">
+            <button class="portal-button secondary settings-address-cancel" type="button">Annuler</button>
+            <button class="portal-button settings-address-save" type="submit">Enregistrer</button>
+          </div>
+        </form>
+      </div>`
+    : "";
+
+  const blockedHtml =
+    !addressState.editable && addressState.blockMessage
+      ? `<p class="settings-address-blocked muted">${escapeHtml(addressState.blockMessage)}</p>
+      ${
+        addressState.blockKind === "cutoff_passed" ||
+        addressState.blockKind === "order_locked" ||
+        addressState.blockKind === "billing_processing" ||
+        addressState.blockKind === "recovery_processing" ||
+        addressState.blockKind === "resume_processing"
+          ? `<a class="settings-address-support" href="${escapeHtml(merchantSupport.href)}">${escapeHtml(merchantSupport.label)}</a>`
+          : ""
+      }`
+      : "";
+
+  const editControl = addressState.editable
+    ? `<button class="settings-row-action edit-address-button" type="button">Modifier</button>`
+    : "";
+
+  return `<div class="settings-address-block">
+    <div class="settings-row settings-row--static">
+      <span class="settings-row-copy">
+        <span class="settings-row-label">Adresse de livraison</span>
+        ${addressHtml}
+      </span>
+      ${editControl}
+    </div>
+    ${blockedHtml}
+    ${formHtml}
+  </div>`;
+};
+
+const renderPaymentSettingsRow = (selection: PortalSelection) => {
+  if (selection.paymentUpdateAvailable) {
+    return `<div class="settings-payment-block">
+      <div class="settings-row settings-row--static">
+        <span class="settings-row-copy">
+          <span class="settings-row-label">Moyen de paiement</span>
+          <span class="settings-row-hint">${escapeHtml(PORTAL_PAYMENT_UPDATE_HINT)}</span>
+        </span>
+        <button class="settings-row-action settings-payment-update-button" type="button">Modifier</button>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="settings-payment-block">
+    <div class="settings-row settings-row--static">
+      <span class="settings-row-copy">
+        <span class="settings-row-label">Moyen de paiement</span>
+        <span class="settings-row-hint">Mise à jour indisponible pour le moment. Contactez-nous si besoin.</span>
+      </span>
+    </div>
+  </div>`;
+};
 
 const renderRecoveryBlock = (
   recovery: PortalRecovery,
@@ -618,6 +754,8 @@ const renderNextBoxCard = ({
       <div class="subscription-manage">
         <p class="subscription-manage-title">Paramètres</p>
         <div class="settings-menu">
+        ${renderDeliveryAddressBlock(selection.deliveryAddress, merchantSupport)}
+        ${renderPaymentSettingsRow(selection)}
         ${
           canChangeBox
             ? `<button class="settings-row change-box-button" type="button">
@@ -654,6 +792,9 @@ const renderNextBoxCard = ({
             <p class="objective-support-message">Le changement d'objectif nécessite l'aide de notre équipe afin d'adapter votre abonnement. Contactez-nous via le chat.</p>
             <a class="portal-button objective-support-contact" href="${escapeHtml(merchantSupport.href)}">Contacter le support</a>
           </div>
+        </div>
+        <div class="settings-logout-row">
+          <a class="settings-logout-link" href="${escapeHtml(portalLogoutHref)}">Se déconnecter</a>
         </div>
         </div>
       </div>

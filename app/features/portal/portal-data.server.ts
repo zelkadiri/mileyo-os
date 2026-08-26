@@ -28,6 +28,12 @@ import { fetchBuilderBoxOptions } from "../builder/builder-catalog.server";
 import { findBuilderBoxByVariantId } from "../builder/builder-box-selection";
 import type { PaymentUpdateUnavailableReason } from "../../constants/subscriptionPaymentRecovery";
 import { BOX_CHANGE_RECOVERY_BLOCK_MESSAGE } from "../../constants/subscriptionBoxChange";
+import {
+  PORTAL_ADDRESS_ORDER_LOCKED_MESSAGE,
+  PORTAL_ADDRESS_PREPARATION_MESSAGE,
+  PORTAL_ADDRESS_UNAVAILABLE_MESSAGE,
+  PORTAL_ADDRESS_UNSUPPORTED_METHOD_MESSAGE,
+} from "../../constants/subscriptionContractAddress";
 import { getCutoffNow } from "../../services/deliveryCutoff.server";
 import { getDeliveryCutoffStatus, projectActiveScheduledDeliveryDate } from "../../utils/deliveryDate";
 import {
@@ -37,6 +43,7 @@ import {
 } from "../../constants/subscriptionStatus";
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
 import { dedupeSubscriptionSelectionsByContract } from "../../services/subscriptionMealSelection.server";
+import { fetchSubscriptionContractShippingAddress } from "../../services/subscriptionContractAddress.server";
 import { derivePortalResumeUi } from "./portal-resume.server";
 import {
   fetchPortalMealOptions,
@@ -55,7 +62,9 @@ import {
   isPortalForecastEligible,
 } from "./portal-formatters";
 import type {
+  PortalAddressBlockKind,
   PortalBoxProduct,
+  PortalDeliveryAddressState,
   PortalForecastCycle,
   PortalHistoryOrder,
   PortalMeal,
@@ -75,6 +84,81 @@ export type PortalData = {
 };
 
 const FORECAST_CYCLE_COUNT = 3;
+
+const toPortalAddressBlockKind = (
+  reason: NonNullable<ReturnType<typeof getPortalModificationBlockReason>>,
+): PortalAddressBlockKind => reason;
+
+const buildDeliveryAddressState = async ({
+  admin,
+  deliveryLocked,
+  modificationBlockReason,
+  subscriptionContractId,
+}: {
+  admin: Awaited<ReturnType<typeof unauthenticated.admin>>["admin"];
+  deliveryLocked: boolean;
+  modificationBlockReason: ReturnType<typeof getPortalModificationBlockReason>;
+  subscriptionContractId: string | null;
+}): Promise<PortalDeliveryAddressState> => {
+  if (!subscriptionContractId) {
+    return {
+      address: null,
+      blockKind: "missing_contract",
+      blockMessage: PORTAL_ADDRESS_UNAVAILABLE_MESSAGE,
+      editable: false,
+    };
+  }
+
+  const fetched = await fetchSubscriptionContractShippingAddress(
+    admin,
+    subscriptionContractId,
+  );
+
+  if (fetched.kind === "unsupported_method") {
+    return {
+      address: null,
+      blockKind: "non_shipping",
+      blockMessage: PORTAL_ADDRESS_UNSUPPORTED_METHOD_MESSAGE,
+      editable: false,
+    };
+  }
+
+  if (fetched.kind === "missing_contract" || fetched.kind === "error") {
+    return {
+      address: null,
+      blockKind: "unavailable",
+      blockMessage: PORTAL_ADDRESS_UNAVAILABLE_MESSAGE,
+      editable: false,
+    };
+  }
+
+  const address = fetched.address;
+
+  if (modificationBlockReason) {
+    return {
+      address,
+      blockKind: toPortalAddressBlockKind(modificationBlockReason),
+      blockMessage: PORTAL_ADDRESS_PREPARATION_MESSAGE,
+      editable: false,
+    };
+  }
+
+  if (deliveryLocked) {
+    return {
+      address,
+      blockKind: "order_locked",
+      blockMessage: PORTAL_ADDRESS_ORDER_LOCKED_MESSAGE,
+      editable: false,
+    };
+  }
+
+  return {
+    address,
+    blockKind: null,
+    blockMessage: null,
+    editable: true,
+  };
+};
 
 /**
  * Upcoming billing previews (read-only).
@@ -315,18 +399,16 @@ export const loadPortalData = async ({
         let paymentUpdateAvailable = false;
         let paymentUpdateUnavailableReason: PaymentUpdateUnavailableReason = null;
 
-        if (recoveryRecord) {
-          if (reconciled.subscriptionContractId) {
-            const eligibility = await resolvePaymentUpdateEligibility(
-              admin,
-              reconciled.subscriptionContractId,
-            );
-            paymentUpdateAvailable = eligibility.available;
-            paymentUpdateUnavailableReason = eligibility.reason;
-          } else {
-            paymentUpdateAvailable = false;
-            paymentUpdateUnavailableReason = "unsupported";
-          }
+        if (reconciled.subscriptionContractId) {
+          const eligibility = await resolvePaymentUpdateEligibility(
+            admin,
+            reconciled.subscriptionContractId,
+          );
+          paymentUpdateAvailable = eligibility.available;
+          paymentUpdateUnavailableReason = eligibility.reason;
+        } else {
+          paymentUpdateAvailable = false;
+          paymentUpdateUnavailableReason = "unsupported";
         }
 
         const cutoffNow = getCutoffNow();
@@ -357,6 +439,13 @@ export const loadPortalData = async ({
               subscriptionMealSelectionId: reconciled.id,
             }),
           ]);
+
+        const deliveryAddress = await buildDeliveryAddressState({
+          admin,
+          deliveryLocked: boxChangeAppliesNextCycle,
+          modificationBlockReason,
+          subscriptionContractId: reconciled.subscriptionContractId,
+        });
 
         let pendingBoxChange: PortalPendingBoxChange | null = null;
 
@@ -444,6 +533,7 @@ export const loadPortalData = async ({
             modificationBlockedReason: modificationBlockReason
               ? getPortalModificationBlockMessage(modificationBlockReason)
               : null,
+            deliveryAddress,
             deliveryCutoff: (() => {
               const cutoff = getDeliveryCutoffStatus(
                 effectiveNextScheduledDeliveryDate,
@@ -468,6 +558,8 @@ export const loadPortalData = async ({
             nextScheduledDeliveryDate:
               effectiveNextScheduledDeliveryDate ?? null,
             pendingBoxChange,
+            paymentUpdateAvailable,
+            paymentUpdateUnavailableReason,
             portalState,
             recovery: recoveryRecord
               ? {

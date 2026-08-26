@@ -17,6 +17,14 @@ export const MILEYO_PORTAL_PATH = "/apps/box-builder/portal";
  */
 export const MILEYO_CUSTOMER_LOGIN_PATH = "/customer_authentication/login";
 
+/**
+ * Shopify Customer Accounts logout (storefront route).
+ * With New Customer Accounts, Shopify redirects through the hosted auth flow.
+ * Fixed path only — no client-controlled return_to (avoid open redirect / re-login loop).
+ * @see https://shopify.dev/docs/api/liquid/objects/routes#routes-account_logout_url
+ */
+export const MILEYO_CUSTOMER_LOGOUT_PATH = "/account/logout";
+
 /** Preferred generic CTA label when linking to the portal from emails. */
 export const MILEYO_PORTAL_CTA_LABEL = "Accéder à mon espace Mileyo";
 

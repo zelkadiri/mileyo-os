@@ -1,3 +1,4 @@
+import { PORTAL_ADDRESS_SUCCESS_MESSAGE } from "../../constants/subscriptionContractAddress";
 import { mealFilterRuntimeScript } from "../builder/builder-filter-runtime";
 import { mealNutritionFormatRuntimeScript } from "../../utils/mealNutritionFormat";
 
@@ -844,12 +845,45 @@ export const portalClientScript = `
     }
   }
 
+  function clearAddressSuccessFlash() {
+    var flash = document.querySelector(".portal-header-flash");
+    if (!flash) return;
+    var addressSuccess = ${JSON.stringify(PORTAL_ADDRESS_SUCCESS_MESSAGE)};
+    flash.querySelectorAll(".success").forEach(function (node) {
+      if ((node.textContent || "").trim() === addressSuccess) {
+        node.remove();
+      }
+    });
+    if (!flash.children.length) {
+      flash.remove();
+    }
+  }
+
+  function closeAddressEditor(selectionId) {
+    var card = document.querySelector('.selection-card[data-selection-id="' + selectionId + '"]');
+    if (!card) return;
+    var panel = card.querySelector(".settings-address-panel");
+    var editButton = card.querySelector(".edit-address-button");
+    var error = card.querySelector(".settings-address-error");
+    if (panel) {
+      panel.classList.add("hidden");
+    }
+    if (editButton) {
+      editButton.classList.remove("hidden");
+    }
+    if (error) {
+      error.textContent = "";
+      error.classList.add("hidden");
+    }
+  }
+
   function closeAllFlows(exceptId) {
     Object.keys(editors).forEach(function (selectionId) {
       if (selectionId === exceptId) return;
       closeMealEditor(editors[selectionId]);
       closeBoxChange(selectionId);
       closeObjectiveSupport(selectionId);
+      closeAddressEditor(selectionId);
     });
   }
 
@@ -926,6 +960,7 @@ export const portalClientScript = `
         closeAllFlows(selectionId);
         closeBoxChange(selectionId);
         closeObjectiveSupport(selectionId);
+        closeAddressEditor(selectionId);
         clearMealFiltersOnEditorClose();
         editor.quantities = JSON.parse(JSON.stringify(data.initialQuantities[selectionId] || {}));
         editor.editButton.classList.add("hidden");
@@ -1011,19 +1046,128 @@ export const portalClientScript = `
     }
 
     var paymentUpdateButton = card.querySelector(".payment-update-button");
+    var settingsPaymentUpdateButton = card.querySelector(
+      ".settings-payment-update-button"
+    );
+
+    function submitPaymentUpdateEmail(button, idleLabel) {
+      button.disabled = true;
+      button.textContent = "Envoi en cours...";
+
+      var paymentBody = new URLSearchParams();
+      paymentBody.set("intent", "sendPaymentUpdateEmail");
+      paymentBody.set("selectionId", selectionId);
+
+      fetch(window.location.pathname + window.location.search, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: paymentBody.toString()
+      }).then(function (response) {
+        return response.text().then(function (html) {
+          document.open();
+          document.write(html);
+          document.close();
+        });
+      }).catch(function () {
+        button.disabled = false;
+        button.textContent = idleLabel;
+        alert("Impossible d’envoyer l’email pour le moment. Réessayez demain.");
+      });
+    }
+
     if (paymentUpdateButton) {
       paymentUpdateButton.addEventListener("click", function () {
-        paymentUpdateButton.disabled = true;
-        paymentUpdateButton.textContent = "Envoi en cours...";
+        submitPaymentUpdateEmail(
+          paymentUpdateButton,
+          "Recevoir un lien sécurisé pour mettre à jour ma carte"
+        );
+      });
+    }
 
-        var paymentBody = new URLSearchParams();
-        paymentBody.set("intent", "sendPaymentUpdateEmail");
-        paymentBody.set("selectionId", selectionId);
+    if (settingsPaymentUpdateButton) {
+      settingsPaymentUpdateButton.addEventListener("click", function () {
+        submitPaymentUpdateEmail(settingsPaymentUpdateButton, "Modifier");
+      });
+    }
+
+    var editAddressButton = card.querySelector(".edit-address-button");
+    var addressPanel = card.querySelector(".settings-address-panel");
+    var addressForm = card.querySelector(".settings-address-form");
+    var addressCancel = card.querySelector(".settings-address-cancel");
+    var addressError = card.querySelector(".settings-address-error");
+    var addressSave = card.querySelector(".settings-address-save");
+
+    if (editAddressButton && addressPanel) {
+      editAddressButton.addEventListener("click", function () {
+        clearAddressSuccessFlash();
+        closeAllFlows(selectionId);
+        closeMealEditor(editor);
+        closeBoxChange(selectionId);
+        closeObjectiveSupport(selectionId);
+        editAddressButton.classList.add("hidden");
+        addressPanel.classList.remove("hidden");
+      });
+    }
+
+    if (addressCancel) {
+      addressCancel.addEventListener("click", function () {
+        closeAddressEditor(selectionId);
+      });
+    }
+
+    if (addressForm) {
+      addressForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+        clearAddressSuccessFlash();
+        if (addressError) {
+          addressError.textContent = "";
+          addressError.classList.add("hidden");
+        }
+
+        var formFields = new FormData(addressForm);
+        var firstName = String(formFields.get("firstName") || "").trim();
+        var lastName = String(formFields.get("lastName") || "").trim();
+        var address1 = String(formFields.get("address1") || "").trim();
+        var zip = String(formFields.get("zip") || "").trim();
+        var city = String(formFields.get("city") || "").trim();
+        var countryCode = String(formFields.get("countryCode") || "").trim();
+
+        if (!firstName || !lastName || !address1 || !zip || !city || countryCode !== "FR") {
+          if (addressError) {
+            addressError.textContent = "Vérifiez les champs de l’adresse.";
+            addressError.classList.remove("hidden");
+          }
+          return;
+        }
+
+        if (!/^\\d{5}$/.test(zip)) {
+          if (addressError) {
+            addressError.textContent = "Le code postal doit contenir 5 chiffres.";
+            addressError.classList.remove("hidden");
+          }
+          return;
+        }
+
+        if (addressSave) {
+          addressSave.disabled = true;
+          addressSave.textContent = "Enregistrement...";
+        }
+
+        var addressBody = new URLSearchParams();
+        addressBody.set("intent", "updateDeliveryAddress");
+        addressBody.set("selectionId", selectionId);
+        addressBody.set("firstName", firstName);
+        addressBody.set("lastName", lastName);
+        addressBody.set("address1", address1);
+        addressBody.set("address2", String(formFields.get("address2") || "").trim());
+        addressBody.set("zip", zip);
+        addressBody.set("city", city);
+        addressBody.set("countryCode", "FR");
 
         fetch(window.location.pathname + window.location.search, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: paymentBody.toString()
+          body: addressBody.toString()
         }).then(function (response) {
           return response.text().then(function (html) {
             document.open();
@@ -1031,9 +1175,15 @@ export const portalClientScript = `
             document.close();
           });
         }).catch(function () {
-          paymentUpdateButton.disabled = false;
-          paymentUpdateButton.textContent = "Recevoir un lien sécurisé pour mettre à jour ma carte";
-          alert("Impossible d’envoyer l’email pour le moment. Réessayez demain.");
+          if (addressSave) {
+            addressSave.disabled = false;
+            addressSave.textContent = "Enregistrer";
+          }
+          if (addressError) {
+            addressError.textContent =
+              "Impossible d’enregistrer l’adresse. Réessayez dans un instant.";
+            addressError.classList.remove("hidden");
+          }
         });
       });
     }
@@ -1045,6 +1195,7 @@ export const portalClientScript = `
         closeAllFlows(selectionId);
         closeMealEditor(editor);
         closeBoxChange(selectionId);
+        closeAddressEditor(selectionId);
         changeObjectiveButton.classList.add("hidden");
         objectiveSupportPanel.classList.remove("hidden");
       });
@@ -1179,6 +1330,7 @@ export const portalClientScript = `
         closeAllFlows(selectionId);
         closeMealEditor(editor);
         closeObjectiveSupport(selectionId);
+        closeAddressEditor(selectionId);
         boxChangeState.selectedBox = null;
         boxChangeState.quantities = {};
         boxChangeState.requiredMeals = 0;

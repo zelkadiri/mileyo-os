@@ -10,6 +10,7 @@ import {
   getMileyoPortalUrl,
   isAllowedMileyoPortalReturnPath,
   MILEYO_CUSTOMER_LOGIN_PATH,
+  MILEYO_CUSTOMER_LOGOUT_PATH,
   MILEYO_PORTAL_CTA_LABEL,
   MILEYO_PORTAL_LIQUID_HREF,
   MILEYO_PORTAL_PATH,
@@ -179,6 +180,30 @@ const runSuite = async () => {
   ctx.assertFalse(
     "HTML sans /account/login nu",
     /href=["']\/account\/login["']/.test(disconnectedHtml),
+  );
+
+  ctx.scenario("G. Logout Customer Accounts");
+  ctx.assertEqual(
+    "MILEYO_CUSTOMER_LOGOUT_PATH",
+    MILEYO_CUSTOMER_LOGOUT_PATH,
+    "/account/logout",
+  );
+  ctx.assertTrue(
+    "portal-render importe logout path",
+    portalRenderSource.includes("MILEYO_CUSTOMER_LOGOUT_PATH"),
+  );
+  ctx.assertTrue(
+    "lien Se déconnecter présent",
+    portalRenderSource.includes("Se déconnecter") &&
+      portalRenderSource.includes("settings-logout-link"),
+  );
+  ctx.assertFalse(
+    "logout sans return_to",
+    /account\/logout[^"'<\s]*return_to/.test(portalRenderSource),
+  );
+  ctx.assertFalse(
+    "logout ne pointe pas vers portal",
+    /account\/logout[^"'<\s]*box-builder\/portal/.test(portalRenderSource),
   );
 
   return finishSuite("79-mileyo-portal-url-auth", ctx);

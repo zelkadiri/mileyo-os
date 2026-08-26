@@ -50,10 +50,19 @@ import {
   buildBoxChangePendingSuccessMessage,
 } from "../../constants/subscriptionBoxChange";
 import {
+  PORTAL_ADDRESS_ORDER_LOCKED_MESSAGE,
+  PORTAL_ADDRESS_PREPARATION_MESSAGE,
+  PORTAL_ADDRESS_SUCCESS_MESSAGE,
+} from "../../constants/subscriptionContractAddress";
+import {
   isRecoveryBlockingBoxChange,
   requestSubscriptionBoxChange,
   resolveCurrentDeliveryCoverage,
 } from "../../services/subscriptionBoxChange.server";
+import {
+  updateSubscriptionContractShippingAddress,
+  validatePortalDeliveryAddressInput,
+} from "../../services/subscriptionContractAddress.server";
 import { getCutoffNow } from "../../services/deliveryCutoff.server";
 import {
   getPortalModificationBlockMessage,
@@ -477,8 +486,124 @@ const handleSendPaymentUpdateEmailAction = async ({
     return renderPortal({
       ...portalData,
       successMessage:
-        "Si votre email est valide, vous recevrez un lien sécurisé Shopify pour mettre à jour votre carte.",
+        "Un email sécurisé vous a été envoyé pour mettre à jour votre moyen de paiement.",
     });
+};
+
+const handleUpdateDeliveryAddressAction = async ({
+  customerShopifyId,
+  formData,
+  selectionId,
+  shop,
+}: PortalActionContext) => {
+  const { admin } = await unauthenticated.admin(shop);
+  const loaded = await loadSyncedSelectionForAction({
+    admin,
+    customerShopifyId,
+    selectionId,
+    shop,
+    statusFilter: { in: ["active", "paused"] },
+  });
+
+  if (loaded.error || !loaded.selection) {
+    return renderMessage(loaded.error ?? "Abonnement introuvable.");
+  }
+
+  const selection = loaded.selection;
+
+  if (!selection.subscriptionContractId) {
+    return renderMessage("Contrat d’abonnement Shopify manquant.");
+  }
+
+  const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
+  const blockReason = getPortalModificationBlockReason(
+    selection,
+    recoveryRecord,
+    getCutoffNow(),
+  );
+
+  if (blockReason) {
+    console.log("[portal] modification blocked by getPortalModificationBlockReason", {
+      blockReason,
+      intent: "updateDeliveryAddress",
+      selectionId,
+      shop,
+    });
+
+    const portalData = await loadPortalData({ customerShopifyId, shop });
+
+    if (!portalData) {
+      return renderMessage("Configuration incomplète.");
+    }
+
+    return renderPortal({
+      ...portalData,
+      errorMessage: PORTAL_ADDRESS_PREPARATION_MESSAGE,
+    });
+  }
+
+  const coverage = await resolveCurrentDeliveryCoverage({ selection });
+
+  if (coverage.locked) {
+    const portalData = await loadPortalData({ customerShopifyId, shop });
+
+    if (!portalData) {
+      return renderMessage("Configuration incomplète.");
+    }
+
+    return renderPortal({
+      ...portalData,
+      errorMessage: PORTAL_ADDRESS_ORDER_LOCKED_MESSAGE,
+    });
+  }
+
+  const validated = validatePortalDeliveryAddressInput({
+    address1: formData.get("address1"),
+    address2: formData.get("address2"),
+    city: formData.get("city"),
+    countryCode: formData.get("countryCode"),
+    firstName: formData.get("firstName"),
+    lastName: formData.get("lastName"),
+    zip: formData.get("zip"),
+  });
+
+  if (!validated.ok) {
+    const portalData = await loadPortalData({ customerShopifyId, shop });
+
+    if (!portalData) {
+      return renderMessage("Configuration incomplète.");
+    }
+
+    return renderPortal({
+      ...portalData,
+      errorMessage:
+        validated.errors[0]?.message ?? "Adresse invalide. Vérifiez les champs.",
+    });
+  }
+
+  const updateResult = await updateSubscriptionContractShippingAddress({
+    address: validated.address,
+    admin,
+    subscriptionContractId: selection.subscriptionContractId,
+  });
+
+  const portalData = await loadPortalData({ customerShopifyId, shop });
+
+  if (!portalData) {
+    return renderMessage("Configuration incomplète.");
+  }
+
+  if (!updateResult.ok) {
+    return renderPortal({
+      ...portalData,
+      errorMessage: updateResult.error,
+    });
+  }
+
+  return renderPortal({
+    ...portalData,
+    successMessage: PORTAL_ADDRESS_SUCCESS_MESSAGE,
+  });
 };
 
 const handleResumeSubscriptionAction = async ({
@@ -1596,6 +1721,10 @@ export const handlePortalAction = async (request: Request) => {
 
   if (intent === "sendPaymentUpdateEmail") {
     return handleSendPaymentUpdateEmailAction(context);
+  }
+
+  if (intent === "updateDeliveryAddress") {
+    return handleUpdateDeliveryAddressAction(context);
   }
 
   if (intent === "resumeSubscription") {

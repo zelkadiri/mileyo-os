@@ -72,6 +72,35 @@ export type PortalDeliveryCutoffStatus = {
   isPassed: boolean;
 };
 
+/** Shipping address from SubscriptionContract.deliveryMethod (SoT). */
+export type PortalDeliveryAddress = {
+  address1: string;
+  address2: string | null;
+  city: string;
+  countryCode: string;
+  firstName: string;
+  lastName: string;
+  provinceCode: string | null;
+  zip: string;
+};
+
+export type PortalAddressBlockKind =
+  | "billing_processing"
+  | "cutoff_passed"
+  | "missing_contract"
+  | "non_shipping"
+  | "order_locked"
+  | "recovery_processing"
+  | "resume_processing"
+  | "unavailable";
+
+export type PortalDeliveryAddressState = {
+  address: PortalDeliveryAddress | null;
+  blockKind: PortalAddressBlockKind | null;
+  blockMessage: string | null;
+  editable: boolean;
+};
+
 /**
  * Pending next-cycle box change for portal display (BOX-CHANGE-6).
  * Price comes from the live catalog — never treat a stored local price as SoT.
@@ -92,6 +121,7 @@ export type PortalSelection = {
   boxChangeBlockedReason: string | null;
   modificationBlocked: boolean;
   modificationBlockedReason: string | null;
+  deliveryAddress: PortalDeliveryAddressState;
   deliveryCutoff: PortalDeliveryCutoffStatus;
   boxSubscriptionPrice: string | null;
   boxTitle: string | null;
@@ -106,6 +136,9 @@ export type PortalSelection = {
   nextScheduledDeliveryDate: string | null;
   /** Active pending box change, if any — future state only. */
   pendingBoxChange: PortalPendingBoxChange | null;
+  /** Secure Shopify payment-method update email (contract-bound). */
+  paymentUpdateAvailable: boolean;
+  paymentUpdateUnavailableReason: PaymentUpdateUnavailableReason;
   portalState: PortalSubscriptionState;
   recovery: PortalRecovery | null;
   resumeBlockedMessage: string | null;
