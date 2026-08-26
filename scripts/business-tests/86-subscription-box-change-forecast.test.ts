@@ -255,7 +255,7 @@ const runSuite = () => {
   ctx.scenario("10. aucune mutation — helper pur + services inchangés dans 7E");
   {
     const start = portalDataSource.indexOf("export const buildForecastCycles");
-    const end = portalDataSource.indexOf("const loadPortalHistoryOrders");
+    const end = portalDataSource.indexOf("const mapBoxOrdersToPortalHistory");
     const body = portalDataSource.slice(start, end);
     ctx.assertTrue("helper body located", body.length > 100);
     ctx.assertFalse("no prisma in buildForecastCycles", body.includes("prisma"));

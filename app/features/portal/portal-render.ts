@@ -35,6 +35,10 @@ import {
   titlesToQuantities,
 } from "./portal-formatters";
 import { portalClientScript } from "./portal-client";
+import {
+  buildPortalSubscriptionHref,
+  formatPortalSubscriptionSelectorLabel,
+} from "./portal-multi-subscription";
 import { portalStyles } from "./portal-styles";
 import type {
   MerchantSupportContact,
@@ -42,6 +46,7 @@ import type {
   PortalDeliveryAddressState,
   PortalForecastCycle,
   PortalHistoryOrder,
+  PortalLegacySubscription,
   PortalMeal,
   PortalPendingBoxChange,
   PortalRecovery,
@@ -902,15 +907,110 @@ const renderHistoryCard = (order: PortalHistoryOrder) => {
     </article>`;
 };
 
+const renderSubscriptionSelector = ({
+  portalRequestUrl,
+  selectedSubscriptionId,
+  selections,
+}: {
+  portalRequestUrl: string;
+  selectedSubscriptionId: string;
+  selections: PortalSelection[];
+}) => {
+  if (selections.length < 2) {
+    return "";
+  }
+
+  const options = selections
+    .map((selection) => {
+      const isSelected = selection.id === selectedSubscriptionId;
+      const label = formatPortalSubscriptionSelectorLabel({
+        mealsCount: selection.mealsCount,
+        objectiveLabel: selection.objectiveLabel,
+        preferredDeliveryWeekday: selection.preferredDeliveryWeekday,
+        status: selection.status,
+      });
+      const badge =
+        selection.status === "paused"
+          ? `<span class="subscription-selector-badge is-paused">En pause</span>`
+          : selection.status === "active"
+            ? `<span class="subscription-selector-badge is-active">Actif</span>`
+            : "";
+      const href = buildPortalSubscriptionHref(portalRequestUrl, selection.id);
+
+      return `<a
+        aria-current="${isSelected ? "true" : "false"}"
+        class="subscription-selector-option${isSelected ? " is-selected" : ""}"
+        href="${escapeHtml(href)}"
+      >
+        <span class="subscription-selector-label">${escapeHtml(label)}</span>
+        ${badge}
+      </a>`;
+    })
+    .join("");
+
+  return `<section aria-label="Mes abonnements" class="subscription-selector">
+      <p class="subscription-selector-title">Mes abonnements</p>
+      <div class="subscription-selector-track" role="list">${options}</div>
+    </section>`;
+};
+
+const renderLegacySubscriptionsSection = ({
+  legacySubscriptions,
+  merchantSupport,
+}: {
+  legacySubscriptions: PortalLegacySubscription[];
+  merchantSupport: MerchantSupportContact;
+}) => {
+  if (legacySubscriptions.length === 0) {
+    return "";
+  }
+
+  const cards = legacySubscriptions
+    .map((legacy) => {
+      const mealsLabel =
+        typeof legacy.mealsCount === "number" && legacy.mealsCount > 0
+          ? `${legacy.mealsCount} repas`
+          : null;
+      const deliveryLabel = formatScheduledDeliveryLabel(
+        legacy.nextScheduledDeliveryDate,
+      );
+
+      return `<article class="portal-card legacy-subscription-card">
+        <p class="legacy-subscription-kicker">Ancienne formule</p>
+        <h3 class="legacy-subscription-title">Cet abonnement utilise une ancienne formule Mileyo.</h3>
+        <div class="legacy-subscription-facts">
+          <span class="legacy-subscription-status">${escapeHtml(legacy.statusLabel)}</span>
+          ${mealsLabel ? `<span>${escapeHtml(mealsLabel)}</span>` : ""}
+          ${
+            deliveryLabel
+              ? `<span>Prochaine livraison : ${escapeHtml(deliveryLabel)}</span>`
+              : ""
+          }
+        </div>
+        <a class="portal-button secondary" href="${escapeHtml(merchantSupport.href)}">${escapeHtml(merchantSupport.isConfigured ? merchantSupport.label : "Contacter Mileyo")}</a>
+      </article>`;
+    })
+    .join("");
+
+  return `<section aria-label="Autres abonnements" class="legacy-subscriptions">
+      <h2 class="legacy-subscriptions-title">Autres abonnements</h2>
+      ${cards}
+    </section>`;
+};
+
 export const renderPortal = ({
   boxes,
   boxChangeEffect,
   errorMessage,
   historyOrders,
+  legacySubscriptions = [],
   meals,
   merchantSupport,
+  portalRequestUrl = "/apps/box-builder/portal",
   processingMessage,
   selections,
+  selectedSubscriptionId = null,
+  selectionNotice = null,
   successMessage,
   terminalSelections,
 }: {
@@ -919,15 +1019,35 @@ export const renderPortal = ({
   boxChangeEffect?: "immediate" | "next_cycle" | null;
   errorMessage?: string | null;
   historyOrders: PortalHistoryOrder[];
+  legacySubscriptions?: PortalLegacySubscription[];
   meals: PortalMeal[];
   merchantSupport: MerchantSupportContact;
+  /** Incoming request URL — used only to pick allowlisted app-owned query keys. */
+  portalRequestUrl?: string;
   processingMessage?: string | null;
   selections: PortalSelection[];
+  selectedSubscriptionId?: string | null;
+  selectionNotice?: string | null;
   successMessage?: string | null;
   terminalSelections: PortalTerminalSelection[];
 }) => {
+  const resolvedSelectedId =
+    (selectedSubscriptionId &&
+      selections.some((selection) => selection.id === selectedSubscriptionId) &&
+      selectedSubscriptionId) ||
+    selections[0]?.id ||
+    null;
+
+  const selectedSelection = resolvedSelectedId
+    ? (selections.find((selection) => selection.id === resolvedSelectedId) ??
+      null)
+    : null;
+
+  // Client payload: only the on-screen subscription (forms + meal editor).
+  const visibleSelections = selectedSelection ? [selectedSelection] : [];
+
   const initialQuantities = Object.fromEntries(
-    selections.map((selection) => [
+    visibleSelections.map((selection) => [
       selection.id,
       titlesToQuantities(
         selection.selectedMeals,
@@ -938,19 +1058,24 @@ export const renderPortal = ({
     ]),
   );
 
-  const forecastCards = selections
-    .filter((selection) => isPortalForecastEligible(selection.portalState))
-    .flatMap((selection) => selection.forecastCycles)
-    .map((cycle, index) => renderForecastCard(cycle, index + 1));
+  const forecastCards = selectedSelection
+    ? selectedSelection.forecastCycles
+        .filter(() => isPortalForecastEligible(selectedSelection.portalState))
+        .map((cycle, index) => renderForecastCard(cycle, index + 1))
+    : [];
   const upcomingEmptyMessage = getUpcomingTabEmptyMessage(
-    selections,
+    visibleSelections,
     forecastCards.length,
   );
-  const hasManageable = selections.length > 0;
+  const hasManageable = Boolean(selectedSelection);
+  const hasLegacy = legacySubscriptions.length > 0;
   const hasTerminal = terminalSelections.length > 0;
-  const hasAnySubscription = hasManageable || hasTerminal;
+  const hasAnySubscription = hasManageable || hasLegacy || hasTerminal;
 
   const headerFlash = [
+    selectionNotice
+      ? `<p class="selection-notice muted">${escapeHtml(selectionNotice)}</p>`
+      : "",
     processingMessage
       ? `<p class="processing-notice">${escapeHtml(processingMessage)}</p>`
       : "",
@@ -968,6 +1093,15 @@ export const renderPortal = ({
     .filter(Boolean)
     .join("");
 
+  const selectorHtml =
+    resolvedSelectedId && selections.length > 1
+      ? renderSubscriptionSelector({
+          portalRequestUrl,
+          selectedSubscriptionId: resolvedSelectedId,
+          selections,
+        })
+      : "";
+
   return htmlResponse(`<!doctype html>
 <html lang="fr">
 <head>
@@ -983,6 +1117,8 @@ export const renderPortal = ({
       ${headerFlash ? `<div class="portal-header-flash">${headerFlash}</div>` : ""}
     </header>
 
+    ${selectorHtml}
+
     ${
       !hasAnySubscription
         ? `<section class="portal-card"><p>Aucun abonnement trouvé pour ton compte.</p></section>`
@@ -994,14 +1130,18 @@ export const renderPortal = ({
     </nav>
     <div class="portal-tab-panel" data-tab-panel="next" role="tabpanel">
       ${
-        hasManageable
-          ? selections
-              .map((selection) =>
-                renderNextBoxCard({ boxes, meals, merchantSupport, selection }),
-              )
-              .join("")
-          : `<section class="portal-card"><p class="muted">Aucun abonnement actif ou en pause. Consultez l’onglet Terminés si votre abonnement a pris fin.</p></section>`
+        hasManageable && selectedSelection
+          ? renderNextBoxCard({
+              boxes,
+              meals,
+              merchantSupport,
+              selection: selectedSelection,
+            })
+          : hasLegacy
+            ? `<section class="portal-card"><p class="muted">Aucun abonnement V2 actif ou en pause. Consultez « Autres abonnements » ci-dessous.</p></section>`
+            : `<section class="portal-card"><p class="muted">Aucun abonnement actif ou en pause. Consultez l’onglet Terminés si votre abonnement a pris fin.</p></section>`
       }
+      ${renderLegacySubscriptionsSection({ legacySubscriptions, merchantSupport })}
     </div>
     <div class="portal-tab-panel hidden" data-tab-panel="upcoming" role="tabpanel">
       <section class="portal-card forecast-intro">
@@ -1126,7 +1266,7 @@ export const renderPortal = ({
     </aside>
   </div>
 
-  <script>window.__MILEYO_PORTAL__ = ${scriptJson({ boxes, initialQuantities, meals, selections })};</script>
+  <script>window.__MILEYO_PORTAL__ = ${scriptJson({ boxes, initialQuantities, meals, selections: visibleSelections })};</script>
   <script>${portalClientScript}</script>
 </body>
 </html>`);

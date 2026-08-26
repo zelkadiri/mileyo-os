@@ -180,6 +180,7 @@ const pauseSubscriptionContract = async (
 type PortalActionContext = {
   customerShopifyId: string;
   formData: FormData;
+  requestUrl: string;
   selectionId: string;
   shop: string;
 };
@@ -248,6 +249,7 @@ const renderPortalModificationBlocked = async ({
   blockReason,
   customerShopifyId,
   intent,
+  requestUrl,
   selectionId,
   shop,
 }: {
@@ -255,6 +257,7 @@ const renderPortalModificationBlocked = async ({
   blockReason: NonNullable<ReturnType<typeof getPortalModificationBlockReason>>;
   customerShopifyId: string;
   intent: string;
+  requestUrl: string;
   selectionId: string;
   shop: string;
 }) => {
@@ -265,7 +268,7 @@ const renderPortalModificationBlocked = async ({
     shop,
   });
 
-  const portalData = await loadPortalData({ customerShopifyId, shop });
+  const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
   if (!portalData) {
     return renderMessage("Configuration incomplète.");
@@ -273,6 +276,7 @@ const renderPortalModificationBlocked = async ({
 
   return renderPortal({
     ...portalData,
+    portalRequestUrl: requestUrl,
     errorMessage: getPortalModificationBlockMessage(blockReason, actionKind),
   });
 };
@@ -282,6 +286,7 @@ const getPortalModificationBlockResponse = async ({
   customerShopifyId,
   intent,
   recoveryRecord,
+  requestUrl,
   selection,
   shop,
 }: {
@@ -289,6 +294,7 @@ const getPortalModificationBlockResponse = async ({
   customerShopifyId: string;
   intent: string;
   recoveryRecord?: { status: string } | null;
+  requestUrl: string;
   selection: {
     active: boolean;
     id: string;
@@ -318,6 +324,7 @@ const getPortalModificationBlockResponse = async ({
     blockReason,
     customerShopifyId,
     intent,
+    requestUrl,
     selectionId: selection.id,
     shop,
   });
@@ -325,6 +332,7 @@ const getPortalModificationBlockResponse = async ({
 
 const handlePauseSubscriptionAction = async ({
   customerShopifyId,
+  requestUrl,
   selectionId,
   shop,
 }: Omit<PortalActionContext, "formData">) => {
@@ -347,6 +355,7 @@ const handlePauseSubscriptionAction = async ({
       actionKind: "subscription_control",
       customerShopifyId,
       intent: "pauseSubscription",
+      requestUrl,
       selection,
       shop,
     });
@@ -408,7 +417,7 @@ const handlePauseSubscriptionAction = async ({
       });
     }
 
-    const portalData = await loadPortalData({ customerShopifyId, shop });
+    const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
     if (!portalData) {
       return renderMessage("Configuration incomplète.");
@@ -416,12 +425,14 @@ const handlePauseSubscriptionAction = async ({
 
     return renderPortal({
       ...portalData,
+      portalRequestUrl: requestUrl,
       successMessage: "Ton abonnement a bien été mis en pause.",
     });
 };
 
 const handleSendPaymentUpdateEmailAction = async ({
   customerShopifyId,
+  requestUrl,
   selectionId,
   shop,
 }: Omit<PortalActionContext, "formData">) => {
@@ -449,7 +460,7 @@ const handleSendPaymentUpdateEmailAction = async ({
       selection.subscriptionContractId,
     );
 
-    const portalData = await loadPortalData({ customerShopifyId, shop });
+    const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
     if (!portalData) {
       return renderMessage("Configuration incomplète.");
@@ -458,6 +469,7 @@ const handleSendPaymentUpdateEmailAction = async ({
     if (!eligibility.available) {
       return renderPortal({
         ...portalData,
+        portalRequestUrl: requestUrl,
       });
     }
 
@@ -474,17 +486,20 @@ const handleSendPaymentUpdateEmailAction = async ({
       if (!isCustomerFacingRateLimit) {
         return renderPortal({
           ...portalData,
+          portalRequestUrl: requestUrl,
         });
       }
 
       return renderPortal({
         ...portalData,
+        portalRequestUrl: requestUrl,
         errorMessage: emailResult.error,
       });
     }
 
     return renderPortal({
       ...portalData,
+      portalRequestUrl: requestUrl,
       successMessage:
         "Un email sécurisé vous a été envoyé pour mettre à jour votre moyen de paiement.",
     });
@@ -493,6 +508,7 @@ const handleSendPaymentUpdateEmailAction = async ({
 const handleUpdateDeliveryAddressAction = async ({
   customerShopifyId,
   formData,
+  requestUrl,
   selectionId,
   shop,
 }: PortalActionContext) => {
@@ -530,7 +546,7 @@ const handleUpdateDeliveryAddressAction = async ({
       shop,
     });
 
-    const portalData = await loadPortalData({ customerShopifyId, shop });
+    const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
     if (!portalData) {
       return renderMessage("Configuration incomplète.");
@@ -538,6 +554,7 @@ const handleUpdateDeliveryAddressAction = async ({
 
     return renderPortal({
       ...portalData,
+      portalRequestUrl: requestUrl,
       errorMessage: PORTAL_ADDRESS_PREPARATION_MESSAGE,
     });
   }
@@ -545,7 +562,7 @@ const handleUpdateDeliveryAddressAction = async ({
   const coverage = await resolveCurrentDeliveryCoverage({ selection });
 
   if (coverage.locked) {
-    const portalData = await loadPortalData({ customerShopifyId, shop });
+    const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
     if (!portalData) {
       return renderMessage("Configuration incomplète.");
@@ -553,6 +570,7 @@ const handleUpdateDeliveryAddressAction = async ({
 
     return renderPortal({
       ...portalData,
+      portalRequestUrl: requestUrl,
       errorMessage: PORTAL_ADDRESS_ORDER_LOCKED_MESSAGE,
     });
   }
@@ -568,7 +586,7 @@ const handleUpdateDeliveryAddressAction = async ({
   });
 
   if (!validated.ok) {
-    const portalData = await loadPortalData({ customerShopifyId, shop });
+    const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
     if (!portalData) {
       return renderMessage("Configuration incomplète.");
@@ -576,6 +594,7 @@ const handleUpdateDeliveryAddressAction = async ({
 
     return renderPortal({
       ...portalData,
+      portalRequestUrl: requestUrl,
       errorMessage:
         validated.errors[0]?.message ?? "Adresse invalide. Vérifiez les champs.",
     });
@@ -587,7 +606,7 @@ const handleUpdateDeliveryAddressAction = async ({
     subscriptionContractId: selection.subscriptionContractId,
   });
 
-  const portalData = await loadPortalData({ customerShopifyId, shop });
+  const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
   if (!portalData) {
     return renderMessage("Configuration incomplète.");
@@ -596,12 +615,14 @@ const handleUpdateDeliveryAddressAction = async ({
   if (!updateResult.ok) {
     return renderPortal({
       ...portalData,
+      portalRequestUrl: requestUrl,
       errorMessage: updateResult.error,
     });
   }
 
   return renderPortal({
     ...portalData,
+    portalRequestUrl: requestUrl,
     successMessage: PORTAL_ADDRESS_SUCCESS_MESSAGE,
   });
 };
@@ -609,6 +630,7 @@ const handleUpdateDeliveryAddressAction = async ({
 const handleResumeSubscriptionAction = async ({
   customerShopifyId,
   formData,
+  requestUrl,
   selectionId,
   shop,
 }: PortalActionContext) => {
@@ -648,6 +670,7 @@ const handleResumeSubscriptionAction = async ({
     customerShopifyId,
     intent: "resumeSubscription",
     recoveryRecord,
+    requestUrl,
     selection,
     shop,
   });
@@ -705,7 +728,7 @@ const handleResumeSubscriptionAction = async ({
   }
 
   if (resumeMode.mode === "pay_now") {
-    const portalData = await loadPortalData({ customerShopifyId, shop });
+    const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
     if (!portalData) {
       return renderMessage("Configuration incomplète.");
@@ -713,6 +736,7 @@ const handleResumeSubscriptionAction = async ({
 
     return renderPortal({
       ...portalData,
+      portalRequestUrl: requestUrl,
       errorMessage:
         "Votre abonnement nécessite un prélèvement immédiat. Utilisez le bouton de reprise avec paiement.",
     });
@@ -743,7 +767,7 @@ const handleResumeSubscriptionAction = async ({
     });
   }
 
-  const portalData = await loadPortalData({ customerShopifyId, shop });
+  const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
   if (!portalData) {
     return renderMessage("Configuration incomplète.");
@@ -751,6 +775,7 @@ const handleResumeSubscriptionAction = async ({
 
   return renderPortal({
     ...portalData,
+    portalRequestUrl: requestUrl,
     successMessage: `Votre abonnement est repris. Votre prochain prélèvement reste prévu le ${formatFrenchDate(resumeMode.nextBillingDate.toISOString())}.`,
   });
 };
@@ -758,6 +783,7 @@ const handleResumeSubscriptionAction = async ({
 const handleResumeSubscriptionAndPayAction = async ({
   customerShopifyId,
   formData,
+  requestUrl,
   selectionId,
   shop,
 }: PortalActionContext) => {
@@ -797,6 +823,7 @@ const handleResumeSubscriptionAndPayAction = async ({
       customerShopifyId,
       intent: "resumeSubscriptionAndPay",
       recoveryRecord,
+      requestUrl,
       selection,
       shop,
     });
@@ -854,7 +881,7 @@ const handleResumeSubscriptionAndPayAction = async ({
     }
 
     if (resumeMode.mode === "schedule_only") {
-      const portalData = await loadPortalData({ customerShopifyId, shop });
+      const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
       if (!portalData) {
         return renderMessage("Configuration incomplète.");
@@ -862,6 +889,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 
       return renderPortal({
         ...portalData,
+        portalRequestUrl: requestUrl,
         errorMessage:
           "Votre abonnement n’est pas dû pour un prélèvement immédiat. Utilisez Reprendre mon abonnement.",
       });
@@ -902,7 +930,7 @@ const handleResumeSubscriptionAndPayAction = async ({
           : retryNumber;
 
       if (prepareResult.action === "block_processing") {
-        const portalData = await loadPortalData({ customerShopifyId, shop });
+        const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
         if (!portalData) {
           return renderMessage("Configuration incomplète.");
@@ -910,6 +938,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 
         return renderPortal({
           ...portalData,
+          portalRequestUrl: requestUrl,
           errorMessage:
             "Votre reprise est déjà en cours de traitement. Patientez quelques instants avant de réessayer.",
         });
@@ -955,7 +984,7 @@ const handleResumeSubscriptionAndPayAction = async ({
           subscriptionContractId: selection.subscriptionContractId!,
         });
 
-        const portalData = await loadPortalData({ customerShopifyId, shop });
+        const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
         if (!portalData) {
           resumeLockStatus = scheduleResult.ok
@@ -978,6 +1007,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 
           return renderPortal({
             ...portalData,
+            portalRequestUrl: requestUrl,
             successMessage:
               "Votre abonnement est repris et votre box confirmée. La date de prochaine facturation n’a pas pu être mise à jour automatiquement — réessayez dans un instant ou contactez le support.",
           });
@@ -999,6 +1029,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 
         return renderPortal({
           ...portalData,
+          portalRequestUrl: requestUrl,
           successMessage:
             "Votre abonnement est repris. Votre prochaine box a été confirmée.",
         });
@@ -1031,7 +1062,7 @@ const handleResumeSubscriptionAndPayAction = async ({
         const activationError = await ensureShopifyContractActive();
 
         if (activationError) {
-          const portalData = await loadPortalData({ customerShopifyId, shop });
+          const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
           if (!portalData) {
             return renderMessage(activationError);
@@ -1039,6 +1070,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 
           return renderPortal({
             ...portalData,
+            portalRequestUrl: requestUrl,
             errorMessage: activationError,
           });
         }
@@ -1072,7 +1104,7 @@ const handleResumeSubscriptionAndPayAction = async ({
       const activationError = await ensureShopifyContractActive();
 
       if (activationError) {
-        const portalData = await loadPortalData({ customerShopifyId, shop });
+        const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
         if (!portalData) {
           return renderMessage(activationError);
@@ -1080,6 +1112,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 
         return renderPortal({
           ...portalData,
+          portalRequestUrl: requestUrl,
           errorMessage: activationError,
         });
       }
@@ -1138,7 +1171,7 @@ const handleResumeSubscriptionAndPayAction = async ({
         billingStarted = false;
         resumeLockStatus = null;
 
-        const portalData = await loadPortalData({ customerShopifyId, shop });
+        const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
         if (!portalData) {
           return renderMessage("Configuration incomplète.");
@@ -1150,6 +1183,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 
         return renderPortal({
           ...portalData,
+          portalRequestUrl: requestUrl,
           errorMessage:
             "Le paiement n’a pas pu être effectué. Vos choix de plats ont été enregistrés. Vous pouvez réessayer.",
         });
@@ -1193,7 +1227,7 @@ const handleResumeSubscriptionAndPayAction = async ({
         });
       }
 
-      const portalData = await loadPortalData({ customerShopifyId, shop });
+      const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
       if (!portalData) {
         return renderMessage("Configuration incomplète.");
@@ -1201,6 +1235,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 
       return renderPortal({
         ...portalData,
+        portalRequestUrl: requestUrl,
         processingMessage:
           "Votre paiement est en cours de confirmation. Ne relancez pas la demande.",
       });
@@ -1266,6 +1301,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 const handleChangeSubscriptionBoxAction = async ({
   customerShopifyId,
   formData,
+  requestUrl,
   selectionId,
   shop,
 }: PortalActionContext) => {
@@ -1311,7 +1347,7 @@ const handleChangeSubscriptionBoxAction = async ({
 
     // BOX-CHANGE SoT: any open recovery blocks box-size change (not meal edits).
     if (isRecoveryBlockingBoxChange(recoveryRecord?.status)) {
-      const portalData = await loadPortalData({ customerShopifyId, shop });
+      const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
       if (!portalData) {
         return renderMessage("Configuration incomplète.");
@@ -1319,6 +1355,7 @@ const handleChangeSubscriptionBoxAction = async ({
 
       return renderPortal({
         ...portalData,
+        portalRequestUrl: requestUrl,
         errorMessage: BOX_CHANGE_RECOVERY_BLOCK_MESSAGE,
       });
     }
@@ -1376,7 +1413,7 @@ const handleChangeSubscriptionBoxAction = async ({
     const isSameBox = currentBox.variantId === selectedBox.variantId;
 
     if (isSameBox) {
-      const portalData = await loadPortalData({ customerShopifyId, shop });
+      const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
       if (!portalData) {
         return renderMessage("Configuration incomplète.");
@@ -1384,6 +1421,7 @@ const handleChangeSubscriptionBoxAction = async ({
 
       return renderPortal({
         ...portalData,
+        portalRequestUrl: requestUrl,
         errorMessage:
           "Vous avez déjà cette box. Choisissez une autre taille pour continuer.",
       });
@@ -1433,7 +1471,7 @@ const handleChangeSubscriptionBoxAction = async ({
         toSellingPlanId: selectedBox.sellingPlanId,
       });
 
-      const portalData = await loadPortalData({ customerShopifyId, shop });
+      const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
       if (!portalData) {
         return renderMessage("Configuration incomplète.");
@@ -1450,6 +1488,7 @@ const handleChangeSubscriptionBoxAction = async ({
 
       return renderPortal({
         ...portalData,
+        portalRequestUrl: requestUrl,
         boxChangeEffect: BOX_CHANGE_EFFECT.NEXT_CYCLE,
         successMessage: buildBoxChangePendingSuccessMessage(
           selectedBox.mealCount,
@@ -1511,7 +1550,7 @@ const handleChangeSubscriptionBoxAction = async ({
       });
     }
 
-    const portalData = await loadPortalData({ customerShopifyId, shop });
+    const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
     if (!portalData) {
       return renderMessage("Configuration incomplète.");
@@ -1519,6 +1558,7 @@ const handleChangeSubscriptionBoxAction = async ({
 
     return renderPortal({
       ...portalData,
+      portalRequestUrl: requestUrl,
       boxChangeEffect: BOX_CHANGE_EFFECT.IMMEDIATE,
       successMessage:
         selection.status === "paused"
@@ -1530,6 +1570,7 @@ const handleChangeSubscriptionBoxAction = async ({
 const handleUpdateFutureMealSelectionAction = async ({
   customerShopifyId,
   formData,
+  requestUrl,
   selectionId,
   shop,
 }: PortalActionContext) => {
@@ -1565,6 +1606,7 @@ const handleUpdateFutureMealSelectionAction = async ({
     customerShopifyId,
     intent: "updateFutureMealSelection",
     recoveryRecord,
+    requestUrl,
     selection,
     shop,
   });
@@ -1672,7 +1714,7 @@ const handleUpdateFutureMealSelectionAction = async ({
     });
   }
 
-  const portalData = await loadPortalData({ customerShopifyId, shop });
+  const portalData = await loadPortalData({ customerShopifyId, requestedSubscriptionId: selectionId, shop });
 
   if (!portalData) {
     return renderMessage("Configuration incomplète.");
@@ -1680,6 +1722,7 @@ const handleUpdateFutureMealSelectionAction = async ({
 
   return renderPortal({
     ...portalData,
+    portalRequestUrl: requestUrl,
     successMessage: "Tes prochains plats ont bien été mis à jour.",
   });
 };
@@ -1711,6 +1754,7 @@ export const handlePortalAction = async (request: Request) => {
   const context: PortalActionContext = {
     customerShopifyId,
     formData,
+    requestUrl: request.url,
     selectionId,
     shop,
   };

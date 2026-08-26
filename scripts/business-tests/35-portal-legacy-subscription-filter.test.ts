@@ -51,7 +51,7 @@ const runSuite = () => {
   const portalBoxes = readSource("app/features/portal/portal-boxes.ts");
   const catalog = [buildV2Box()];
 
-  ctx.scenario("A. Même customer — seul V2 dans Ma prochaine box");
+  ctx.scenario("A. Même customer — seul V2 dans Ma prochaine box (selector)");
   const mixed = nextBoxIds(catalog, [
     {
       id: "sel-v2",
@@ -64,10 +64,16 @@ const runSuite = () => {
       variantId: V1_DUO_VARIANT_ID,
     },
   ]);
-  ctx.assertEqual("only V2 id kept", mixed.join("|"), "sel-v2");
+  ctx.assertEqual("only V2 id kept for next-box/manageable", mixed.join("|"), "sel-v2");
   ctx.assertTrue(
     "V1 variant is not in V2 catalog",
     findBuilderBoxByVariantId(catalog, V1_DUO_VARIANT_ID) === null,
+  );
+  ctx.assertTrue(
+    "V1 can surface as legacySubscriptions (not dropped silently)",
+    portalData.includes("legacySubscriptions") &&
+      portalData.includes("PortalLegacySubscription") &&
+      portalData.includes("shouldIncludeInPortalNextBox({"),
   );
 
   ctx.scenario("B. Variant V1 Box 16 repas (Duo) exclu");
@@ -142,10 +148,11 @@ const runSuite = () => {
     "sel-v2|sel-v1",
   );
 
-  ctx.scenario("F. Historique BoxOrder V1 non filtré");
+  ctx.scenario("F. Historique BoxOrder — isolé par subscription (pas drop)");
   ctx.assertTrue(
-    "history still uses unfiltered visibleManageable + visibleTerminal",
-    portalData.includes("visibleRecords: [...visibleManageable, ...visibleTerminal]"),
+    "history scoped via selection/contract filters helper",
+    portalData.includes("loadPortalHistoryOrdersForSelection") &&
+      portalData.includes("buildPortalHistoryOrderFilters"),
   );
   ctx.assertTrue(
     "BoxOrder snapshots still loaded for history",
@@ -155,6 +162,15 @@ const runSuite = () => {
     "portal data does not delete BoxOrder or selections",
     portalData.includes("prisma.boxOrder.delete") ||
       portalData.includes("prisma.subscriptionMealSelection.delete"),
+  );
+  ctx.assertTrue(
+    "legacy V1 section rendered without V2 edit actions",
+    readSource("app/features/portal/portal-render.ts").includes(
+      "Autres abonnements",
+    ) &&
+      readSource("app/features/portal/portal-render.ts").includes(
+        "ancienne formule Mileyo",
+      ),
   );
 
   ctx.scenario("G. Statut terminal après reconcile — hors prochaine box");

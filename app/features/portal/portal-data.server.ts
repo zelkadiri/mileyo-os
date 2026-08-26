@@ -61,12 +61,18 @@ import {
   getSelectedMeals,
   isPortalForecastEligible,
 } from "./portal-formatters";
+import {
+  buildPortalHistoryOrderFilters,
+  PORTAL_INVALID_SUBSCRIPTION_NOTICE,
+  resolveSelectedPortalSubscriptionId,
+} from "./portal-multi-subscription";
 import type {
   PortalAddressBlockKind,
   PortalBoxProduct,
   PortalDeliveryAddressState,
   PortalForecastCycle,
   PortalHistoryOrder,
+  PortalLegacySubscription,
   PortalMeal,
   PortalPendingBoxChange,
   PortalSelection,
@@ -77,9 +83,14 @@ import type {
 export type PortalData = {
   boxes: PortalBoxProduct[];
   historyOrders: PortalHistoryOrder[];
+  legacySubscriptions: PortalLegacySubscription[];
   meals: PortalMeal[];
   merchantSupport: MerchantSupportContact;
+  /** Manageable V2 active+paused selections (selector source). */
   selections: PortalSelection[];
+  selectedSubscriptionId: string | null;
+  /** Soft notice when `?subscription=` was invalid — never leaks ownership. */
+  selectionNotice: string | null;
   terminalSelections: PortalTerminalSelection[];
 };
 
@@ -209,54 +220,9 @@ export const buildForecastCycles = ({
   return cycles;
 };
 
-const loadPortalHistoryOrders = async ({
-  shop,
-  visibleRecords,
-}: {
-  shop: string;
-  visibleRecords: {
-    customerEmail: string | null;
-    subscriptionContractId: string | null;
-  }[];
-}): Promise<PortalHistoryOrder[]> => {
-  const contractIds = [
-    ...new Set(
-      visibleRecords
-        .map((record) => normalizeShopifyId(record.subscriptionContractId))
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
-  const customerEmails = [
-    ...new Set(
-      visibleRecords
-        .map((record) => record.customerEmail?.trim())
-        .filter((email): email is string => Boolean(email)),
-    ),
-  ];
-
-  const orFilters: Prisma.BoxOrderWhereInput[] = [];
-
-  if (contractIds.length > 0) {
-    orFilters.push({ subscriptionContractId: { in: contractIds } });
-  }
-
-  if (customerEmails.length > 0) {
-    orFilters.push({ customerEmail: { in: customerEmails } });
-  }
-
-  if (orFilters.length === 0) {
-    return [];
-  }
-
-  const boxOrders = await prisma.boxOrder.findMany({
-    orderBy: { createdAt: "desc" },
-    where: {
-      OR: orFilters,
-      shop,
-      simulated: false,
-    },
-  });
-
+const mapBoxOrdersToPortalHistory = (
+  boxOrders: Awaited<ReturnType<typeof prisma.boxOrder.findMany>>,
+): PortalHistoryOrder[] => {
   const seenOrderIds = new Set<string>();
 
   return boxOrders
@@ -281,6 +247,49 @@ const loadPortalHistoryOrders = async ({
     }));
 };
 
+/** History for one subscription.
+ * Prefer subscriptionSelectionId / contract / originating order.
+ * Email fallback only when the customer has a single non-terminal sub
+ * (legacy BoxOrders may lack selection/contract links).
+ */
+const loadPortalHistoryOrdersForSelection = async ({
+  allowEmailFallback,
+  selection,
+  shop,
+}: {
+  allowEmailFallback: boolean;
+  selection: {
+    customerEmail: string | null;
+    id: string;
+    shopifyOrderId: string;
+    subscriptionContractId: string | null;
+  };
+  shop: string;
+}): Promise<PortalHistoryOrder[]> => {
+  const orFilters = buildPortalHistoryOrderFilters({
+    allowEmailFallback,
+    customerEmail: selection.customerEmail,
+    selectionId: selection.id,
+    shopifyOrderId: selection.shopifyOrderId,
+    subscriptionContractId: normalizeShopifyId(selection.subscriptionContractId),
+  }) as Prisma.BoxOrderWhereInput[];
+
+  if (orFilters.length === 0) {
+    return [];
+  }
+
+  const boxOrders = await prisma.boxOrder.findMany({
+    orderBy: { createdAt: "desc" },
+    where: {
+      OR: orFilters,
+      shop,
+      simulated: false,
+    },
+  });
+
+  return mapBoxOrdersToPortalHistory(boxOrders);
+};
+
 export const getShopFromRequest = (request: Request) => {
   const url = new URL(request.url);
   return url.searchParams.get("shop")?.trim() ?? null;
@@ -293,9 +302,12 @@ export const getCustomerIdFromRequest = (request: Request) => {
 
 export const loadPortalData = async ({
   customerShopifyId,
+  requestedSubscriptionId = null,
   shop,
 }: {
   customerShopifyId: string;
+  /** `?subscription=` — must already belong to this customer+shop to win. */
+  requestedSubscriptionId?: string | null;
   shop: string;
 }): Promise<PortalData | null> => {
   const settings = await prisma.appSettings.findUnique({ where: { shop } });
@@ -365,7 +377,11 @@ export const loadPortalData = async ({
         );
 
         if (isTerminalPortalDisplayStatus(reconciled.status)) {
-          return { selection: null, terminalRecord: reconciled };
+          return {
+            legacy: null as PortalLegacySubscription | null,
+            selection: null as PortalSelection | null,
+            terminalRecord: reconciled,
+          };
         }
 
         let currentVariantId: string | null = null;
@@ -381,6 +397,13 @@ export const loadPortalData = async ({
           currentVariantId = reconciled.boxVariantShopifyId?.trim() || null;
         }
 
+        const effectiveNextScheduledDeliveryDate =
+          projectActiveScheduledDeliveryDate({
+            nextScheduledDeliveryDate: reconciled.nextScheduledDeliveryDate,
+            preferredDeliveryWeekday: reconciled.preferredDeliveryWeekday,
+          }).effectiveDeliveryDate;
+
+        // V1 / non-catalog: visible in "Autres abonnements", never V2 selector.
         if (
           !shouldIncludeInPortalNextBox({
             catalog,
@@ -388,7 +411,21 @@ export const loadPortalData = async ({
             status: reconciled.status,
           })
         ) {
-          return { selection: null, terminalRecord: null };
+          return {
+            legacy: {
+              id: reconciled.id,
+              mealsCount:
+                typeof reconciled.mealsCount === "number"
+                  ? reconciled.mealsCount
+                  : null,
+              nextScheduledDeliveryDate: effectiveNextScheduledDeliveryDate,
+              shopifyOrderName: reconciled.shopifyOrderName,
+              status: reconciled.status,
+              statusLabel: formatMealSelectionStatusLabel(reconciled.status),
+            } satisfies PortalLegacySubscription,
+            selection: null,
+            terminalRecord: null,
+          };
         }
 
         const portalState = derivePortalSubscriptionState(reconciled);
@@ -412,11 +449,6 @@ export const loadPortalData = async ({
         }
 
         const cutoffNow = getCutoffNow();
-        const effectiveNextScheduledDeliveryDate =
-          projectActiveScheduledDeliveryDate({
-            nextScheduledDeliveryDate: reconciled.nextScheduledDeliveryDate,
-            preferredDeliveryWeekday: reconciled.preferredDeliveryWeekday,
-          }).effectiveDeliveryDate;
 
         const modificationBlockReason = getPortalModificationBlockReason(
           reconciled,
@@ -525,6 +557,7 @@ export const loadPortalData = async ({
         });
 
         return {
+          legacy: null,
           selection: {
             boxChangeAppliesNextCycle,
             boxChangeBlocked,
@@ -548,6 +581,7 @@ export const loadPortalData = async ({
             })(),
             boxSubscriptionPrice,
             boxTitle,
+            createdAt: reconciled.createdAt.toISOString(),
             currentVariantId: currentBox?.variantId ?? currentVariantId,
             forecastCycles,
             id: reconciled.id,
@@ -561,6 +595,7 @@ export const loadPortalData = async ({
             paymentUpdateAvailable,
             paymentUpdateUnavailableReason,
             portalState,
+            preferredDeliveryWeekday: reconciled.preferredDeliveryWeekday ?? null,
             recovery: recoveryRecord
               ? {
                   failureCount: recoveryRecord.failureCount,
@@ -576,6 +611,9 @@ export const loadPortalData = async ({
             selectedMeals: getSelectedMeals(reconciled.selectedMeals),
             shopifyOrderName: reconciled.shopifyOrderName,
             status: reconciled.status,
+            subscriptionContractId: normalizeShopifyId(
+              reconciled.subscriptionContractId,
+            ),
           },
           terminalRecord: null,
         };
@@ -585,6 +623,8 @@ export const loadPortalData = async ({
   const selections: PortalSelection[] = mappedManageable.flatMap((mapped) =>
     mapped.selection ? [mapped.selection] : [],
   );
+  const legacySubscriptions: PortalLegacySubscription[] =
+    mappedManageable.flatMap((mapped) => (mapped.legacy ? [mapped.legacy] : []));
   const extraTerminalRecords = mappedManageable.flatMap((mapped) =>
     mapped.terminalRecord ? [mapped.terminalRecord] : [],
   );
@@ -593,15 +633,41 @@ export const loadPortalData = async ({
     ...extraTerminalRecords,
   ]);
 
-  const historyOrders = await loadPortalHistoryOrders({
-    shop,
-    visibleRecords: [...visibleManageable, ...visibleTerminal],
-  });
+  const { selectedSubscriptionId, usedFallback } =
+    resolveSelectedPortalSubscriptionId({
+      candidates: selections.map((selection) => ({
+        createdAt: selection.createdAt,
+        id: selection.id,
+        nextScheduledDeliveryDate: selection.nextScheduledDeliveryDate,
+        status: selection.status,
+      })),
+      requestedSubscriptionId,
+    });
+
+  const selectedSelection =
+    selections.find((selection) => selection.id === selectedSubscriptionId) ??
+    null;
+
+  // Email history fallback only when a single non-terminal sub exists (legacy links).
+  const nonTerminalCount = selections.length + legacySubscriptions.length;
+  const allowEmailFallback = nonTerminalCount <= 1;
+
+  const selectedSourceRecord = selectedSelection
+    ? visibleManageable.find((record) => record.id === selectedSelection.id)
+    : null;
+
+  const historyOrders = selectedSourceRecord
+    ? await loadPortalHistoryOrdersForSelection({
+        allowEmailFallback,
+        selection: selectedSourceRecord,
+        shop,
+      })
+    : [];
 
   const lastOrderDateByContract = new Map<string, string>();
 
   for (const order of historyOrders) {
-    const matchingSelection = [...visibleManageable, ...visibleTerminal].find(
+    const matchingSelection = visibleManageable.find(
       (record) => record.shopifyOrderName === order.shopifyOrderName,
     );
     const contractId = normalizeShopifyId(matchingSelection?.subscriptionContractId);
@@ -670,9 +736,12 @@ export const loadPortalData = async ({
   return {
     boxes,
     historyOrders,
+    legacySubscriptions,
     meals,
     merchantSupport,
     selections,
+    selectedSubscriptionId,
+    selectionNotice: usedFallback ? PORTAL_INVALID_SUBSCRIPTION_NOTICE : null,
     terminalSelections,
   };
 };

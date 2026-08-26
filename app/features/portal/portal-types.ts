@@ -125,6 +125,8 @@ export type PortalSelection = {
   deliveryCutoff: PortalDeliveryCutoffStatus;
   boxSubscriptionPrice: string | null;
   boxTitle: string | null;
+  /** ISO timestamp — default-selection tie-break. */
+  createdAt: string;
   currentVariantId: string | null;
   forecastCycles: PortalForecastCycle[];
   id: string;
@@ -140,12 +142,29 @@ export type PortalSelection = {
   paymentUpdateAvailable: boolean;
   paymentUpdateUnavailableReason: PaymentUpdateUnavailableReason;
   portalState: PortalSubscriptionState;
+  /** JS Date#getDay weekday (0–6) preferred for delivery. */
+  preferredDeliveryWeekday: number | null;
   recovery: PortalRecovery | null;
   resumeBlockedMessage: string | null;
   resumeRequiresPayment: boolean;
   selectedMeals: string[];
   shopifyOrderName: string | null;
   status: string;
+  /** Shopify SubscriptionContract GID when known. */
+  subscriptionContractId: string | null;
+};
+
+/**
+ * Active/paused V1 (or non-catalog) subscription — visible, non-editable.
+ * Never enters the V2 manageable selector.
+ */
+export type PortalLegacySubscription = {
+  id: string;
+  mealsCount: number | null;
+  nextScheduledDeliveryDate: string | null;
+  shopifyOrderName: string | null;
+  status: string;
+  statusLabel: string;
 };
 
 /** Lecture seule — affichée depuis la base locale, sans sync Shopify. */

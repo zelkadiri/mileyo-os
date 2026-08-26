@@ -45,6 +45,23 @@ export const portalClientScript = `
   var tabButtons = document.querySelectorAll(".portal-tab");
   var tabPanels = document.querySelectorAll(".portal-tab-panel");
 
+  /**
+   * Never POST with Shopify App Proxy signed query params (shop, signature, …).
+   * Keep only Mileyo app-owned keys (currently: subscription).
+   */
+  function getPortalFetchUrl() {
+    var params = new URLSearchParams();
+    try {
+      var current = new URLSearchParams(window.location.search || "");
+      var subscription = current.get("subscription");
+      if (subscription) {
+        params.set("subscription", subscription);
+      }
+    } catch (e) {}
+    var query = params.toString();
+    return window.location.pathname + (query ? "?" + query : "");
+  }
+
   tabButtons.forEach(function (button) {
     button.addEventListener("click", function () {
       var tab = button.getAttribute("data-tab");
@@ -990,7 +1007,7 @@ export const portalClientScript = `
         body.set("selectionId", editor.selectionId);
         body.set("selectedMeals", JSON.stringify(editor.quantities));
 
-        fetch(window.location.pathname + window.location.search, {
+        fetch(getPortalFetchUrl(), {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: body.toString()
@@ -1027,7 +1044,7 @@ export const portalClientScript = `
         resumeBody.set("selectionId", editor.selectionId);
         resumeBody.set("selectedMeals", JSON.stringify(editor.quantities));
 
-        fetch(window.location.pathname + window.location.search, {
+        fetch(getPortalFetchUrl(), {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: resumeBody.toString()
@@ -1058,7 +1075,7 @@ export const portalClientScript = `
       paymentBody.set("intent", "sendPaymentUpdateEmail");
       paymentBody.set("selectionId", selectionId);
 
-      fetch(window.location.pathname + window.location.search, {
+      fetch(getPortalFetchUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: paymentBody.toString()
@@ -1164,7 +1181,7 @@ export const portalClientScript = `
         addressBody.set("city", city);
         addressBody.set("countryCode", "FR");
 
-        fetch(window.location.pathname + window.location.search, {
+        fetch(getPortalFetchUrl(), {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: addressBody.toString()
@@ -1213,7 +1230,7 @@ export const portalClientScript = `
         pauseBody.set("intent", "pauseSubscription");
         pauseBody.set("selectionId", selectionId);
 
-        fetch(window.location.pathname + window.location.search, {
+        fetch(getPortalFetchUrl(), {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: pauseBody.toString()
@@ -1423,7 +1440,7 @@ export const portalClientScript = `
           body.set("productVariantId", boxChangeState.selectedBox.variantId);
           body.set("selectedMeals", JSON.stringify(boxChangeState.quantities));
 
-          fetch(window.location.pathname + window.location.search, {
+          fetch(getPortalFetchUrl(), {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: body.toString()

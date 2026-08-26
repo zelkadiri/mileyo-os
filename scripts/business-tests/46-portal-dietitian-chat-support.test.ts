@@ -32,6 +32,7 @@ const activeSelection = (): PortalSelection => ({
   boxChangeBlockedReason: null,
   boxSubscriptionPrice: "76.11",
   boxTitle: "Box 8 repas",
+  createdAt: "2026-08-01T10:00:00.000Z",
   currentVariantId: "gid://shopify/ProductVariant/811",
   deliveryAddress: {
     address: {
@@ -66,12 +67,14 @@ const activeSelection = (): PortalSelection => ({
   paymentUpdateUnavailableReason: null,
   pendingBoxChange: null,
   portalState: "active",
+  preferredDeliveryWeekday: 4,
   recovery: null,
   resumeBlockedMessage: null,
   resumeRequiresPayment: false,
   selectedMeals: ["Poulet tikka"],
   shopifyOrderName: "#1001",
   status: "active",
+  subscriptionContractId: "gid://shopify/SubscriptionContract/1001",
 });
 
 const sampleBox = (): PortalBoxProduct => ({

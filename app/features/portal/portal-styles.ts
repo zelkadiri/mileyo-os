@@ -91,8 +91,129 @@ body {
 
 .portal-header .success,
 .portal-header .processing-notice,
-.portal-header .error {
+.portal-header .error,
+.portal-header .selection-notice {
   margin: 0;
+}
+
+.subscription-selector {
+  margin: 0 0 18px;
+}
+
+.subscription-selector-title {
+  color: var(--mileyo-purple-black);
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+}
+
+.subscription-selector-track {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+.subscription-selector-option {
+  align-items: flex-start;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(220, 194, 240, 0.7);
+  border-radius: 16px;
+  color: var(--mileyo-text);
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(280px, 82vw);
+  min-height: 44px;
+  min-width: 168px;
+  padding: 12px 14px;
+  text-decoration: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.subscription-selector-option:hover {
+  border-color: rgba(185, 138, 215, 0.9);
+  box-shadow: var(--mileyo-shadow-soft);
+}
+
+.subscription-selector-option.is-selected {
+  background: #fff;
+  border-color: var(--mileyo-purple);
+  box-shadow: 0 0 0 1px rgba(185, 138, 215, 0.35), var(--mileyo-shadow-soft);
+}
+
+.subscription-selector-label {
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.subscription-selector-badge {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  padding: 3px 8px;
+  width: fit-content;
+}
+
+.subscription-selector-badge.is-active {
+  background: rgba(124, 201, 167, 0.2);
+  color: #1f6b4f;
+}
+
+.subscription-selector-badge.is-paused {
+  background: rgba(230, 192, 138, 0.28);
+  color: #8a5a1a;
+}
+
+.legacy-subscriptions {
+  margin-top: 8px;
+}
+
+.legacy-subscriptions-title {
+  color: var(--mileyo-purple-black);
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 8px 0 12px;
+}
+
+.legacy-subscription-card {
+  background: rgba(252, 248, 246, 0.95);
+}
+
+.legacy-subscription-kicker {
+  color: var(--mileyo-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  margin: 0 0 6px;
+  text-transform: uppercase;
+}
+
+.legacy-subscription-title {
+  font-size: 1rem;
+  margin: 0 0 12px;
+}
+
+.legacy-subscription-facts {
+  color: var(--mileyo-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 0.9rem;
+  margin: 0 0 16px;
+}
+
+.legacy-subscription-status {
+  color: var(--mileyo-text);
+  font-weight: 650;
 }
 
 .intro {
@@ -3114,6 +3235,15 @@ button:disabled,
 @media (max-width: 559px) {
   .portal-shell {
     padding: 12px 12px 48px;
+  }
+
+  .subscription-selector {
+    margin-bottom: 14px;
+  }
+
+  .subscription-selector-option {
+    min-width: 156px;
+    padding: 11px 12px;
   }
 
   .portal-tabs {
