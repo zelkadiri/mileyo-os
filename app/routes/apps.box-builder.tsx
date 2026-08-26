@@ -15,13 +15,13 @@ import {
 import {
   CAPTURE_CHECKOUT_LEAD_INTENT,
   captureCheckoutLead,
-  getBuilderShopFromRequest,
   parseCaptureCheckoutLeadBody,
   parseCheckoutLeadContext,
 } from "../features/builder/builder-lead.server";
 import { renderBuilder, renderMessage } from "../features/builder/builder-render";
 import { DELIVERY_TIMEZONE } from "../constants/deliverySchedule";
 import { buildBuilderDeliveryWindowOptions } from "../utils/deliveryDate";
+import { authenticateMileyoAppProxy } from "../utils/appProxyAuth.server";
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -30,14 +30,7 @@ const jsonResponse = (body: unknown, status = 200) =>
   });
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const url = new URL(request.url);
-  const shop = url.searchParams.get("shop")?.trim();
-
-  if (!shop) {
-    return renderMessage(
-      "Boutique introuvable. Ouvrez ce builder via le proxy d’application Shopify.",
-    );
-  }
+  const { shop } = await authenticateMileyoAppProxy(request);
 
   const settings = await prisma.appSettings.findUnique({ where: { shop } });
 
@@ -79,7 +72,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return jsonResponse({ message: "Méthode non autorisée.", ok: false }, 405);
   }
 
-  const shop = getBuilderShopFromRequest(request);
+  const { shop } = await authenticateMileyoAppProxy(request);
   let payload: unknown;
 
   try {

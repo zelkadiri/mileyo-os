@@ -79,11 +79,7 @@ import {
 } from "../builder/builder-catalog.server";
 import { getPortalMealsForObjective } from "./portal-catalog.server";
 import { getPortalV2BoxTitle, isPortalV2MealCount } from "./portal-boxes";
-import {
-  getCustomerIdFromRequest,
-  getShopFromRequest,
-  loadPortalData,
-} from "./portal-data.server";
+import { loadPortalData } from "./portal-data.server";
 import {
   parseMealQuantities,
   validateMealSelection,
@@ -96,6 +92,7 @@ import {
 import {
   syncAndAssertSubscriptionContractActionAllowed,
 } from "../../services/subscriptionContractSync.server";
+import { authenticateMileyoAppProxy } from "../../utils/appProxyAuth.server";
 import { renderMessage, renderPortal } from "./portal-render";
 
 type SubscriptionContractStatusResponse = {
@@ -1728,12 +1725,9 @@ const handleUpdateFutureMealSelectionAction = async ({
 };
 
 export const handlePortalAction = async (request: Request) => {
-  const shop = getShopFromRequest(request);
-  const customerShopifyId = getCustomerIdFromRequest(request);
-
-  if (!shop) {
-    return renderMessage("Boutique introuvable.");
-  }
+  // App Proxy HMAC first — shop / logged_in_customer_id are untrusted until then.
+  const { shop, loggedInCustomerId: customerShopifyId } =
+    await authenticateMileyoAppProxy(request);
 
   if (!customerShopifyId) {
     return renderMessage(

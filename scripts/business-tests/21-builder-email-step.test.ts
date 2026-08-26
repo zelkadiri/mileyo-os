@@ -328,8 +328,8 @@ const runSuite = () => {
     ),
   );
   ctx.assertTrue(
-    "shop from request not body",
-    routeSource.includes("getBuilderShopFromRequest") &&
+    "shop from App Proxy auth not body",
+    routeSource.includes("authenticateMileyoAppProxy") &&
       !/body\.shop/.test(routeSource),
   );
   ctx.assertFalse(

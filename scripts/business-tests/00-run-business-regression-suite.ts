@@ -112,6 +112,7 @@ const BUSINESS_SUITES = [
   "89-portal-multi-subscription.test.ts",
   "90-billing-contract-sync-fail-closed.test.ts",
   "91-billing-recovery-contract-sync-fail-closed.test.ts",
+  "92-app-proxy-authentication.test.ts",
 ];
 
 const LEGACY_SUITES = [

@@ -290,6 +290,11 @@ const loadPortalHistoryOrdersForSelection = async ({
   return mapBoxOrdersToPortalHistory(boxOrders);
 };
 
+/**
+ * Raw query helpers — DO NOT use for authorization.
+ * Shop / customer identity must come from `authenticateMileyoAppProxy` first.
+ * Kept for non-auth URL parsing / tests only.
+ */
 export const getShopFromRequest = (request: Request) => {
   const url = new URL(request.url);
   return url.searchParams.get("shop")?.trim() ?? null;

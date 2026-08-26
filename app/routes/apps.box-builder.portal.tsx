@@ -1,23 +1,14 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import { handlePortalAction } from "../features/portal/portal-actions.server";
-import {
-  getCustomerIdFromRequest,
-  getShopFromRequest,
-  loadPortalData,
-} from "../features/portal/portal-data.server";
+import { loadPortalData } from "../features/portal/portal-data.server";
 import { getRequestedSubscriptionIdFromRequest } from "../features/portal/portal-multi-subscription";
 import { renderMessage, renderPortal } from "../features/portal/portal-render";
+import { authenticateMileyoAppProxy } from "../utils/appProxyAuth.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const shop = getShopFromRequest(request);
-  const customerShopifyId = getCustomerIdFromRequest(request);
-
-  if (!shop) {
-    return renderMessage(
-      "Boutique introuvable. Ouvrez ce portail via le proxy d’application Shopify.",
-    );
-  }
+  const { shop, loggedInCustomerId: customerShopifyId } =
+    await authenticateMileyoAppProxy(request);
 
   if (!customerShopifyId) {
     return renderMessage(
