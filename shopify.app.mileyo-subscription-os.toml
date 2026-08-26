@@ -1,4 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+#
+# DANGEROUS DUPLICATE / LEGACY — do NOT deploy this file.
+# Same production client_id as shopify.app.production.toml but stale scopes,
+# webhooks, and api_version. Use: shopify app deploy --config shopify.app.production.toml
 
 client_id = "b2ca390f61d777ae3c4f87ecc30648a6"
 name = "Mileyo Subscription Os"
