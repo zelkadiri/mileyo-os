@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runProcessEmailRetriesCron } from "../../app/routes/api.cron.process-email-retries";
+import { runProcessEmailRetriesCron } from "../../app/services/email/processEmailRetriesCron.server";
 import {
   createBusinessTestContext,
   finishSuite,
@@ -134,6 +134,9 @@ const runSuite = async () => {
     const emailRetriesCron = readRepoFile(
       "app/routes/api.cron.process-email-retries.tsx",
     );
+    const emailRetriesCronServer = readRepoFile(
+      "app/services/email/processEmailRetriesCron.server.ts",
+    );
     const vercel = readRepoFile("vercel.json");
 
     ctx.assertFalse(
@@ -154,7 +157,11 @@ const runSuite = async () => {
     );
     ctx.assertTrue(
       "email retries cron importe worker",
-      /processDueEmailEvents/.test(emailRetriesCron),
+      /processDueEmailEvents/.test(emailRetriesCronServer),
+    );
+    ctx.assertTrue(
+      "email retries route délègue au helper server",
+      /runProcessEmailRetriesCron/.test(emailRetriesCron),
     );
     ctx.assertTrue(
       "vercel garde process-subscriptions",

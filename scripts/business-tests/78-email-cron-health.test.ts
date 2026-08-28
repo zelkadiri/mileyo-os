@@ -31,7 +31,7 @@ import {
   type EmailCronRunDb,
   type EmailCronRunRecord,
 } from "../../app/services/email/email-cron-run.server";
-import { runProcessEmailRetriesCron } from "../../app/routes/api.cron.process-email-retries";
+import { runProcessEmailRetriesCron } from "../../app/services/email/processEmailRetriesCron.server";
 import {
   createBusinessTestContext,
   finishSuite,
@@ -566,7 +566,10 @@ const runSuite = async () => {
 
   ctx.scenario("U–W. Cron auth / cap / manual retry inchangés");
   {
-    const cron = readRepoFile("app/routes/api.cron.process-email-retries.tsx");
+    const cronRoute = readRepoFile("app/routes/api.cron.process-email-retries.tsx");
+    const cron = readRepoFile(
+      "app/services/email/processEmailRetriesCron.server.ts",
+    );
     const worker = readRepoFile(
       "app/services/email/email-event-worker.server.ts",
     );
@@ -576,6 +579,10 @@ const runSuite = async () => {
     ctx.assertTrue(
       "U. CRON_SECRET auth",
       cron.includes("CRON_SECRET") && cron.includes("Unauthorized"),
+    );
+    ctx.assertTrue(
+      "U. route délègue au helper server",
+      /runProcessEmailRetriesCron/.test(cronRoute),
     );
     ctx.assertTrue(
       "U. schedule inchangé",

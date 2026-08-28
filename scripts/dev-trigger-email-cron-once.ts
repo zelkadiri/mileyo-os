@@ -2,7 +2,7 @@
  * DEV-only: trigger email retries cron once (EMAIL-6G-C QA).
  * Uses CRON_SECRET / CRON_SHOP from env. Does not print secrets.
  */
-import { runProcessEmailRetriesCron } from "../app/routes/api.cron.process-email-retries";
+import { runProcessEmailRetriesCron } from "../app/services/email/processEmailRetriesCron.server";
 import db from "../app/db.server";
 
 const secret = process.env.CRON_SECRET?.trim();
