@@ -2,11 +2,11 @@
   "crons": [
     {
       "path": "/api/cron/process-subscriptions",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/cron/process-email-retries",
-      "schedule": "5 * * * *"
+      "schedule": "5 0 * * *"
     }
   ]
 }
