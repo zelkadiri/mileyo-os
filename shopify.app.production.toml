@@ -2,11 +2,11 @@
 
 client_id = "b2ca390f61d777ae3c4f87ecc30648a6"
 name = "Mileyo Subscription Os"
-application_url = "https://mileyo-os.vercel.app/"
+application_url = "https://app.mileyo.fr/"
 embedded = true
 
 [app_proxy]
-url = "https://mileyo-os.vercel.app/apps/box-builder"
+url = "https://app.mileyo.fr/apps/box-builder"
 subpath = "box-builder"
 prefix = "apps"
 
@@ -62,8 +62,8 @@ use_legacy_install_flow = false
 
 [auth]
 redirect_urls = [
-  "https://mileyo-os.vercel.app/auth/callback",
-  "https://mileyo-os.vercel.app/auth/shopify/callback"
+  "https://app.mileyo.fr/auth/callback",
+  "https://app.mileyo.fr/auth/shopify/callback"
 ]
 
 
