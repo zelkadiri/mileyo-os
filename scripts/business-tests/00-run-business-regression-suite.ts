@@ -115,6 +115,7 @@ const BUSINESS_SUITES = [
   "92-app-proxy-authentication.test.ts",
   "93-portal-crisp-integration.test.ts",
   "94-order-cancellation-lifecycle.test.ts",
+  "95-admin-cancel-subscription.test.ts",
 ];
 
 const LEGACY_SUITES = [

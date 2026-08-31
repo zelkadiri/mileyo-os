@@ -118,6 +118,21 @@ const subscriptionContractPauseMutation = `#graphql
   }
 `;
 
+const subscriptionContractCancelMutation = `#graphql
+  mutation SubscriptionContractCancel($subscriptionContractId: ID!) {
+    subscriptionContractCancel(subscriptionContractId: $subscriptionContractId) {
+      contract {
+        id
+        status
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`;
+
 const subscriptionContractBillingPolicyQuery = `#graphql
   query SubscriptionContractBillingPolicy($id: ID!) {
     subscriptionContract(id: $id) {
@@ -201,6 +216,10 @@ type SubscriptionContractMutationResponse = {
       userErrors?: { field?: string[] | null; message?: string | null }[];
     } | null;
     subscriptionContractPause?: {
+      contract?: { id?: string | null; status?: string | null } | null;
+      userErrors?: { field?: string[] | null; message?: string | null }[];
+    } | null;
+    subscriptionContractCancel?: {
       contract?: { id?: string | null; status?: string | null } | null;
       userErrors?: { field?: string[] | null; message?: string | null }[];
     } | null;
@@ -477,6 +496,41 @@ export const pauseSubscriptionContractOnShopify = async (
 
   if (userErrorMessage) {
     return { error: userErrorMessage };
+  }
+
+  return {};
+};
+
+export const cancelSubscriptionContractOnShopify = async (
+  admin: ShopifyAdminGraphql,
+  subscriptionContractId: string,
+): Promise<{ error?: string }> => {
+  const response = await admin.graphql(subscriptionContractCancelMutation, {
+    variables: {
+      subscriptionContractId: toSubscriptionContractGid(subscriptionContractId),
+    },
+  });
+  const json = (await response.json()) as SubscriptionContractMutationResponse;
+
+  if (json.errors?.length) {
+    return {
+      error:
+        json.errors
+          .map((error) => error.message)
+          .filter(Boolean)
+          .join(" ") || "Erreur GraphQL lors de l’annulation.",
+    };
+  }
+
+  const result = json.data?.subscriptionContractCancel;
+  const userErrorMessage = getGraphqlUserErrors(result?.userErrors);
+
+  if (userErrorMessage) {
+    return { error: userErrorMessage };
+  }
+
+  if (!result?.contract?.id) {
+    return { error: "Shopify n’a pas confirmé l’annulation du contrat." };
   }
 
   return {};

@@ -43,6 +43,17 @@ export const recoveryDevButtonStyle = {
   padding: "0.65rem 1rem",
 } as const;
 
+export const destructiveButtonStyle = {
+  background: "#991b1b",
+  border: 0,
+  borderRadius: "999px",
+  color: "white",
+  cursor: "pointer",
+  font: "inherit",
+  fontWeight: 700,
+  padding: "0.65rem 1rem",
+} as const;
+
 export const bannerStyle = (variant: "error" | "success" | "warning") =>
   ({
     background:

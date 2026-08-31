@@ -3,6 +3,7 @@ import { Form, useLoaderData, useSearchParams } from "react-router";
 import type { loadSubscriptionsPageData } from "./subscriptions-data.server";
 import {
   DEV_RECOVERY_RETRY_DEFAULT_NOW,
+  cancelSubscriptionConfirmMessage,
   formatAdminDateTime,
   formatMealSelectionStatusLabel,
   formatRecoveryStatusLabel,
@@ -14,6 +15,7 @@ import {
   bannerStyle,
   billingWarningColumnStyle,
   buttonRowStyle,
+  destructiveButtonStyle,
   listStyle,
   primaryButtonStyle,
   recoveryDevButtonStyle,
@@ -68,6 +70,8 @@ export default function SubscriptionsPage() {
   const error = searchParams.get("error");
   const billingError = searchParams.get("billingError");
   const billingSuccess = searchParams.get("billingSuccess") === "1";
+  const cancelError = searchParams.get("cancelError");
+  const cancelSuccess = searchParams.get("cancelSuccess") === "1";
   const recoveryRetrySuccess = searchParams.get("recoveryRetrySuccess") === "1";
   const attemptId = searchParams.get("attemptId");
   const recoveryRetried = searchParams.get("retried");
@@ -243,6 +247,12 @@ export default function SubscriptionsPage() {
               capturera.
             </p>
           ) : null}
+          {cancelSuccess ? (
+            <p style={bannerStyle("success")}>Abonnement annulé.</p>
+          ) : null}
+          {cancelError ? (
+            <p style={bannerStyle("error")}>{cancelError}</p>
+          ) : null}
           {recoveryRetrySuccess ? (
             <p style={bannerStyle("success")}>
               Retry recovery DEV lancé
@@ -364,6 +374,41 @@ export default function SubscriptionsPage() {
                     <s-text>
                       ID fiche : {selection.id}
                     </s-text>
+                    {!isTerminal ? (
+                      <div style={buttonRowStyle}>
+                        <Form
+                          method="post"
+                          onSubmit={(event) => {
+                            if (!confirm(cancelSubscriptionConfirmMessage)) {
+                              event.preventDefault();
+                            }
+                          }}
+                        >
+                          <input
+                            name="intent"
+                            type="hidden"
+                            value="cancelSubscription"
+                          />
+                          <input
+                            name="selectionId"
+                            type="hidden"
+                            value={selection.id}
+                          />
+                          <button
+                            disabled={!selection.subscriptionContractId}
+                            style={destructiveButtonStyle}
+                            title={
+                              selection.subscriptionContractId
+                                ? undefined
+                                : "Contrat d’abonnement Shopify requis"
+                            }
+                            type="submit"
+                          >
+                            Annuler l’abonnement
+                          </button>
+                        </Form>
+                      </div>
+                    ) : null}
                     {isActive && !isTerminal ? (
                       showSubscriptionTestActions ? (
                         <div style={buttonRowStyle}>

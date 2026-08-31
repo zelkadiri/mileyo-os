@@ -3,11 +3,16 @@ import { redirect } from "react-router";
 
 import db from "../../db.server";
 import { authenticate } from "../../shopify.server";
-import { isTerminalSubscriptionSelectionStatus } from "../../constants/subscriptionMealSelection";
 import {
+  isManageableSubscriptionSelectionStatus,
+  isTerminalSubscriptionSelectionStatus,
+} from "../../constants/subscriptionMealSelection";
+import {
+  syncAndAssertSubscriptionContractActionAllowed,
   syncSubscriptionContractState,
 } from "../../services/subscriptionContractSync.server";
 import {
+  cancelSubscriptionContractOnShopify,
   getBillingRunnerDeliveryGate,
   getSelectionSkipReason,
   triggerSubscriptionBillingAttempt,
@@ -26,9 +31,17 @@ const ADMIN_BILLING_NOT_READY_MESSAGE =
 const ADMIN_BILLING_CONTRACT_SYNC_FAILED_MESSAGE =
   "Impossible de vérifier l’état Shopify de cet abonnement. Facturation refusée.";
 
+const ADMIN_CANCEL_CONTRACT_SYNC_FAILED_MESSAGE =
+  "Impossible de vérifier l’état Shopify de cet abonnement. Annulation refusée.";
+
 const redirectWithBillingError = (message: string) =>
   redirect(
     `/app/subscriptions?billingError=${encodeURIComponent(message)}`,
+  );
+
+const redirectWithCancelError = (message: string) =>
+  redirect(
+    `/app/subscriptions?cancelError=${encodeURIComponent(message)}`,
   );
 
 const isUnreliableContractSyncResult = (syncResult: {
@@ -249,6 +262,119 @@ export const handleSubscriptionsAction = async (request: Request) => {
         "Impossible d’exécuter le retry recovery DEV.",
       );
     }
+  }
+
+  if (intent === "cancelSubscription") {
+    const selection = await db.subscriptionMealSelection.findFirst({
+      where: {
+        id: selectionId,
+        shop,
+      },
+    });
+
+    if (!selection) {
+      return redirectWithCancelError("Abonnement introuvable.");
+    }
+
+    if (isTerminalSubscriptionSelectionStatus(selection.status)) {
+      return redirectWithCancelError(
+        "Cet abonnement est déjà terminé et ne peut plus être annulé.",
+      );
+    }
+
+    if (!isManageableSubscriptionSelectionStatus(selection.status)) {
+      return redirectWithCancelError(
+        "Cet abonnement ne peut pas être annulé dans son état actuel.",
+      );
+    }
+
+    if (!selection.subscriptionContractId) {
+      return redirectWithCancelError(
+        "Contrat d’abonnement Shopify manquant pour cet abonnement.",
+      );
+    }
+
+    let guard;
+
+    try {
+      guard = await syncAndAssertSubscriptionContractActionAllowed({
+        admin,
+        selection,
+        shop,
+        source: "admin_action",
+      });
+    } catch (error) {
+      console.log("[ADMIN_CANCEL] contract sync failed", {
+        error: error instanceof Error ? error.message : error,
+        selectionId: selection.id,
+        source: "admin_action",
+        subscriptionContractId: selection.subscriptionContractId,
+      });
+      return redirectWithCancelError(ADMIN_CANCEL_CONTRACT_SYNC_FAILED_MESSAGE);
+    }
+
+    if (
+      guard.syncResult &&
+      isUnreliableContractSyncResult(guard.syncResult)
+    ) {
+      console.log("[ADMIN_CANCEL] contract sync unreliable — cancel blocked", {
+        reason: guard.syncResult.reason,
+        selectionId: selection.id,
+        source: "admin_action",
+        subscriptionContractId: selection.subscriptionContractId,
+        syncAction: guard.syncResult.action,
+      });
+      return redirectWithCancelError(ADMIN_CANCEL_CONTRACT_SYNC_FAILED_MESSAGE);
+    }
+
+    if (!guard.allowed) {
+      return redirectWithCancelError(
+        guard.message ??
+          "Cet abonnement ne peut plus être annulé côté Shopify.",
+      );
+    }
+
+    const cancellableSelection = guard.selection;
+
+    if (
+      !cancellableSelection.subscriptionContractId ||
+      !isManageableSubscriptionSelectionStatus(cancellableSelection.status)
+    ) {
+      return redirectWithCancelError(
+        "Cet abonnement ne peut plus être annulé côté Shopify.",
+      );
+    }
+
+    try {
+      const shopifyResult = await cancelSubscriptionContractOnShopify(
+        admin,
+        cancellableSelection.subscriptionContractId,
+      );
+
+      if (shopifyResult.error) {
+        return redirectWithCancelError(shopifyResult.error);
+      }
+    } catch {
+      return redirectWithCancelError(
+        "Impossible de contacter Shopify pour annuler l’abonnement.",
+      );
+    }
+
+    // Optimistic local terminal state — matches CANCELLED sync map.
+    // Does not touch BoxOrder / Preparation (order cancel is separate).
+    await db.subscriptionMealSelection.update({
+      data: {
+        active: false,
+        nextBillingDate: null,
+        status: "cancelled",
+      },
+      where: {
+        id: cancellableSelection.id,
+        shop,
+      },
+    });
+
+    return redirect("/app/subscriptions?cancelSuccess=1");
   }
 
   if (intent !== "simulateNextSubscriptionOrder") {

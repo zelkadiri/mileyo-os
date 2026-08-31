@@ -67,7 +67,7 @@ const scheduleRecoverySource = recoverySource.slice(
 );
 const triggerRecoveryRetrySource = actionsSource.slice(
   actionsSource.indexOf('if (intent === "triggerRecoveryRetry")'),
-  actionsSource.indexOf('if (intent !== "simulateNextSubscriptionOrder")'),
+  actionsSource.indexOf('if (intent === "cancelSubscription")'),
 );
 const processDueBillingsSource = workerSource.slice(
   workerSource.indexOf("export const processDueSubscriptionBillings"),
