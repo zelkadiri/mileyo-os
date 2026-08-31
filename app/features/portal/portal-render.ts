@@ -36,6 +36,10 @@ import {
 } from "./portal-formatters";
 import { portalClientScript } from "./portal-client";
 import {
+  renderPortalCrispScript,
+  resolvePortalCrispConfig,
+} from "./portal-crisp";
+import {
   buildPortalSubscriptionHref,
   formatPortalSubscriptionSelectorLabel,
 } from "./portal-multi-subscription";
@@ -58,6 +62,54 @@ import type {
 
 const portalLoginHref = buildMileyoPortalLoginUrl(MILEYO_PORTAL_PATH);
 const portalLogoutHref = MILEYO_CUSTOMER_LOGOUT_PATH;
+
+const PORTAL_CRISP_CHAT_TRIGGER_CLASS = "portal-crisp-chat-trigger";
+
+const renderPortalCrispChatTrigger = ({
+  extraClasses,
+  externalLinkWhenDisabled = false,
+  label,
+  merchantSupport,
+  portalCrispEnabled,
+}: {
+  extraClasses: string;
+  externalLinkWhenDisabled?: boolean;
+  label: string;
+  merchantSupport: MerchantSupportContact;
+  portalCrispEnabled: boolean;
+}) =>
+  portalCrispEnabled
+    ? `<button
+            class="${extraClasses} ${PORTAL_CRISP_CHAT_TRIGGER_CLASS}"
+            data-fallback-href="${escapeHtml(merchantSupport.href)}"
+            type="button"
+          >
+            ${label}
+          </button>`
+    : `<a
+            class="${extraClasses}"
+            href="${escapeHtml(merchantSupport.href)}"${
+              externalLinkWhenDisabled
+                ? `
+            rel="noopener noreferrer"
+            target="_blank"`
+                : ""
+            }
+          >
+            ${label}
+          </a>`;
+
+const renderDietitianChatButton = (
+  merchantSupport: MerchantSupportContact,
+  portalCrispEnabled: boolean,
+) =>
+  renderPortalCrispChatTrigger({
+    extraClasses: "portal-button secondary dietitian-chat-button",
+    externalLinkWhenDisabled: true,
+    label: "Discuter avec la diététicienne",
+    merchantSupport,
+    portalCrispEnabled,
+  });
 
 const htmlResponse = (html: string) =>
   new Response(html, {
@@ -503,11 +555,13 @@ const renderNextBoxCard = ({
   boxes,
   meals,
   merchantSupport,
+  portalCrispEnabled,
   selection,
 }: {
   boxes: PortalBoxProduct[];
   meals: PortalMeal[];
   merchantSupport: MerchantSupportContact;
+  portalCrispEnabled: boolean;
   selection: PortalSelection;
 }) => {
   const portalState = selection.portalState;
@@ -795,7 +849,12 @@ const renderNextBoxCard = ({
           </button>
           <div class="objective-support-panel hidden">
             <p class="objective-support-message">Le changement d'objectif nécessite l'aide de notre équipe afin d'adapter votre abonnement. Contactez-nous via le chat.</p>
-            <a class="portal-button objective-support-contact" href="${escapeHtml(merchantSupport.href)}">Contacter le support</a>
+            ${renderPortalCrispChatTrigger({
+              extraClasses: "portal-button objective-support-contact",
+              label: "Contacter le support",
+              merchantSupport,
+              portalCrispEnabled,
+            })}
           </div>
         </div>
         <div class="settings-logout-row">
@@ -809,14 +868,7 @@ const renderNextBoxCard = ({
           <p class="dietitian-title">Votre diététicienne</p>
           <p class="dietitian-lead">Une question sur vos repas ?</p>
           <p class="dietitian-copy">Discutez avec votre diététicienne</p>
-          <a
-            class="portal-button secondary dietitian-chat-button"
-            href="${escapeHtml(merchantSupport.href)}"
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            Ouvrir le chat
-          </a>
+          ${renderDietitianChatButton(merchantSupport, portalCrispEnabled)}
         </div>
       </section>
       </aside>
@@ -1071,6 +1123,11 @@ export const renderPortal = ({
   const hasLegacy = legacySubscriptions.length > 0;
   const hasTerminal = terminalSelections.length > 0;
   const hasAnySubscription = hasManageable || hasLegacy || hasTerminal;
+  const portalCrispConfig = resolvePortalCrispConfig();
+  const portalCrispScript =
+    portalCrispConfig.enabled && portalCrispConfig.websiteId
+      ? renderPortalCrispScript(portalCrispConfig.websiteId)
+      : null;
 
   const headerFlash = [
     selectionNotice
@@ -1135,6 +1192,7 @@ export const renderPortal = ({
               boxes,
               meals,
               merchantSupport,
+              portalCrispEnabled: portalCrispConfig.enabled,
               selection: selectedSelection,
             })
           : hasLegacy
@@ -1267,6 +1325,7 @@ export const renderPortal = ({
   </div>
 
   <script>window.__MILEYO_PORTAL__ = ${scriptJson({ boxes, initialQuantities, meals, selections: visibleSelections })};</script>
+  ${portalCrispScript ? `<script>${portalCrispScript}</script>` : ""}
   <script>${portalClientScript}</script>
 </body>
 </html>`);

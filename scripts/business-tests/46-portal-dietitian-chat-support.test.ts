@@ -87,6 +87,34 @@ const sampleBox = (): PortalBoxProduct => ({
   variantId: "gid://shopify/ProductVariant/811",
 });
 
+const withEnv = async <T>(
+  values: Record<string, string | undefined>,
+  run: () => Promise<T>,
+): Promise<T> => {
+  const previous: Record<string, string | undefined> = {};
+
+  for (const [key, value] of Object.entries(values)) {
+    previous[key] = process.env[key];
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+
+  try {
+    return await run();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+};
+
 const runSuite = async () => {
   const ctx = createBusinessTestContext("46-portal-dietitian-chat-support");
   const portalClient = readSource("app/features/portal/portal-client.ts");
@@ -149,22 +177,30 @@ const runSuite = async () => {
   ctx.assertFalse("vide refusé", isAllowedSupportChatUrl(""));
 
   ctx.scenario("B. Portal — CTA diététicienne = lien merchantSupport");
-  const html = await renderPortal({
-    boxes: [sampleBox()],
-    historyOrders: [],
-    meals: [],
-    merchantSupport: {
-      href: CHAT_HREF,
-      isConfigured: true,
-      label: "Nous contacter",
+  const html = await withEnv(
+    {
+      CRISP_WEBSITE_ID: "",
+      ENABLE_PORTAL_CRISP: "false",
     },
-    selections: [activeSelection()],
-    terminalSelections: [],
-  }).text();
+    async () =>
+      renderPortal({
+        boxes: [sampleBox()],
+        historyOrders: [],
+        meals: [],
+        merchantSupport: {
+          href: CHAT_HREF,
+          isConfigured: true,
+          label: "Nous contacter",
+        },
+        selections: [activeSelection()],
+        terminalSelections: [],
+      }).text(),
+  );
 
   ctx.assertTrue(
     "bloc diététicienne présent",
-    html.includes("Votre diététicienne") && html.includes("Ouvrir le chat"),
+    html.includes("Votre diététicienne") &&
+      html.includes("Discuter avec la diététicienne"),
   );
   ctx.assertTrue(
     "lien avec classe dietitian-chat-button",
@@ -189,9 +225,10 @@ const runSuite = async () => {
     "portal-data appelle getMerchantSupportContact(shop)",
     portalData.includes("getMerchantSupportContact(shop)"),
   );
-  ctx.assertFalse(
-    "portal-client sans handler dietitian",
-    portalClient.includes("dietitian"),
+  ctx.assertTrue(
+    "portal-client handler Crisp partagé avec chat:open",
+    portalClient.includes('["do", "chat:open"]') &&
+      portalClient.includes(".portal-crisp-chat-trigger[data-fallback-href]"),
   );
 
   ctx.scenario("C. Admin + schema");

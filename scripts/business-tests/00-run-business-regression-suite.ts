@@ -113,6 +113,7 @@ const BUSINESS_SUITES = [
   "90-billing-contract-sync-fail-closed.test.ts",
   "91-billing-recovery-contract-sync-fail-closed.test.ts",
   "92-app-proxy-authentication.test.ts",
+  "93-portal-crisp-integration.test.ts",
 ];
 
 const LEGACY_SUITES = [

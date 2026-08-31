@@ -1479,5 +1479,23 @@ export const portalClientScript = `
       toggle.textContent = expanded ? "Réduire" : "Voir tout";
     });
   });
+
+  document
+    .querySelectorAll(".portal-crisp-chat-trigger[data-fallback-href]")
+    .forEach(function (button) {
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+
+        if (window.$crisp) {
+          window.$crisp.push(["do", "chat:open"]);
+          return;
+        }
+
+        var fallbackHref = button.getAttribute("data-fallback-href");
+        if (fallbackHref) {
+          window.open(fallbackHref, "_blank", "noopener,noreferrer");
+        }
+      });
+    });
 })();
 `;
