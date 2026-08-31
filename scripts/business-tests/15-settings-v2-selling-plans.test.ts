@@ -1016,10 +1016,24 @@ const runSuite = async () => {
   const v2IntentIndex = actionsSource.indexOf(
     "if (intent === SETUP_V2_WEEKLY_SELLING_PLANS_INTENT)",
   );
-  const v2Block = actionsSource.slice(
-    v2IntentIndex,
-    actionsSource.indexOf("const boxCollectionId", v2IntentIndex),
+  const nextIntentAfterV2 = actionsSource.indexOf(
+    "if (intent ===",
+    v2IntentIndex + 1,
   );
+  const fallbackBoxCollectionIndex = actionsSource.indexOf(
+    "const boxCollectionId",
+    v2IntentIndex,
+  );
+  const v2BlockEnd =
+    nextIntentAfterV2 === -1
+      ? fallbackBoxCollectionIndex
+      : Math.min(
+          nextIntentAfterV2,
+          fallbackBoxCollectionIndex === -1
+            ? nextIntentAfterV2
+            : fallbackBoxCollectionIndex,
+        );
+  const v2Block = actionsSource.slice(v2IntentIndex, v2BlockEnd);
   ctx.assertTrue(
     "V2 intent calls setupV2WeeklySellingPlans",
     v2Block.includes("setupV2WeeklySellingPlans("),

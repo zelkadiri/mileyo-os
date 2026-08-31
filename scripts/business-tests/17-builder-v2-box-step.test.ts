@@ -172,6 +172,12 @@ const runSuite = () => {
   const adapterSource = readSource(
     "app/features/builder/builder-catalog.server.ts",
   );
+  const checkoutServerSource = readSource(
+    "app/features/builder/builder-checkout.server.ts",
+  );
+  const createCheckoutFn =
+    clientSource.match(/function createBuilderCheckout[\s\S]*?\n {2}function /)?.[0] ??
+    "";
 
   ctx.scenario("A. QUERY A — handle lookup + cost-safe shape");
   ctx.assertEqual(
@@ -572,7 +578,7 @@ const runSuite = () => {
     clientSource.includes("box.objective === selectedObjective"),
   );
 
-  ctx.scenario("H. One-time removed + cart always subscription");
+  ctx.scenario("H. One-time removed + checkout always subscription");
   ctx.assertFalse("no orderType state", clientSource.includes("var orderType"));
   ctx.assertFalse("no setOrderType", clientSource.includes("setOrderType"));
   ctx.assertFalse(
@@ -594,20 +600,20 @@ const runSuite = () => {
     clientSource.includes('orderType === "one-time"'),
   );
   ctx.assertTrue(
-    "cart always sets selling_plan",
-    clientSource.includes("selling_plan: sellingPlanId"),
+    "checkout always sends sellingPlanId",
+    createCheckoutFn.includes("sellingPlanId: selectedBox.sellingPlanId"),
   );
   ctx.assertTrue(
-    "Type de commande always Abonnement hebdomadaire",
-    clientSource.includes(
-      '"Type de commande": "Abonnement hebdomadaire"',
-    ),
+    "Type de commande always Abonnement hebdomadaire (server)",
+    checkoutServerSource.includes("BUILDER_CART_ORDER_TYPE_SUBSCRIPTION") &&
+      readSource("app/features/builder/builder-cart.ts").includes(
+        '"Abonnement hebdomadaire"',
+      ),
   );
   ctx.assertTrue(
-    "Nombre de repas from selectedBox.mealCount",
-    clientSource.includes(
-      '"Nombre de repas": String(selectedBox.mealCount)',
-    ),
+    "Nombre de repas from checkout mealCount (server)",
+    checkoutServerSource.includes("BUILDER_CART_MEAL_COUNT_PROPERTY") &&
+      createCheckoutFn.includes("mealCount: selectedBox.mealCount"),
   );
 
   ctx.scenario("I. Price + launch promo display");
@@ -1087,14 +1093,15 @@ const runSuite = () => {
     "J. getStartingPriceForObjective itself does not subtract discount",
     /getBuilderLaunchPricing|FIRST_BOX_LAUNCH_DISCOUNT/.test(startingPriceFn),
   );
-  const addToCartFn =
-    clientSource.match(/function addSelectedBoxToCart[\s\S]*?\n {2}function /)?.[0] ??
-    "";
-  ctx.assertTrue("addSelectedBoxToCart found", addToCartFn.includes("cart/add.js"));
+  ctx.assertTrue(
+    "createBuilderCheckout posts JSON checkout intent",
+    createCheckoutFn.includes("CREATE_CHECKOUT_INTENT") &&
+      !createCheckoutFn.includes("/cart/add.js"),
+  );
   ctx.assertFalse(
-    "J. cart add does not send launchPrice",
+    "J. checkout does not send launchPrice",
     /launchPrice|launchPricePerMeal|discountCents|LAUNCH_DISCOUNT/.test(
-      addToCartFn,
+      createCheckoutFn,
     ),
   );
 

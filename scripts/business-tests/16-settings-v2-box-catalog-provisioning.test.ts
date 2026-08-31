@@ -17,9 +17,9 @@ import {
   BOX_V2_PRODUCT_STATUS,
   BOX_V2_PRODUCT_TITLE,
   getBoxV2VariantSpecs,
-  getTemporaryV2VariantPrice,
-  TEMPORARY_V2_BASE_PRICE_BY_MEAL_COUNT,
-  TEMPORARY_V2_OBJECTIVE_PRICE_OFFSET,
+  getSeedV2VariantPrice,
+  SEED_V2_BASE_PRICE_BY_MEAL_COUNT,
+  SEED_V2_OBJECTIVE_PRICE_OFFSET,
 } from "../../app/constants/subscriptionBoxCatalogV2";
 import {
   SUBSCRIPTION_OBJECTIVE,
@@ -342,67 +342,44 @@ const runSuite = async () => {
     "24",
   );
 
-  ctx.scenario("E. Temporary placeholder prices");
-  ctx.assertEqual("base 8", TEMPORARY_V2_BASE_PRICE_BY_MEAL_COUNT[8], 76);
-  ctx.assertEqual("offset weight_loss", TEMPORARY_V2_OBJECTIVE_PRICE_OFFSET.weight_loss, 0.11);
+  ctx.scenario("E. Seed prices (empty-catalog create only)");
+  ctx.assertEqual("seed base 8 euros helper", SEED_V2_BASE_PRICE_BY_MEAL_COUNT[8], 76);
   ctx.assertEqual(
-    "8/weight_loss price",
-    getTemporaryV2VariantPrice(8, SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS),
-    "76.11",
-  );
-  ctx.assertEqual(
-    "8/balanced price",
-    getTemporaryV2VariantPrice(8, SUBSCRIPTION_OBJECTIVE.BALANCED),
-    "76.22",
-  );
-  ctx.assertEqual(
-    "8/bulk price",
-    getTemporaryV2VariantPrice(8, SUBSCRIPTION_OBJECTIVE.BULK),
-    "76.33",
-  );
-  ctx.assertEqual(
-    "10/weight_loss price",
-    getTemporaryV2VariantPrice(10, SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS),
-    "96.11",
-  );
-  ctx.assertEqual(
-    "12/balanced price",
-    getTemporaryV2VariantPrice(12, SUBSCRIPTION_OBJECTIVE.BALANCED),
-    "125.22",
-  );
-  ctx.assertEqual(
-    "16/bulk price",
-    getTemporaryV2VariantPrice(16, SUBSCRIPTION_OBJECTIVE.BULK),
-    "158.33",
-  );
-  ctx.assertEqual(
-    "20/weight_loss price",
-    getTemporaryV2VariantPrice(20, SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS),
-    "180.11",
-  );
-  ctx.assertEqual(
-    "24/bulk price",
-    getTemporaryV2VariantPrice(24, SUBSCRIPTION_OBJECTIVE.BULK),
-    "200.33",
+    "seed offset weight_loss helper",
+    SEED_V2_OBJECTIVE_PRICE_OFFSET.weight_loss,
+    0.11,
   );
   ctx.assertTrue(
-    "all 18 prices are two-decimal strings",
+    "all 18 seed prices are two-decimal strings",
     specs.every((spec) => /^\d+\.\d{2}$/.test(spec.price)),
   );
   ctx.assertTrue(
-    "TEMPORARY naming present for base cents",
-    constantsSource.includes("TEMPORARY_V2_BASE_PRICE_CENTS_BY_MEAL_COUNT"),
+    "each spec price matches getSeedV2VariantPrice",
+    specs.every(
+      (spec) =>
+        spec.price === getSeedV2VariantPrice(spec.mealCount, spec.objective),
+    ),
   );
   ctx.assertTrue(
-    "TEMPORARY placeholder comment present",
-    constantsSource.includes("TEMPORARY PLACEHOLDER PRICING"),
+    "SEED naming present for base cents",
+    constantsSource.includes("SEED_V2_BASE_PRICE_CENTS_BY_MEAL_COUNT"),
+  );
+  ctx.assertTrue(
+    "seed SoT comment present",
+    constantsSource.includes("Shopify variant.price remains the source of truth") ||
+      constantsSource.includes("Shopify remains the source of truth"),
+  );
+  ctx.assertFalse(
+    "no TEMPORARY pricing naming",
+    constantsSource.includes("TEMPORARY_V2_") ||
+      constantsSource.includes("TEMPORARY PLACEHOLDER"),
   );
 
   ctx.scenario("F. ProductSet create input");
   const input = buildBoxV2ProductSetInput();
   ctx.assertEqual("title", input.title, BOX_V2_PRODUCT_TITLE);
   ctx.assertEqual("handle", input.handle, BOX_V2_PRODUCT_HANDLE);
-  ctx.assertEqual("status DRAFT", input.status, "DRAFT");
+  ctx.assertEqual("status DRAFT on create input", input.status, "DRAFT");
   ctx.assertEqual("two options", input.productOptions.length, 2);
   ctx.assertEqual(
     "option 1 name",
@@ -417,7 +394,17 @@ const runSuite = async () => {
   ctx.assertEqual("18 variants in input", input.variants.length, 18);
   const firstVariant = input.variants[0];
   ctx.assertEqual("first variant option count", firstVariant.optionValues.length, 2);
-  ctx.assertEqual("first variant price", firstVariant.price, "76.11");
+  ctx.assertEqual(
+    "first variant price uses seed helper",
+    firstVariant.price,
+    getSeedV2VariantPrice(8, SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS),
+  );
+  ctx.assertTrue(
+    "create input prices match seed specs",
+    input.variants.every(
+      (variant, index) => variant.price === specs[index]?.price,
+    ),
+  );
   ctx.assertEqual("first variant inventoryPolicy", firstVariant.inventoryPolicy, "CONTINUE");
   ctx.assertEqual("first variant tracked", firstVariant.inventoryItem.tracked, false);
   ctx.assertEqual("first variant metafield count", firstVariant.metafields.length, 2);
@@ -529,15 +516,19 @@ const runSuite = async () => {
     "blocked",
   );
 
-  const badPrice = buildExactSnapshot();
-  badPrice.variants[0] = {
-    ...badPrice.variants[0],
-    price: "76.00",
+  const differentPrice = buildExactSnapshot();
+  differentPrice.variants[0] = {
+    ...differentPrice.variants[0],
+    price: "999.99",
   };
   ctx.assertEqual(
-    "different price → BLOCKED",
-    resolveV2BoxCatalogDecision([badPrice]).action,
-    "blocked",
+    "different Shopify price → ALREADY_CONFIGURED (price not a gate)",
+    resolveV2BoxCatalogDecision([differentPrice]).action,
+    "alreadyConfigured",
+  );
+  ctx.assertTrue(
+    "different price still validates structure",
+    validateBoxV2ProductSnapshot(differentPrice).ok,
   );
 
   const missingOption = buildExactSnapshot();
@@ -551,9 +542,13 @@ const runSuite = async () => {
   const activeStatus = buildExactSnapshot();
   activeStatus.status = "ACTIVE";
   ctx.assertEqual(
-    "non-DRAFT status → BLOCKED",
+    "ACTIVE status → ALREADY_CONFIGURED (status not a gate)",
     resolveV2BoxCatalogDecision([activeStatus]).action,
-    "blocked",
+    "alreadyConfigured",
+  );
+  ctx.assertTrue(
+    "ACTIVE status still validates structure",
+    validateBoxV2ProductSnapshot(activeStatus).ok,
   );
 
   ctx.assertEqual(
@@ -632,6 +627,25 @@ const runSuite = async () => {
       call.query.includes("inventoryBulkToggleActivation"),
     ).length,
     18,
+  );
+
+  const livePricedNode = buildExactGraphqlNode();
+  livePricedNode.status = "ACTIVE";
+  livePricedNode.variants.nodes = livePricedNode.variants.nodes.map((variant) => ({
+    ...variant,
+    price: "199.90",
+  }));
+  const livePricedMock = createMockAdmin({ products: [livePricedNode] });
+  const livePricedResult = await setupV2BoxCatalog(livePricedMock.admin);
+  ctx.assertEqual(
+    "ACTIVE + live Shopify prices → alreadyConfigured",
+    livePricedResult.status,
+    "alreadyConfigured",
+  );
+  ctx.assertEqual(
+    "ACTIVE + live prices never productSet (no price overwrite)",
+    mutationCalls(livePricedMock.calls).length,
+    0,
   );
 
   const blockedMock = createMockAdmin({
@@ -728,11 +742,17 @@ const runSuite = async () => {
     uiSource.includes('value="setupV2BoxCatalog"'),
   );
   ctx.assertTrue(
-    "UI mentions temporary prices",
-    uiSource.includes("TEMPORAIRES"),
+    "UI mentions Shopify-managed prices",
+    uiSource.includes("gérés dans Shopify") ||
+      uiSource.includes("geres dans Shopify"),
+  );
+  ctx.assertFalse(
+    "UI does not mention temporary prices",
+    uiSource.includes("TEMPORAIRES") ||
+      uiSource.includes("attente de validation client"),
   );
   ctx.assertTrue(
-    "UI mentions DRAFT",
+    "UI mentions initial DRAFT create",
     uiSource.includes("DRAFT"),
   );
   ctx.assertTrue(

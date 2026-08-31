@@ -367,10 +367,14 @@ const runSuite = () => {
     renderSource.includes("delivery-date-grid"),
   );
 
-  ctx.scenario("Cart payload — thursday canonical + readable range");
+  ctx.scenario("Checkout payload — thursday canonical + readable range");
+  const checkoutServerSource = readRepoFile(
+    "app/features/builder/builder-checkout.server.ts",
+  );
   ctx.assertTrue(
-    "cart uses selectedScheduledDeliveryDate",
-    clientSource.includes('"_mileyo_delivery_date": selectedScheduledDeliveryDate'),
+    "checkout uses selectedScheduledDeliveryDate",
+    clientSource.includes("scheduledDeliveryDate: selectedScheduledDeliveryDate") &&
+      checkoutServerSource.includes("DELIVERY_DATE_PROPERTY_TECHNICAL"),
   );
   ctx.assertTrue(
     "cart readable property uses rangeLabel",

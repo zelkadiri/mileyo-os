@@ -674,9 +674,13 @@ export default function Settings() {
           </s-text>
           <s-text>Variantes : 18</s-text>
           <s-text>
-            Prix : TEMPORAIRES — en attente de validation client
+            Prix : gérés dans Shopify. Les valeurs initiales servent uniquement
+            à l’initialisation d’un catalogue vide.
           </s-text>
-          <s-text>Statut : Brouillon / DRAFT</s-text>
+          <s-text>
+            Création initiale en brouillon (DRAFT) — la publication se fait dans
+            Shopify Admin.
+          </s-text>
           <s-text>
             Le produit n’est ajouté à aucune collection et n’est pas branché
             au builder legacy.

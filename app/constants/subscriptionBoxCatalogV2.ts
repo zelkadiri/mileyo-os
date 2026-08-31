@@ -1,7 +1,8 @@
 /**
  * Box Mileyo V2 catalog constants (provisioning only — not wired to builder).
  *
- * TEMPORARY PLACEHOLDER PRICING — replace once client pricing is approved.
+ * Seed prices are initial values used only when creating an empty catalog.
+ * Shopify variant.price remains the source of truth after creation.
  */
 
 import {
@@ -14,6 +15,7 @@ import {
 
 export const BOX_V2_PRODUCT_TITLE = "Box Mileyo V2";
 export const BOX_V2_PRODUCT_HANDLE = "box-mileyo-v2";
+/** Initial product status on first create only — live shops may publish to ACTIVE. */
 export const BOX_V2_PRODUCT_STATUS = "DRAFT" as const;
 
 export const BOX_V2_MEAL_COUNTS = [8, 10, 12, 16, 20, 24] as const;
@@ -37,10 +39,10 @@ export const BOX_V2_MEAL_COUNT_OPTION_LABEL: Record<BoxV2MealCount, string> = {
 export const BOX_V2_OBJECTIVE_OPTION_LABEL = SUBSCRIPTION_OBJECTIVE_OPTION_LABEL;
 
 /**
- * TEMPORARY PLACEHOLDER PRICING — replace once client pricing is approved.
- * Stored in minor units (cents) to avoid float precision issues.
+ * Seed base prices in minor units (cents).
+ * Used only when creating an empty catalog — Shopify remains the source of truth.
  */
-export const TEMPORARY_V2_BASE_PRICE_CENTS_BY_MEAL_COUNT: Record<
+export const SEED_V2_BASE_PRICE_CENTS_BY_MEAL_COUNT: Record<
   BoxV2MealCount,
   number
 > = {
@@ -53,10 +55,10 @@ export const TEMPORARY_V2_BASE_PRICE_CENTS_BY_MEAL_COUNT: Record<
 };
 
 /**
- * TEMPORARY PLACEHOLDER PRICING — replace once client pricing is approved.
- * Offsets in cents so final Shopify prices are exact two-decimal strings.
+ * Seed objective offsets in cents (exact two-decimal Shopify money strings).
+ * Used only when creating an empty catalog — Shopify remains the source of truth.
  */
-export const TEMPORARY_V2_OBJECTIVE_PRICE_OFFSET_CENTS: Record<
+export const SEED_V2_OBJECTIVE_PRICE_OFFSET_CENTS: Record<
   SubscriptionObjective,
   number
 > = {
@@ -65,8 +67,8 @@ export const TEMPORARY_V2_OBJECTIVE_PRICE_OFFSET_CENTS: Record<
   [SUBSCRIPTION_OBJECTIVE.BULK]: 33,
 };
 
-/** Euro amounts for docs / UI — derived from cents, not used for Shopify writes. */
-export const TEMPORARY_V2_BASE_PRICE_BY_MEAL_COUNT: Record<
+/** Euro amounts for docs — derived from cents, not used for Shopify writes. */
+export const SEED_V2_BASE_PRICE_BY_MEAL_COUNT: Record<
   BoxV2MealCount,
   number
 > = {
@@ -78,7 +80,7 @@ export const TEMPORARY_V2_BASE_PRICE_BY_MEAL_COUNT: Record<
   24: 200,
 };
 
-export const TEMPORARY_V2_OBJECTIVE_PRICE_OFFSET: Record<
+export const SEED_V2_OBJECTIVE_PRICE_OFFSET: Record<
   SubscriptionObjective,
   number
 > = {
@@ -92,7 +94,7 @@ export type BoxV2VariantSpec = {
   objective: SubscriptionObjective;
   mealCountOptionLabel: string;
   objectiveOptionLabel: string;
-  /** Exact Shopify Money string, e.g. "76.11". */
+  /** Seed Shopify Money string for empty-catalog create only. */
   price: string;
   objectiveMetafieldValue: SubscriptionObjective;
   mealCountMetafieldValue: string;
@@ -100,7 +102,7 @@ export type BoxV2VariantSpec = {
 
 const formatShopifyMoneyFromCents = (cents: number): string => {
   if (!Number.isInteger(cents) || cents < 0) {
-    throw new Error(`Invalid temporary V2 price cents: ${cents}`);
+    throw new Error(`Invalid seed V2 price cents: ${cents}`);
   }
 
   const euros = Math.floor(cents / 100);
@@ -108,12 +110,13 @@ const formatShopifyMoneyFromCents = (cents: number): string => {
   return `${euros}.${String(remainder).padStart(2, "0")}`;
 };
 
-export const getTemporaryV2VariantPrice = (
+/** Seed variant price for empty-catalog create — not a runtime source of truth. */
+export const getSeedV2VariantPrice = (
   mealCount: BoxV2MealCount,
   objective: SubscriptionObjective,
 ): string => {
-  const baseCents = TEMPORARY_V2_BASE_PRICE_CENTS_BY_MEAL_COUNT[mealCount];
-  const offsetCents = TEMPORARY_V2_OBJECTIVE_PRICE_OFFSET_CENTS[objective];
+  const baseCents = SEED_V2_BASE_PRICE_CENTS_BY_MEAL_COUNT[mealCount];
+  const offsetCents = SEED_V2_OBJECTIVE_PRICE_OFFSET_CENTS[objective];
   return formatShopifyMoneyFromCents(baseCents + offsetCents);
 };
 
@@ -130,7 +133,7 @@ export const getBoxV2VariantSpecs = (): BoxV2VariantSpec[] => {
         objective,
         mealCountOptionLabel: BOX_V2_MEAL_COUNT_OPTION_LABEL[mealCount],
         objectiveOptionLabel: BOX_V2_OBJECTIVE_OPTION_LABEL[objective],
-        price: getTemporaryV2VariantPrice(mealCount, objective),
+        price: getSeedV2VariantPrice(mealCount, objective),
         objectiveMetafieldValue: objective,
         mealCountMetafieldValue: String(mealCount),
       });

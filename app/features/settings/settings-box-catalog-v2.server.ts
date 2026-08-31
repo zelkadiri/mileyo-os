@@ -3,6 +3,8 @@
  *
  * Isolated from the legacy Box Mileyo collection and from selling-plan V2.
  * productSet is used ONLY when the handle is absent — never for repair/resync.
+ * Seed prices apply on first create only; validation never compares or overwrites
+ * live Shopify variant.price, and never requires DRAFT status.
  */
 
 import {
@@ -196,15 +198,6 @@ const graphqlErrorMessages = (json: GraphqlErrorResponse) =>
     .map((error) => error.message)
     .filter((message): message is string => Boolean(message));
 
-const normalizePrice = (value: string | null | undefined): string | null => {
-  if (value == null) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const amount = Number.parseFloat(trimmed.replace(",", "."));
-  if (!Number.isFinite(amount)) return null;
-  return amount.toFixed(2);
-};
-
 const optionValuesFromShopify = (
   values: unknown,
 ): { name: string }[] => {
@@ -319,9 +312,8 @@ export const validateBoxV2ProductSnapshot = (
     reasons.push(`title expected ${BOX_V2_PRODUCT_TITLE}, got ${product.title}`);
   }
 
-  if (product.status !== BOX_V2_PRODUCT_STATUS) {
-    reasons.push(`status expected ${BOX_V2_PRODUCT_STATUS}, got ${product.status}`);
-  }
+  // Status (DRAFT vs ACTIVE) is managed in Shopify Admin — not a provisioning gate.
+  // Prices are never validated against seed values — Shopify variant.price is SoT.
 
   if (product.options.length !== 2) {
     reasons.push(`expected 2 options, got ${product.options.length}`);
@@ -428,13 +420,6 @@ export const validateBoxV2ProductSnapshot = (
     if (objectiveLabel !== expected.objectiveOptionLabel) {
       reasons.push(
         `${pairKey}: objective option expected "${expected.objectiveOptionLabel}", got "${objectiveLabel ?? "null"}"`,
-      );
-    }
-
-    const price = normalizePrice(variant.price);
-    if (price !== expected.price) {
-      reasons.push(
-        `${pairKey}: price expected ${expected.price}, got ${variant.price ?? "null"}`,
       );
     }
   }

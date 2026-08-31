@@ -702,7 +702,7 @@ body {
 .delivery-window-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   margin: 0 auto;
   max-width: 640px;
 }
@@ -752,7 +752,7 @@ body {
 .delivery-date-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   margin: 0 auto;
   max-width: 520px;
 }

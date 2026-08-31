@@ -523,14 +523,23 @@ const runSuite = () => {
     "client no longer uses meal.id for quantities",
     client.includes("selectedMeals[meal.id]"),
   );
-  ctx.assertTrue(
-    "cart Plat N uses meal.title",
-    client.includes('properties["Plat " + propertyIndex] = meal.title'),
+  const checkoutServer = readRepoFile(
+    "app/features/builder/builder-checkout.server.ts",
+  );
+  const mealSelection = readRepoFile(
+    "app/features/builder/builder-meal-selection.ts",
   );
   ctx.assertTrue(
-    "cart still single box line with selling_plan",
-    client.includes("selling_plan: sellingPlanId") &&
-      client.includes("items: [item]"),
+    "checkout Plat N uses meal.title",
+    mealSelection.includes('properties[`Plat ${propertyIndex}`] = meal.title') &&
+      checkoutServer.includes('key: `Plat ${propertyIndex}`') &&
+      client.includes("title: meal.title"),
+  );
+  ctx.assertTrue(
+    "checkout still single box line with sellingPlanId",
+    client.includes("sellingPlanId: selectedBox.sellingPlanId") &&
+      checkoutServer.includes("sellingPlanId: input.sellingPlanId") &&
+      checkoutServer.includes("quantity: 1"),
   );
   ctx.assertFalse(
     "BuilderMealOption has no price field",

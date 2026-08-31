@@ -932,8 +932,14 @@ const runSuite = async () => {
     builderClient.includes("selectedMeals[meal.variantId]"),
   );
   ctx.assertTrue(
-    "builder Plat N uses meal.title",
-    builderClient.includes('properties["Plat " + propertyIndex] = meal.title'),
+    "builder Plat N uses meal.title via checkout helper",
+    readRepoFile("app/features/builder/builder-meal-selection.ts").includes(
+      'properties[`Plat ${propertyIndex}`] = meal.title',
+    ) &&
+      readRepoFile("app/features/builder/builder-checkout.server.ts").includes(
+        'key: `Plat ${propertyIndex}`',
+      ) &&
+      builderClient.includes("title: meal.title"),
   );
   ctx.assertTrue(
     "legacy getCollectionProducts still has variants(first: 1) for other callers",
