@@ -8,6 +8,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { normalizeShopifyId } from "../utils/shopifyIds.server";
+import { KITCHEN_PREPARATION_BOX_ORDER_WHERE } from "../constants/boxOrder";
 
 /** Existing BoxOrder.selectedMealsSource values — not a new column. */
 export const PORTAL_CURRENT_DELIVERY_MEALS_SOURCE =
@@ -86,8 +87,8 @@ export const findCurrentDeliveryBoxOrder = async ({
     where: {
       scheduledDeliveryDate: effectiveDeliveryDate,
       shop,
-      simulated: false,
       subscriptionSelectionId,
+      ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
     },
   });
 
@@ -110,8 +111,8 @@ export const findCurrentDeliveryBoxOrder = async ({
     where: {
       scheduledDeliveryDate: effectiveDeliveryDate,
       shop,
-      simulated: false,
       subscriptionContractId: contractId,
+      ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
     },
   });
 

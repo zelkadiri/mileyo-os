@@ -5,6 +5,7 @@
 
 import { RECOVERY_STATUS } from "../../constants/subscriptionPaymentRecovery";
 import { EMAIL_EVENT_TYPE } from "../../constants/emailEvent";
+import { KITCHEN_PREPARATION_BOX_ORDER_WHERE } from "../../constants/boxOrder";
 import db from "../../db.server";
 import { getPortalModificationBlockReason } from "../subscriptionModificationBlock.server";
 import { isMileyoTransactionalEmailEnabled } from "./email-client.server";
@@ -92,8 +93,8 @@ const loadMatchingBoxOrderProof = async ({
     where: {
       shop,
       scheduledDeliveryDate: deliveryDate,
-      simulated: false,
       subscriptionSelectionId: selectionId,
+      ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
     },
   });
 

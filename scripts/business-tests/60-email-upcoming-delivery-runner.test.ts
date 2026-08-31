@@ -432,7 +432,7 @@ const runSuite = async () => {
   ctx.assertTrue(
     "batch BoxOrders proof query",
     runnerSource.includes("subscriptionSelectionId: { in: selectionIds }") &&
-      runnerSource.includes("simulated: false"),
+      runnerSource.includes("KITCHEN_PREPARATION_BOX_ORDER_WHERE"),
   );
   ctx.assertTrue(
     "batch recoveries query",

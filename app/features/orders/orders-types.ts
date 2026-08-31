@@ -1,5 +1,6 @@
 export type AdminOrderDto = {
   boxTitle: string | null;
+  cancelledAt: Date | null;
   createdAt: Date;
   customerEmail: string | null;
   customerName: string | null;

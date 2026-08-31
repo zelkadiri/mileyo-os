@@ -68,6 +68,10 @@ const matchesWhere = (
   where: Record<string, unknown>,
 ): boolean => {
   for (const [key, expected] of Object.entries(where)) {
+    const actual = row[key];
+    if (expected === null && (actual === null || actual === undefined)) {
+      continue;
+    }
     if (row[key] !== expected) {
       return false;
     }
@@ -152,6 +156,7 @@ const createMemoryDb = ({
 
 const toPrepRecord = (order: MemBoxOrder): PreparationBoxOrderRecord => ({
   boxTitle: `Box ${order.mealsCount ?? "?"} repas`,
+  cancelledAt: null,
   createdAt: new Date("2026-08-20T10:00:00.000Z"),
   customerEmail: "client@example.com",
   customerName: "Client QA",

@@ -71,6 +71,9 @@ export default function OrdersPage() {
                     {order.isSubscriptionRenewal ? (
                       <s-text>Renouvellement d’abonnement</s-text>
                     ) : null}
+                    {order.cancelledAt ? (
+                      <s-text>Annulée</s-text>
+                    ) : null}
                     {usesFutureSelection ? (
                       <s-text>
                         Plats récupérés depuis la sélection future client.

@@ -1,4 +1,5 @@
 import { DELIVERY_RESCHEDULE_REASON_LABELS } from "../../constants/deliverySchedule";
+import { isActiveKitchenBoxOrder } from "../../constants/boxOrder";
 
 const MEAL_OBJECT_TITLE_KEYS = ["title", "name", "mealTitle", "label"] as const;
 
@@ -77,10 +78,11 @@ export const isSubscriptionPreparationOrder = ({
 }) =>
   isSubscriptionRenewal || Boolean(orderType?.toLowerCase().includes("abonnement"));
 
-/** Kitchen preparation ignores simulated BoxOrders entirely. */
+/** Kitchen preparation ignores simulated and cancelled BoxOrders. */
 export const isKitchenPreparationBoxOrder = (order: {
+  cancelledAt?: Date | string | null;
   simulated: boolean;
-}) => order.simulated !== true;
+}) => isActiveKitchenBoxOrder(order);
 
 export const formatSelectedMealsForCsv = (selectedMeals: string[]) =>
   selectedMeals.join(" | ");

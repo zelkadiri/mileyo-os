@@ -37,6 +37,7 @@ import {
   ACTIVE_RECOVERY_STATUSES,
   isOpenRecoveryStatus,
 } from "../constants/subscriptionPaymentRecovery";
+import { KITCHEN_PREPARATION_BOX_ORDER_WHERE } from "../constants/boxOrder";
 import db from "../db.server";
 import { findBuilderBoxByVariantId } from "../features/builder/builder-box-selection";
 import { fetchBuilderBoxOptions } from "../features/builder/builder-catalog.server";
@@ -307,8 +308,8 @@ export const findBoxOrderForEffectiveDelivery = async ({
     where: {
       scheduledDeliveryDate: effectiveDeliveryDate,
       shop,
-      simulated: false,
       subscriptionSelectionId: selectionId,
+      ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
     },
   });
 };

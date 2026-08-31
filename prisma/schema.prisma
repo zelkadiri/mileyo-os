@@ -81,6 +81,7 @@ model BoxOrder {
   subscriptionSelectionId String?
   subscriptionContractId  String?
   simulated               Boolean  @default(false)
+  cancelledAt             DateTime?
   desiredDeliveryDate     String?  @db.VarChar(10)
   scheduledDeliveryDate   String?  @db.VarChar(10)
   deliveryRescheduleReason  String?

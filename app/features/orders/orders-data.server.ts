@@ -49,6 +49,7 @@ export const loadOrdersPageData = async (
 
       const mapped: AdminOrderDto = {
         boxTitle: order.boxTitle,
+        cancelledAt: order.cancelledAt,
         createdAt: order.createdAt,
         customerEmail: order.customerEmail,
         customerName: order.customerName,

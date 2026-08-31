@@ -1,4 +1,5 @@
 import type { DeliveryRescheduleReason } from "../constants/deliverySchedule";
+import { KITCHEN_PREPARATION_BOX_ORDER_WHERE } from "../constants/boxOrder";
 import db from "../db.server";
 import { resolveNextBillingCycleAfterDelivery } from "../utils/subscriptionBillingSchedule";
 import {
@@ -680,8 +681,8 @@ export const findRenewalDeliveryCycleCollision = async ({
       NOT: { shopifyOrderId },
       scheduledDeliveryDate,
       shop,
-      simulated: false,
       subscriptionSelectionId,
+      ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
     },
   });
 

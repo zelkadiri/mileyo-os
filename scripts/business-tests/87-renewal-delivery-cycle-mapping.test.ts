@@ -37,6 +37,7 @@ const prepOrder = (
   overrides: Partial<PreparationBoxOrderRecord> & { id: string },
 ): PreparationBoxOrderRecord => ({
   boxTitle: "Box 10 repas",
+  cancelledAt: null,
   createdAt: new Date("2026-08-18T11:00:00.000Z"),
   customerEmail: "client@example.com",
   customerName: "Client Test",

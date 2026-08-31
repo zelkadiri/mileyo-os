@@ -1,4 +1,5 @@
 import db from "../../db.server";
+import { KITCHEN_PREPARATION_BOX_ORDER_WHERE } from "../../constants/boxOrder";
 import { authenticate } from "../../shopify.server";
 import {
   getTodayDeliveryDate,
@@ -153,7 +154,7 @@ export const getPreparationDayData = async (
     where: {
       scheduledDeliveryDate,
       shop,
-      simulated: false,
+      ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
     },
   });
 
@@ -170,7 +171,7 @@ export const getUpcomingPreparationDates = async (
     where: {
       scheduledDeliveryDate: { not: null },
       shop,
-      simulated: false,
+      ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
     },
   });
 

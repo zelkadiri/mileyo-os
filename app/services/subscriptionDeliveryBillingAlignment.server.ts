@@ -1,4 +1,5 @@
 import { isTerminalSubscriptionSelectionStatus } from "../constants/subscriptionMealSelection";
+import { KITCHEN_PREPARATION_BOX_ORDER_WHERE } from "../constants/boxOrder";
 import db from "../db.server";
 import {
   projectActiveScheduledDeliveryDate,
@@ -92,6 +93,7 @@ export const hasSubscriptionBoxOrderForDeliveryDate = async ({
     where: {
       scheduledDeliveryDate: activeDeliveryDate,
       shop,
+      ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
       OR: [
         { subscriptionSelectionId: selectionId },
         ...(subscriptionContractId

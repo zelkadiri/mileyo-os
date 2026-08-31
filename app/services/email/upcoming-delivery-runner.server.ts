@@ -7,6 +7,7 @@
  */
 
 import { EMAIL_EVENT_TYPE } from "../../constants/emailEvent";
+import { KITCHEN_PREPARATION_BOX_ORDER_WHERE } from "../../constants/boxOrder";
 import { RECOVERY_STATUS } from "../../constants/subscriptionPaymentRecovery";
 import db from "../../db.server";
 import { getPortalModificationBlockReason } from "../subscriptionModificationBlock.server";
@@ -408,8 +409,8 @@ export const processDueUpcomingDeliveryEmails = async (
     },
     where: {
       shop,
-      simulated: false,
       subscriptionSelectionId: { in: selectionIds },
+      ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
     },
   });
 

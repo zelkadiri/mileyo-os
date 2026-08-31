@@ -72,5 +72,6 @@ export type PreparationBoxOrderRecord = {
   isSubscriptionRenewal: boolean;
   /** Simulated test orders must never appear in kitchen preparation. */
   simulated: boolean;
+  cancelledAt?: Date | null;
   createdAt: Date;
 };

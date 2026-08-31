@@ -93,6 +93,9 @@ const matchesWhere = (
       }
       continue;
     }
+    if (expected === null && (actual === null || actual === undefined)) {
+      continue;
+    }
     if (actual !== expected) {
       return false;
     }
