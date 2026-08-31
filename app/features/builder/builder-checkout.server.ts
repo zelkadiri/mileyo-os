@@ -17,6 +17,7 @@ import {
 } from "../../utils/orderLineItemProperties";
 import { parseDeliveryDate } from "../../utils/deliveryDate";
 import { parseMealCountMetafield } from "../../utils/mealCountMetafield";
+import { captureTechnicalError } from "../../services/observability/captureTechnicalError.server";
 
 export { CREATE_BUILDER_CHECKOUT_INTENT };
 
@@ -266,6 +267,33 @@ type CartCreateResponse = {
   errors?: Array<{ message?: string }> | null;
 };
 
+type BuilderCheckoutStorefront = {
+  graphql: (
+    query: string,
+    options?: { variables?: Record<string, unknown> },
+  ) => Promise<Response>;
+};
+
+type BuilderCheckoutTestDeps = {
+  getStorefront?: (
+    shop: string,
+  ) => Promise<{ storefront: BuilderCheckoutStorefront }>;
+};
+
+let builderCheckoutTestDeps: BuilderCheckoutTestDeps = {};
+
+/** @internal Mileyo business regression tests only. */
+export const __setBuilderCheckoutTestDeps = (
+  deps: BuilderCheckoutTestDeps,
+): void => {
+  builderCheckoutTestDeps = deps;
+};
+
+/** @internal Mileyo business regression tests only. */
+export const __resetBuilderCheckoutTestDeps = (): void => {
+  builderCheckoutTestDeps = {};
+};
+
 /**
  * Storefront Cart checkout for the builder: selling plan line + guest email
  * via buyerIdentity, then redirect to cart.checkoutUrl (editable prefill).
@@ -289,7 +317,9 @@ export const createBuilderStorefrontCheckout = async ({
   });
 
   try {
-    const { storefront } = await unauthenticated.storefront(shop);
+    const getStorefront =
+      builderCheckoutTestDeps.getStorefront ?? unauthenticated.storefront;
+    const { storefront } = await getStorefront(shop);
     const response = await storefront.graphql(CART_CREATE_MUTATION, {
       variables: {
         input: {
@@ -338,6 +368,13 @@ export const createBuilderStorefrontCheckout = async ({
       requestId: details.requestId,
       shop,
     });
+
+    captureTechnicalError(error, {
+      errorCode: "builder_checkout_storefront_throw",
+      shop,
+      source: "builder_checkout",
+    });
+
     return { message: BUILDER_CART_PREPARE_ERROR, ok: false };
   }
 };

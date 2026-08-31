@@ -128,8 +128,11 @@ const runSuite = async () => {
 
   ctx.scenario("D. Isolation — subscriptions cron + vercel schedule");
   {
-    const subscriptionsCron = readRepoFile(
+    const subscriptionsCronRoute = readRepoFile(
       "app/routes/api.cron.process-subscriptions.tsx",
+    );
+    const subscriptionsCron = readRepoFile(
+      "app/services/processSubscriptionsCron.server.ts",
     );
     const emailRetriesCron = readRepoFile(
       "app/routes/api.cron.process-email-retries.tsx",
@@ -142,6 +145,10 @@ const runSuite = async () => {
     ctx.assertFalse(
       "subscriptions cron n'importe pas email worker",
       /processDueEmailEvents|email-event-worker/.test(subscriptionsCron),
+    );
+    ctx.assertTrue(
+      "subscriptions route délègue au helper server",
+      /runProcessSubscriptionsCron/.test(subscriptionsCronRoute),
     );
     ctx.assertTrue(
       "subscriptions conserve billing",

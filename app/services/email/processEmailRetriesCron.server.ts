@@ -6,6 +6,7 @@ import {
   type EmailCronRunDb,
 } from "./email-cron-run.server";
 import { processDueEmailEvents } from "./email-event-worker.server";
+import { captureTechnicalError } from "../observability/captureTechnicalError.server";
 import { resolveCronShop } from "../../utils/cronShop.server";
 
 const validateCronSecret = (request: Request): Response | null => {
@@ -153,6 +154,14 @@ export const runProcessEmailRetriesCron = async (
       runId,
       shop,
       status: "failed",
+    });
+
+    captureTechnicalError(error, {
+      cronName: "process-email-retries",
+      errorCode: "cron_exception",
+      runId,
+      shop,
+      source: "cron",
     });
 
     return Response.json({ error: message, runId }, { status: 500 });

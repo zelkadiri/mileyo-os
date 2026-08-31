@@ -69,7 +69,9 @@ const eligibleSelection = {
 const runSuite = async () => {
   const ctx = createBusinessTestContext("57-email-meal-selection-reminder");
 
-  const cronSource = readRepoFile("app/routes/api.cron.process-subscriptions.tsx");
+  const cronSource = readRepoFile(
+    "app/services/processSubscriptionsCron.server.ts",
+  );
   const runnerSource = readRepoFile(
     "app/services/email/meal-selection-reminder-runner.server.ts",
   );
@@ -276,8 +278,7 @@ const runSuite = async () => {
   );
 
   const cronRunBlock = cronSource.slice(
-    cronSource.indexOf("const runProcessSubscriptionsCron"),
-    cronSource.indexOf("export const loader"),
+    cronSource.indexOf("export const runProcessSubscriptionsCron"),
   );
 
   ctx.scenario("E. Runner + cron");

@@ -17,6 +17,7 @@ import {
 import { alignImmediatePaymentResumeWithDeliverySchedule } from "./deliverySchedule.server";
 import { evaluateDeliveryBillingReadiness } from "../utils/deliveryDate";
 import { markMealSelectionExplicitForCurrentDelivery } from "./email/meal-selection-email.server";
+import { captureTechnicalError } from "./observability/captureTechnicalError.server";
 
 const billingAttemptCreateMutation = `#graphql
   mutation SubscriptionBillingAttemptCreate(
@@ -1860,12 +1861,14 @@ export const triggerSubscriptionBillingAttempt = async ({
   admin,
   idempotencyKey,
   selectionId,
+  shop,
   subscriptionContractId,
   syncNextBillingDateFromShopify = true,
 }: {
   admin: ShopifyAdminGraphql;
   idempotencyKey: string;
   selectionId: string;
+  shop?: string;
   subscriptionContractId: string;
   syncNextBillingDateFromShopify?: boolean;
 }): Promise<TriggerBillingAttemptResult> => {
@@ -1971,6 +1974,14 @@ export const triggerSubscriptionBillingAttempt = async ({
       error instanceof Error
         ? error.message
         : "Impossible de contacter Shopify pour déclencher la facturation.";
+
+    captureTechnicalError(error, {
+      errorCode: "billing_attempt_throw",
+      selectionId,
+      shop,
+      source: "billing",
+      subscriptionContractId,
+    });
 
     await db.subscriptionMealSelection.update({
       data: {
@@ -2351,6 +2362,7 @@ export const processDueSubscriptionBillings = async (
       admin,
       idempotencyKey,
       selectionId: currentSelection.id,
+      shop,
       subscriptionContractId: currentSelection.subscriptionContractId!,
     });
 

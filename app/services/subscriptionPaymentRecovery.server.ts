@@ -38,6 +38,7 @@ import {
   ensureSubscriptionPauseEmailEpisode,
 } from "./email/email-outbox-event-driven.server";
 import { computeNextSubscriptionCycleRetryAt } from "../utils/subscriptionCycleBilling";
+import { captureTechnicalError } from "./observability/captureTechnicalError.server";
 import {
   fetchShopifyBillingAttempt,
   isResumeRenewalOrder,
@@ -1783,6 +1784,7 @@ export const processDueRecoveryRetries = async (
         admin,
         idempotencyKey: nextIdempotencyKey,
         selectionId: billableSelection.id,
+        shop,
         subscriptionContractId: billableSelection.subscriptionContractId,
       });
 
@@ -1870,6 +1872,15 @@ export const processDueRecoveryRetries = async (
         recoveryId: recovery.id,
         selectionId: selection.id,
         stack: error instanceof Error ? error.stack : undefined,
+      });
+
+      captureTechnicalError(error, {
+        errorCode: "payment_recovery_unexpected",
+        recoveryId: recovery.id,
+        selectionId: selection.id,
+        shop,
+        source: "payment_recovery",
+        subscriptionContractId: selection.subscriptionContractId,
       });
     }
   }
