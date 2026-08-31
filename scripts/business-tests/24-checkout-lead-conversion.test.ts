@@ -325,10 +325,9 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "replay uses selection shopifyOrderId match",
-    orchestratorSource.includes("shopifyIdsMatch") &&
-      /shopifyIdsMatch\(\s*matchedSelection\.shopifyOrderId,\s*shopifyOrderId/.test(
-        orchestratorSource,
-      ),
+    orchestratorSource.includes("isFirstOrderReplay") &&
+      (orchestratorSource.includes("shopifyIdsMatch") ||
+        orchestratorSource.includes("classifyOrdersCreateCycle")),
   );
   ctx.assertTrue(
     "resume renewal is excluded",

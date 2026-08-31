@@ -38,9 +38,12 @@ const runSuite = async () => {
     "app/services/email/meal-selection-email.server.ts",
   );
 
+  const createFirstStart = ordersSource.indexOf(
+    'if (decision === "create_first_subscription")',
+  );
   const createFirstBlock = ordersSource.slice(
-    ordersSource.indexOf('if (decision === "create_first_subscription")'),
-    ordersSource.indexOf("if (isRenewal && matchedSelection)"),
+    createFirstStart,
+    ordersSource.indexOf("if (isRenewal && matchedSelection)", createFirstStart),
   );
 
   const updateFutureBlock = portalActionsSource.slice(

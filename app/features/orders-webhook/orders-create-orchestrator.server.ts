@@ -37,7 +37,7 @@ import {
   getPropertyValue,
   getSelectedMealsFromLineItemProperties,
 } from "../../utils/orderLineItemProperties";
-import { normalizeShopifyId, shopifyIdsMatch } from "../../utils/shopifyIds.server";
+import { normalizeShopifyId } from "../../utils/shopifyIds.server";
 import { unauthenticated } from "../../shopify.server";
 import {
   alignFirstOrderBillingWithDeliverySchedule,
@@ -49,6 +49,9 @@ import {
   type FirstOrderDeliveryScheduleResolution,
   type RenewalDeliveryScheduleResolution,
 } from "../../services/deliverySchedule.server";
+import type { DeliveryRescheduleReason } from "../../constants/deliverySchedule";
+import type { DeliveryDateString } from "../../utils/deliveryDate";
+import { classifyOrdersCreateCycle } from "./orders-create-cycle-classification.server";
 import { findBoxLineItem, getCustomerName } from "./orders-create-parsers";
 import type { OrdersCreateWebhookPayload } from "./orders-create-types";
 
@@ -229,7 +232,36 @@ export const handleOrdersCreateWebhook = async ({
     }
   }
 
-  const isRenewal = Boolean(isSubscription && matchedSelection);
+  const existingBoxOrder = await db.boxOrder.findUnique({
+    select: {
+      deliveryRescheduleReason: true,
+      desiredDeliveryDate: true,
+      id: true,
+      isSubscriptionRenewal: true,
+      scheduledDeliveryDate: true,
+      selectedMealsSource: true,
+    },
+    where: {
+      shop_shopifyOrderId: {
+        shop,
+        shopifyOrderId,
+      },
+    },
+  });
+
+  const {
+    isAttachedToIncomingOrder,
+    isFirstOrderReplay,
+    isRenewal,
+    isRenewalOrderReplay,
+    isSameOrderReplay,
+  } = classifyOrdersCreateCycle({
+    hasExistingBoxOrder: Boolean(existingBoxOrder),
+    isSubscription,
+    matchedSelectionShopifyOrderId: matchedSelection?.shopifyOrderId,
+    shopifyOrderId,
+  });
+
   let decision: OrdersCreateDecision = "not_subscription";
 
   if (isSubscription) {
@@ -242,10 +274,6 @@ export const handleOrdersCreateWebhook = async ({
     }
   }
 
-  const isFirstOrderReplay = Boolean(
-    matchedSelection &&
-      shopifyIdsMatch(matchedSelection.shopifyOrderId, shopifyOrderId),
-  );
   const isResumeRenewal = Boolean(
     matchedSelection && isResumeRenewalOrder(matchedSelection),
   );
@@ -300,40 +328,65 @@ export const handleOrdersCreateWebhook = async ({
       })
     : null;
 
-  let renewalDeliverySchedule =
-    isRenewal && matchedSelection
-      ? resolveRenewalDeliveryScheduleFromSelection({
-          orderCreatedAt,
-          selection: {
-            nextScheduledDeliveryDate:
-              matchedSelection.nextScheduledDeliveryDate,
-            preferredDeliveryWeekday: matchedSelection.preferredDeliveryWeekday,
-          },
-          selectionId: matchedSelection.id,
-          shopifyOrderId,
-        })
-      : null;
+  let renewalDeliverySchedule: RenewalDeliveryScheduleResolution | null = null;
 
-  // BOX-CHANGE-7H: distinct Shopify order must not steal an already-paid cycle.
-  // Replay of the same shopifyOrderId is excluded by the collision query.
-  if (isRenewal && matchedSelection && renewalDeliverySchedule) {
-    const cycleCollision = await findRenewalDeliveryCycleCollision({
-      scheduledDeliveryDate: renewalDeliverySchedule.scheduledDeliveryDate,
-      shop,
-      shopifyOrderId,
-      subscriptionSelectionId: matchedSelection.id,
-    });
-
-    if (cycleCollision) {
-      console.log("[DELIVERY] renewal_cycle_collision fail-closed", {
-        collidingBoxOrderId: cycleCollision.id,
-        collidingShopifyOrderId: cycleCollision.shopifyOrderId,
-        collidingShopifyOrderName: cycleCollision.shopifyOrderName,
-        scheduledDeliveryDate: renewalDeliverySchedule.scheduledDeliveryDate,
+  if (isRenewal && matchedSelection) {
+    if (
+      isRenewalOrderReplay &&
+      existingBoxOrder?.scheduledDeliveryDate
+    ) {
+      // Same Shopify order already persisted — converge to that cycle, never +7 again.
+      renewalDeliverySchedule = {
+        deliveryRescheduleReason:
+          (existingBoxOrder.deliveryRescheduleReason as DeliveryRescheduleReason | null) ??
+          null,
+        desiredDeliveryDate: (existingBoxOrder.desiredDeliveryDate ??
+          existingBoxOrder.scheduledDeliveryDate) as DeliveryDateString,
+        referenceDate:
+          existingBoxOrder.scheduledDeliveryDate as DeliveryDateString,
+        scheduledDeliveryDate:
+          existingBoxOrder.scheduledDeliveryDate as DeliveryDateString,
+      };
+      console.log("[ORDERS_CREATE] same-order renewal replay — preserving schedule", {
+        boxOrderId: existingBoxOrder.id,
+        scheduledDeliveryDate: existingBoxOrder.scheduledDeliveryDate,
         selectionId: matchedSelection.id,
         shopifyOrderId,
       });
-      renewalDeliverySchedule = null;
+    } else {
+      renewalDeliverySchedule = resolveRenewalDeliveryScheduleFromSelection({
+        orderCreatedAt,
+        selection: {
+          nextScheduledDeliveryDate:
+            matchedSelection.nextScheduledDeliveryDate,
+          preferredDeliveryWeekday: matchedSelection.preferredDeliveryWeekday,
+        },
+        selectionId: matchedSelection.id,
+        shopifyOrderId,
+      });
+
+      // BOX-CHANGE-7H: distinct Shopify order must not steal an already-paid cycle.
+      // Replay of the same shopifyOrderId is excluded by the collision query.
+      if (renewalDeliverySchedule) {
+        const cycleCollision = await findRenewalDeliveryCycleCollision({
+          scheduledDeliveryDate: renewalDeliverySchedule.scheduledDeliveryDate,
+          shop,
+          shopifyOrderId,
+          subscriptionSelectionId: matchedSelection.id,
+        });
+
+        if (cycleCollision) {
+          console.log("[DELIVERY] renewal_cycle_collision fail-closed", {
+            collidingBoxOrderId: cycleCollision.id,
+            collidingShopifyOrderId: cycleCollision.shopifyOrderId,
+            collidingShopifyOrderName: cycleCollision.shopifyOrderName,
+            scheduledDeliveryDate: renewalDeliverySchedule.scheduledDeliveryDate,
+            selectionId: matchedSelection.id,
+            shopifyOrderId,
+          });
+          renewalDeliverySchedule = null;
+        }
+      }
     }
   }
 
@@ -352,9 +405,12 @@ export const handleOrdersCreateWebhook = async ({
 
   console.log("[SUBSCRIPTION_SELECTION] order processed", {
     decision,
+    isAttachedToIncomingOrder,
     isFirstOrderReplay,
     isRenewal,
+    isRenewalOrderReplay,
     isResumeRenewal,
+    isSameOrderReplay,
     isSubscription,
     matchedSelectionId: matchedSelection?.id ?? null,
     mealSnapshotSource: selectedMealsSource,
@@ -657,33 +713,67 @@ export const handleOrdersCreateWebhook = async ({
         });
       }
     }
+  }
 
-    if (isFirstOrderReplay) {
-      try {
-        await ensureAndProcessEmailEventImmediately({
-          backfillStamp: (event) =>
-            backfillSubscriptionCreatedStampFromSentEvent({
-              event,
-              selectionId: matchedSelection.id,
-            }),
-          input: {
-            eventType: EMAIL_EVENT_TYPE.SUBSCRIPTION_CREATED,
-            idempotencyKey: buildSubscriptionCreatedEmailEventIdempotencyKey(
-              matchedSelection.id,
-            ),
-            metaJson: null,
-            referenceId: matchedSelection.id,
-            referenceType: EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
-            shop,
-          },
-        });
-      } catch (error) {
-        console.log("[ORDERS_CREATE] subscription-created EmailEvent failed", {
-          error: error instanceof Error ? error.message : error,
-          selectionId: matchedSelection.id,
-          shopifyOrderId,
-        });
-      }
+  // First-order same-order replay: converge selection schedule to raw first-order
+  // dates when no later renewal BoxOrder exists. Never advance the cycle.
+  if (
+    isFirstOrderReplay &&
+    matchedSelection &&
+    firstOrderDeliverySchedule &&
+    decision === "attach_existing"
+  ) {
+    const laterRenewalBoxOrder = await db.boxOrder.findFirst({
+      select: { id: true },
+      where: {
+        isSubscriptionRenewal: true,
+        NOT: { shopifyOrderId },
+        shop,
+        subscriptionSelectionId: matchedSelection.id,
+      },
+    });
+
+    if (!laterRenewalBoxOrder) {
+      await db.subscriptionMealSelection.update({
+        data: {
+          nextScheduledDeliveryDate:
+            firstOrderDeliverySchedule.scheduledDeliveryDate,
+          preferredDeliveryWeekday:
+            firstOrderDeliverySchedule.preferredDeliveryWeekday,
+        },
+        where: { id: matchedSelection.id },
+      });
+    }
+  }
+
+  // First-order same-order replay (late contract / webhook retry): email is
+  // idempotent by selection id. Must not live under isRenewal — replays of the
+  // checkout order are never renewals.
+  if (isFirstOrderReplay && matchedSelection) {
+    try {
+      await ensureAndProcessEmailEventImmediately({
+        backfillStamp: (event) =>
+          backfillSubscriptionCreatedStampFromSentEvent({
+            event,
+            selectionId: matchedSelection.id,
+          }),
+        input: {
+          eventType: EMAIL_EVENT_TYPE.SUBSCRIPTION_CREATED,
+          idempotencyKey: buildSubscriptionCreatedEmailEventIdempotencyKey(
+            matchedSelection.id,
+          ),
+          metaJson: null,
+          referenceId: matchedSelection.id,
+          referenceType: EMAIL_EVENT_REFERENCE_TYPE_SUBSCRIPTION_SELECTION,
+          shop,
+        },
+      });
+    } catch (error) {
+      console.log("[ORDERS_CREATE] subscription-created EmailEvent failed", {
+        error: error instanceof Error ? error.message : error,
+        selectionId: matchedSelection.id,
+        shopifyOrderId,
+      });
     }
   }
 };

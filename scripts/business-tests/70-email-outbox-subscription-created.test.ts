@@ -135,9 +135,16 @@ const runSuite = async () => {
     "app/services/email/email-event-handlers.server.ts",
   );
 
+  const createFirstStart = ordersSource.indexOf(
+    'if (decision === "create_first_subscription")',
+  );
+  const renewalSideEffectsStart = ordersSource.indexOf(
+    "if (isRenewal && matchedSelection)",
+    createFirstStart,
+  );
   const createFirstBlock = ordersSource.slice(
-    ordersSource.indexOf('if (decision === "create_first_subscription")'),
-    ordersSource.indexOf("if (isRenewal && matchedSelection)"),
+    createFirstStart,
+    renewalSideEffectsStart,
   );
 
   const previousFlag = process.env[ENABLE_MILEYO_TRANSACTIONAL_EMAILS_ENV];
@@ -166,7 +173,7 @@ const runSuite = async () => {
     );
     ctx.assertTrue(
       "isFirstOrderReplay ensureAndProcess",
-      ordersSource.includes("if (isFirstOrderReplay)") &&
+      /if \(isFirstOrderReplay && matchedSelection\)/.test(ordersSource) &&
         ordersSource.includes("ensureAndProcessEmailEventImmediately"),
     );
     ctx.assertTrue(

@@ -32,9 +32,16 @@ const runSuite = async () => {
     "app/services/email/subscription-email.server.ts",
   );
 
+  const createFirstStart = ordersSource.indexOf(
+    'if (decision === "create_first_subscription")',
+  );
+  const renewalSideEffectsStart = ordersSource.indexOf(
+    "if (isRenewal && matchedSelection)",
+    createFirstStart,
+  );
   const createFirstBlock = ordersSource.slice(
-    ordersSource.indexOf('if (decision === "create_first_subscription")'),
-    ordersSource.indexOf("if (isRenewal && matchedSelection)"),
+    createFirstStart,
+    renewalSideEffectsStart,
   );
 
   ctx.scenario("A. Branchement orders/create — première commande abonnement");
@@ -77,7 +84,7 @@ const runSuite = async () => {
   ctx.scenario("B. Replay first order — contrat tardif");
   ctx.assertTrue(
     "isFirstOrderReplay appelle ensureAndProcess",
-    ordersSource.includes("if (isFirstOrderReplay)") &&
+    /if \(isFirstOrderReplay && matchedSelection\)/.test(ordersSource) &&
       ordersSource.includes("ensureAndProcessEmailEventImmediately"),
   );
   ctx.assertTrue(
