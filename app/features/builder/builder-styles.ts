@@ -46,6 +46,12 @@ body {
   min-height: 100dvh;
 }
 
+.tunnel-body.is-step-objective,
+.tunnel-body.is-step-livraison {
+  display: flex;
+  flex-direction: column;
+}
+
 .tunnel-promo {
   background: linear-gradient(90deg, rgba(124, 201, 167, 0.2), rgba(220, 194, 240, 0.28));
   border-bottom: 1px solid rgba(185, 138, 215, 0.12);
@@ -262,6 +268,13 @@ body {
   padding-bottom: calc(var(--tunnel-footer-height) + 16px);
 }
 
+.tunnel-body.is-step-objective .builder-shell,
+.tunnel-body.is-step-livraison .builder-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
 .tunnel-body.is-step-objective .builder-shell {
   max-width: calc(var(--objective-step-max-width) + 80px);
 }
@@ -269,6 +282,11 @@ body {
 .tunnel-body.is-step-livraison .builder-shell {
   max-width: calc(var(--delivery-step-max-width) + 80px);
   padding-bottom: calc(var(--tunnel-footer-height) + 16px);
+}
+
+.tunnel-body.is-step-objective .builder-step--objective,
+.tunnel-body.is-step-livraison .builder-step--delivery {
+  margin-block: auto;
 }
 
 .tunnel-body.is-step-email .builder-shell {
