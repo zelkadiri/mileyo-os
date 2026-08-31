@@ -310,39 +310,34 @@ export const portalClientScript = `
     }
   }
 
-  function appendNutritionModalRow(list, label, value) {
-    if (!value) return;
-    var row = document.createElement("div");
-    row.className = "meal-nutrition-modal-row";
-    var term = document.createElement("span");
-    term.className = "meal-nutrition-modal-row-label";
-    term.textContent = label;
-    var definition = document.createElement("span");
-    definition.className = "meal-nutrition-modal-row-value";
-    definition.textContent = value;
-    row.appendChild(term);
-    row.appendChild(definition);
-    list.appendChild(row);
-  }
+  function openMealNutritionModal(meal) {
+    if (!mealNutritionModal || !mealNutritionModalList) {
+      return;
+    }
 
-  function openMealNutritionModal(meal, nutrition) {
-    if (!mealNutritionModal || !mealNutritionModalList || !nutrition || !nutrition.lines.length) {
+    var values = {
+      calories: meal.calories,
+      proteins: meal.proteins,
+      carbs: meal.carbs,
+      fat: meal.fat,
+      saturatedFat: meal.saturatedFat,
+      sugars: meal.sugars,
+      fiber: meal.fiber,
+      salt: meal.salt,
+      portionGrams: meal.portionGrams,
+    };
+    var table = formatMealNutritionTable(values);
+    if (!table.hasRows) {
       return;
     }
 
     closeMealDetail();
 
     mealNutritionModalList.innerHTML = "";
-    appendNutritionModalRow(mealNutritionModalList, "Calories", nutrition.calories);
-    appendNutritionModalRow(mealNutritionModalList, "Protéines", nutrition.proteins);
-    appendNutritionModalRow(mealNutritionModalList, "Glucides", nutrition.carbs);
-    appendNutritionModalRow(mealNutritionModalList, "Lipides", nutrition.fat);
-    appendNutritionModalRow(mealNutritionModalList, "Portion", nutrition.portionGrams);
+    appendMealNutritionTable(mealNutritionModalList, values);
 
     if (mealNutritionModalMeal) {
-      mealNutritionModalMeal.textContent = nutrition.portionGrams
-        ? "Par portion (" + nutrition.portionGrams + ")"
-        : "Par portion";
+      mealNutritionModalMeal.textContent = meal.title || "";
     }
 
     mealNutritionModal.classList.remove("hidden");
@@ -358,46 +353,6 @@ export const portalClientScript = `
       }
     }
     return null;
-  }
-
-  function splitMealDetailNutritionDisplay(formatted) {
-    if (!formatted) return null;
-    var kcalMatch = String(formatted).match(/^([\d\s\u00a0\u202f,.]+)\s*kcal$/i);
-    if (kcalMatch) {
-      return { unit: "kcal", value: kcalMatch[1].trim() };
-    }
-    var macroMatch = String(formatted).match(
-      /^([\d\s\u00a0\u202f,.]+)\s*g\s+(.+)$/i,
-    );
-    if (macroMatch) {
-      return {
-        unit: macroMatch[2].trim(),
-        value: macroMatch[1].trim() + "g",
-      };
-    }
-    var gramsMatch = String(formatted).match(/^([\d\s\u00a0\u202f,.]+)\s*g$/i);
-    if (gramsMatch) {
-      return { unit: "portion", value: gramsMatch[1].trim() + "g" };
-    }
-    return { unit: "", value: String(formatted) };
-  }
-
-  function appendMealDetailNutritionCard(list, formatted) {
-    var parts = splitMealDetailNutritionDisplay(formatted);
-    if (!parts) return;
-    var card = document.createElement("div");
-    card.className = "meal-detail-nutrition-card";
-    var value = document.createElement("span");
-    value.className = "meal-detail-nutrition-value";
-    value.textContent = parts.value;
-    var unit = document.createElement("span");
-    unit.className = "meal-detail-nutrition-unit";
-    unit.textContent = parts.unit;
-    card.appendChild(value);
-    if (parts.unit) {
-      card.appendChild(unit);
-    }
-    list.appendChild(card);
   }
 
   function closeMealDetail() {
@@ -481,35 +436,18 @@ export const portalClientScript = `
 
     if (mealDetailNutrition) {
       mealDetailNutrition.innerHTML = "";
-      var nutrition = formatMealNutrition({
+      var rendered = appendMealNutritionTable(mealDetailNutrition, {
         calories: meal.calories,
         proteins: meal.proteins,
         carbs: meal.carbs,
         fat: meal.fat,
+        saturatedFat: meal.saturatedFat,
+        sugars: meal.sugars,
+        fiber: meal.fiber,
+        salt: meal.salt,
         portionGrams: meal.portionGrams,
       });
-      var macroLines = [
-        nutrition.calories,
-        nutrition.proteins,
-        nutrition.carbs,
-        nutrition.fat,
-      ].filter(Boolean);
-      if (macroLines.length || nutrition.portionGrams) {
-        var heading = document.createElement("p");
-        heading.className = "meal-detail-section-heading meal-detail-nutrition-heading";
-        heading.textContent = nutrition.portionGrams
-          ? "Nutrition · Par portion (" + nutrition.portionGrams + ")"
-          : "Nutrition";
-        mealDetailNutrition.appendChild(heading);
-        if (macroLines.length) {
-          var grid = document.createElement("div");
-          grid.className = "meal-detail-nutrition-grid";
-          appendMealDetailNutritionCard(grid, nutrition.calories);
-          appendMealDetailNutritionCard(grid, nutrition.proteins);
-          appendMealDetailNutritionCard(grid, nutrition.carbs);
-          appendMealDetailNutritionCard(grid, nutrition.fat);
-          mealDetailNutrition.appendChild(grid);
-        }
+      if (rendered) {
         mealDetailNutrition.classList.remove("hidden");
       } else {
         mealDetailNutrition.classList.add("hidden");
@@ -560,6 +498,10 @@ export const portalClientScript = `
       proteins: meal.proteins,
       carbs: meal.carbs,
       fat: meal.fat,
+      saturatedFat: meal.saturatedFat,
+      sugars: meal.sugars,
+      fiber: meal.fiber,
+      salt: meal.salt,
       portionGrams: meal.portionGrams,
     });
     if (!nutrition.calories || !nutrition.lines.length) return;
@@ -598,7 +540,7 @@ export const portalClientScript = `
     badge.addEventListener("click", function (event) {
       event.preventDefault();
       event.stopPropagation();
-      openMealNutritionModal(meal, nutrition);
+      openMealNutritionModal(meal);
     });
     parent.appendChild(badge);
   }

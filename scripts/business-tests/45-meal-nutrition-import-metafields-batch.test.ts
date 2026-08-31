@@ -29,9 +29,25 @@ const validRow = (
   proteins: 38.5,
   carbs: 35,
   fat: 12,
+  saturatedFat: null,
+  sugars: null,
+  fiber: null,
+  salt: null,
   portionGrams: 350,
   ...overrides,
 });
+
+const fullExtendedRow = (
+  index: number,
+  overrides: Partial<MealNutritionImportRow> = {},
+): MealNutritionImportRow =>
+  validRow(index, {
+    saturatedFat: 2.4,
+    sugars: 5,
+    fiber: 3,
+    salt: 0.5,
+    ...overrides,
+  });
 
 const rows = (count: number) =>
   Array.from({ length: count }, (_, index) => validRow(index + 1));
@@ -211,6 +227,59 @@ const runSuite = async () => {
   ctx.assertEqual("exact-25 applied", fiveResult.appliedVariantCount, 5);
   ctx.assertEqual("exact-25 calls", fiveMock.calls.length, 1);
   ctx.assertEqual("exact-25 size", metafieldCountInCall(fiveMock.calls[0]!), 25);
+
+  ctx.scenario("E. Extended nutrition — 6 variantes × 9 metafields");
+  const extendedPlans = buildMealNutritionWritePlans(
+    Array.from({ length: 6 }, (_, index) => fullExtendedRow(index + 1)),
+  );
+  ctx.assertEqual(
+    "extended plan metafields count",
+    extendedPlans[0]?.metafields.length,
+    9,
+  );
+  const extendedBatches = chunkMealNutritionWritePlans(extendedPlans);
+  ctx.assertEqual("6 extended variants → 3 batches", extendedBatches.length, 3);
+  ctx.assertEqual("extended batch1 variants", extendedBatches[0]?.length, 2);
+  ctx.assertEqual("extended batch2 variants", extendedBatches[1]?.length, 2);
+  ctx.assertEqual("extended batch3 variants", extendedBatches[2]?.length, 2);
+  ctx.assertEqual(
+    "extended batch1 metafields",
+    extendedBatches[0]?.reduce((sum, plan) => sum + plan.metafields.length, 0),
+    18,
+  );
+  ctx.assertEqual(
+    "extended batch2 metafields",
+    extendedBatches[1]?.reduce((sum, plan) => sum + plan.metafields.length, 0),
+    18,
+  );
+  ctx.assertEqual(
+    "extended batch3 metafields",
+    extendedBatches[2]?.reduce((sum, plan) => sum + plan.metafields.length, 0),
+    18,
+  );
+
+  const extendedMock = createMockAdmin();
+  const extendedResult = await applyMealNutritionMetafields(
+    extendedMock.admin,
+    Array.from({ length: 6 }, (_, index) => fullExtendedRow(index + 1)),
+  );
+  ctx.assertEqual("extended applied count", extendedResult.appliedVariantCount, 6);
+  ctx.assertEqual("extended graphql calls", extendedMock.calls.length, 3);
+  ctx.assertEqual(
+    "extended first call size",
+    metafieldCountInCall(extendedMock.calls[0]!),
+    18,
+  );
+  ctx.assertEqual(
+    "extended second call size",
+    metafieldCountInCall(extendedMock.calls[1]!),
+    18,
+  );
+  ctx.assertEqual(
+    "extended third call size",
+    metafieldCountInCall(extendedMock.calls[2]!),
+    18,
+  );
 
   ctx.scenario("D. Failed batch does not inflate appliedVariantCount");
   const failMock = createMockAdmin({

@@ -38,8 +38,12 @@ import {
   VARIANT_MEAL_CALORIES_METAFIELD_DEFINITION,
   VARIANT_MEAL_CARBS_METAFIELD_DEFINITION,
   VARIANT_MEAL_FAT_METAFIELD_DEFINITION,
+  VARIANT_MEAL_FIBER_METAFIELD_DEFINITION,
   VARIANT_MEAL_PORTION_GRAMS_METAFIELD_DEFINITION,
   VARIANT_MEAL_PROTEINS_METAFIELD_DEFINITION,
+  VARIANT_MEAL_SATURATED_FAT_METAFIELD_DEFINITION,
+  VARIANT_MEAL_SALT_METAFIELD_DEFINITION,
+  VARIANT_MEAL_SUGARS_METAFIELD_DEFINITION,
   VARIANT_OBJECTIVE_METAFIELD_DEFINITION,
   ensureMetafieldDefinition,
   formatMealV2MetafieldDefinitionsMessage,
@@ -308,9 +312,9 @@ const runSuite = async () => {
 
   ctx.scenario("B. Metafield definitions contracts");
   ctx.assertEqual(
-    "definitions count is 6",
+    "definitions count is 10",
     MEAL_V2_METAFIELD_DEFINITIONS.length,
-    6,
+    10,
   );
   ctx.assertEqual(
     "objective owner PRODUCTVARIANT",
@@ -336,6 +340,86 @@ const runSuite = async () => {
     "fat type number_decimal",
     VARIANT_MEAL_FAT_METAFIELD_DEFINITION.type,
     "number_decimal",
+  );
+  ctx.assertEqual(
+    "saturated_fat owner PRODUCTVARIANT",
+    VARIANT_MEAL_SATURATED_FAT_METAFIELD_DEFINITION.ownerType,
+    "PRODUCTVARIANT",
+  );
+  ctx.assertEqual(
+    "saturated_fat type number_decimal",
+    VARIANT_MEAL_SATURATED_FAT_METAFIELD_DEFINITION.type,
+    "number_decimal",
+  );
+  ctx.assertEqual(
+    "saturated_fat namespace custom",
+    VARIANT_MEAL_SATURATED_FAT_METAFIELD_DEFINITION.namespace,
+    "custom",
+  );
+  ctx.assertEqual(
+    "saturated_fat key",
+    VARIANT_MEAL_SATURATED_FAT_METAFIELD_DEFINITION.key,
+    "saturated_fat",
+  );
+  ctx.assertEqual(
+    "sugars owner PRODUCTVARIANT",
+    VARIANT_MEAL_SUGARS_METAFIELD_DEFINITION.ownerType,
+    "PRODUCTVARIANT",
+  );
+  ctx.assertEqual(
+    "sugars type number_decimal",
+    VARIANT_MEAL_SUGARS_METAFIELD_DEFINITION.type,
+    "number_decimal",
+  );
+  ctx.assertEqual(
+    "sugars namespace custom",
+    VARIANT_MEAL_SUGARS_METAFIELD_DEFINITION.namespace,
+    "custom",
+  );
+  ctx.assertEqual(
+    "sugars key",
+    VARIANT_MEAL_SUGARS_METAFIELD_DEFINITION.key,
+    "sugars",
+  );
+  ctx.assertEqual(
+    "fiber owner PRODUCTVARIANT",
+    VARIANT_MEAL_FIBER_METAFIELD_DEFINITION.ownerType,
+    "PRODUCTVARIANT",
+  );
+  ctx.assertEqual(
+    "fiber type number_decimal",
+    VARIANT_MEAL_FIBER_METAFIELD_DEFINITION.type,
+    "number_decimal",
+  );
+  ctx.assertEqual(
+    "fiber namespace custom",
+    VARIANT_MEAL_FIBER_METAFIELD_DEFINITION.namespace,
+    "custom",
+  );
+  ctx.assertEqual(
+    "fiber key",
+    VARIANT_MEAL_FIBER_METAFIELD_DEFINITION.key,
+    "fiber",
+  );
+  ctx.assertEqual(
+    "salt owner PRODUCTVARIANT",
+    VARIANT_MEAL_SALT_METAFIELD_DEFINITION.ownerType,
+    "PRODUCTVARIANT",
+  );
+  ctx.assertEqual(
+    "salt type number_decimal",
+    VARIANT_MEAL_SALT_METAFIELD_DEFINITION.type,
+    "number_decimal",
+  );
+  ctx.assertEqual(
+    "salt namespace custom",
+    VARIANT_MEAL_SALT_METAFIELD_DEFINITION.namespace,
+    "custom",
+  );
+  ctx.assertEqual(
+    "salt key",
+    VARIANT_MEAL_SALT_METAFIELD_DEFINITION.key,
+    "salt",
   );
   ctx.assertEqual(
     "portion_grams type number_integer",
@@ -452,7 +536,7 @@ const runSuite = async () => {
     batch.alreadyPresent,
     1,
   );
-  ctx.assertEqual("batch created remaining", batch.created, 5);
+  ctx.assertEqual("batch created remaining", batch.created, 9);
   ctx.assertEqual("batch blocked", batch.blocked, 0);
   ctx.assertTrue("batch ok", batch.ok);
   ctx.assertEqual(

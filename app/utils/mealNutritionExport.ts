@@ -8,7 +8,25 @@
 export const MEAL_NUTRITION_EXPORT_FILENAME =
   "mileyo-meal-nutrition-template.csv";
 
+/** Current export + new import schema — 13 columns. */
 export const MEAL_NUTRITION_EXPORT_HEADERS = [
+  "variantId",
+  "productTitle",
+  "variantTitle",
+  "objective",
+  "calories",
+  "proteins",
+  "carbs",
+  "fat",
+  "saturatedFat",
+  "sugars",
+  "fiber",
+  "salt",
+  "portionGrams",
+] as const;
+
+/** Legacy import schema — 9 columns (historical Excel templates). */
+export const MEAL_NUTRITION_LEGACY_EXPORT_HEADERS = [
   "variantId",
   "productTitle",
   "variantTitle",
@@ -29,6 +47,10 @@ export type MealNutritionExportCatalogVariant = {
   proteins: number | null;
   carbs: number | null;
   fat: number | null;
+  saturatedFat?: number | null;
+  sugars?: number | null;
+  fiber?: number | null;
+  salt?: number | null;
   portionGrams: number | null;
 };
 
@@ -46,6 +68,10 @@ export type MealNutritionExportRow = {
   proteins: number | null;
   carbs: number | null;
   fat: number | null;
+  saturatedFat: number | null;
+  sugars: number | null;
+  fiber: number | null;
+  salt: number | null;
   portionGrams: number | null;
 };
 
@@ -77,6 +103,10 @@ export const flattenMealCatalogToExportRows = (
         proteins: variant.proteins,
         carbs: variant.carbs,
         fat: variant.fat,
+        saturatedFat: variant.saturatedFat ?? null,
+        sugars: variant.sugars ?? null,
+        fiber: variant.fiber ?? null,
+        salt: variant.salt ?? null,
         portionGrams: variant.portionGrams,
       });
     }
@@ -96,6 +126,10 @@ export const buildMealNutritionExportCsvRow = (
   row.proteins,
   row.carbs,
   row.fat,
+  row.saturatedFat,
+  row.sugars,
+  row.fiber,
+  row.salt,
   row.portionGrams,
 ];
 

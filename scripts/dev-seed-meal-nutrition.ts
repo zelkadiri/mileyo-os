@@ -40,6 +40,10 @@ const DEV_SEED_TEMPLATE_ROWS: MealNutritionImportRow[] = [
     proteins: 38,
     carbs: 32,
     fat: 12,
+    saturatedFat: null,
+    sugars: null,
+    fiber: null,
+    salt: null,
     portionGrams: 350,
   },
   {
@@ -50,6 +54,10 @@ const DEV_SEED_TEMPLATE_ROWS: MealNutritionImportRow[] = [
     proteins: 42,
     carbs: 45,
     fat: 16,
+    saturatedFat: null,
+    sugars: null,
+    fiber: null,
+    salt: null,
     portionGrams: 400,
   },
   {
@@ -60,6 +68,10 @@ const DEV_SEED_TEMPLATE_ROWS: MealNutritionImportRow[] = [
     proteins: 48,
     carbs: 62,
     fat: 22,
+    saturatedFat: null,
+    sugars: null,
+    fiber: null,
+    salt: null,
     portionGrams: 480,
   },
 ];

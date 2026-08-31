@@ -20,6 +20,7 @@ export type PortalMeal = {
   calories: number | null;
   carbs: number | null;
   fat: number | null;
+  fiber: number | null;
   id: string;
   imageAlt: string;
   imageUrl: string | null;
@@ -27,6 +28,9 @@ export type PortalMeal = {
   objective: SubscriptionObjective;
   portionGrams: number | null;
   proteins: number | null;
+  salt: number | null;
+  saturatedFat: number | null;
+  sugars: number | null;
   title: string;
   variantId: string;
   variantTitle: string;

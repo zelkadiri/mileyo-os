@@ -1,11 +1,14 @@
 /**
  * Meal nutrition CSV parse + import preview (pure, no Shopify I/O).
  *
- * Contract headers = MEAL_NUTRITION_EXPORT_HEADERS (14B).
+ * Dual schema: legacy 9 columns + new 13 columns.
  * Preview-only: no Shopify writes.
  */
 
-import { MEAL_NUTRITION_EXPORT_HEADERS } from "./mealNutritionExport";
+import {
+  MEAL_NUTRITION_EXPORT_HEADERS,
+  MEAL_NUTRITION_LEGACY_EXPORT_HEADERS,
+} from "./mealNutritionExport";
 import {
   validateMealNutritionImportRows,
   type MealNutritionImportIssue,
@@ -14,11 +17,17 @@ import {
 
 export const MEAL_NUTRITION_CSV_MAX_BYTES = 2 * 1024 * 1024;
 
+export type MealNutritionCsvSchema = "legacy" | "new";
+
 export type MealNutritionMacroSnapshot = {
   calories: number | null;
   proteins: number | null;
   carbs: number | null;
   fat: number | null;
+  saturatedFat: number | null;
+  sugars: number | null;
+  fiber: number | null;
+  salt: number | null;
   portionGrams: number | null;
 };
 
@@ -46,10 +55,15 @@ export type MealNutritionCatalogVariantRef = {
   proteins: number | null;
   carbs: number | null;
   fat: number | null;
+  saturatedFat?: number | null;
+  sugars?: number | null;
+  fiber?: number | null;
+  salt?: number | null;
   portionGrams: number | null;
 };
 
 export type MealNutritionImportPreview = {
+  csvSchema?: MealNutritionCsvSchema;
   diffs: MealNutritionImportDiff[];
   issues: MealNutritionImportIssue[];
   ok: boolean;
@@ -65,6 +79,9 @@ export type MealNutritionImportPreview = {
   validRowCount: number;
   validRows: MealNutritionImportRow[];
 };
+
+const LEGACY_SEPARATOR_COUNT = MEAL_NUTRITION_LEGACY_EXPORT_HEADERS.length - 1;
+const NEW_SEPARATOR_COUNT = MEAL_NUTRITION_EXPORT_HEADERS.length - 1;
 
 const emptyPreview = (
   partial: Partial<MealNutritionImportPreview> & {
@@ -157,22 +174,57 @@ const extractFirstLogicalLine = (text: string): string => {
   return line;
 };
 
+const headersMatchSchema = (
+  headerRow: readonly string[],
+  schema: MealNutritionCsvSchema,
+): boolean => {
+  const expected =
+    schema === "legacy"
+      ? MEAL_NUTRITION_LEGACY_EXPORT_HEADERS
+      : MEAL_NUTRITION_EXPORT_HEADERS;
+
+  if (headerRow.length !== expected.length) {
+    return false;
+  }
+
+  return expected.every(
+    (expectedHeader, index) => headerRow[index]?.trim() === expectedHeader,
+  );
+};
+
+export const detectMealNutritionCsvSchema = (
+  headerRow: readonly string[],
+): MealNutritionCsvSchema | null => {
+  if (headersMatchSchema(headerRow, "new")) {
+    return "new";
+  }
+  if (headersMatchSchema(headerRow, "legacy")) {
+    return "legacy";
+  }
+  return null;
+};
+
 /**
  * Detect Excel FR (;) vs Mileyo export (,) from the header line.
- * Prefers the delimiter that yields the expected column count.
+ * Prefers the delimiter that yields a recognized schema column count.
  */
 export const detectMealNutritionCsvDelimiter = (
   raw: string,
 ): "," | ";" => {
   const firstLine = extractFirstLogicalLine(stripBom(raw));
-  const expectedSeparators = MEAL_NUTRITION_EXPORT_HEADERS.length - 1;
   const commaCount = countUnquotedDelimiters(firstLine, ",");
   const semicolonCount = countUnquotedDelimiters(firstLine, ";");
 
-  if (semicolonCount === expectedSeparators) {
+  if (semicolonCount === NEW_SEPARATOR_COUNT) {
     return ";";
   }
-  if (commaCount === expectedSeparators) {
+  if (commaCount === NEW_SEPARATOR_COUNT) {
+    return ",";
+  }
+  if (semicolonCount === LEGACY_SEPARATOR_COUNT) {
+    return ";";
+  }
+  if (commaCount === LEGACY_SEPARATOR_COUNT) {
     return ",";
   }
   if (semicolonCount > commaCount) {
@@ -246,29 +298,38 @@ export const parseMealNutritionCsv = (raw: string): string[][] => {
 const isTotallyEmptyRow = (cells: readonly string[]) =>
   cells.every((cell) => cell.trim() === "");
 
-/** Nutrition columns in export contract order (after objective). */
-const NUTRITION_CELL_INDEXES = [4, 5, 6, 7, 8] as const;
+const LEGACY_NUTRITION_CELL_INDEXES = [4, 5, 6, 7, 8] as const;
+const NEW_NUTRITION_CELL_INDEXES = [4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+
+const nutritionCellIndexesForSchema = (schema: MealNutritionCsvSchema) =>
+  schema === "legacy"
+    ? LEGACY_NUTRITION_CELL_INDEXES
+    : NEW_NUTRITION_CELL_INDEXES;
 
 const isNutritionCellEmpty = (raw: string | undefined) =>
   (raw ?? "").trim() === "";
 
-const areAllNutritionCellsEmpty = (cells: readonly string[]) =>
-  NUTRITION_CELL_INDEXES.every((index) =>
+const areAllNutritionCellsEmpty = (
+  cells: readonly string[],
+  schema: MealNutritionCsvSchema,
+) =>
+  nutritionCellIndexesForSchema(schema).every((index) =>
     isNutritionCellEmpty(cells[index]),
   );
 
 /**
- * Export-template row not filled yet: has variantId, all macros blank.
+ * Export-template row not filled yet: has variantId, all nutrition blank.
  * Ignored — not an error (partial Excel workflow).
  */
 export const isIgnorableUnfilledNutritionRow = (
   cells: readonly string[],
+  schema: MealNutritionCsvSchema = "new",
 ): boolean => {
   const variantId = (cells[0] ?? "").trim();
-  return Boolean(variantId) && areAllNutritionCellsEmpty(cells);
+  return Boolean(variantId) && areAllNutritionCellsEmpty(cells, schema);
 };
 
-const parseMacroNumber = (raw: string): number => {
+const parseRequiredMacroNumber = (raw: string): number => {
   const trimmed = raw.trim().replace(",", ".");
   if (!trimmed) {
     return Number.NaN;
@@ -276,7 +337,17 @@ const parseMacroNumber = (raw: string): number => {
   return Number(trimmed);
 };
 
-const mapCsvRowToImportCandidate = (
+/** Empty cell → null; invalid non-empty → NaN (validation error). */
+const parseOptionalMacroNumber = (raw: string): number | null => {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed.replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+};
+
+const mapLegacyCsvRowToImportCandidate = (
   cells: readonly string[],
 ): MealNutritionImportRow => {
   const [
@@ -295,23 +366,66 @@ const mapCsvRowToImportCandidate = (
     variantId,
     productTitle: productTitle.trim() || undefined,
     objective: objective.trim() || undefined,
-    calories: parseMacroNumber(caloriesRaw),
-    proteins: parseMacroNumber(proteinsRaw),
-    carbs: parseMacroNumber(carbsRaw),
-    fat: parseMacroNumber(fatRaw),
-    portionGrams: parseMacroNumber(portionRaw),
+    calories: parseRequiredMacroNumber(caloriesRaw),
+    proteins: parseRequiredMacroNumber(proteinsRaw),
+    carbs: parseRequiredMacroNumber(carbsRaw),
+    fat: parseRequiredMacroNumber(fatRaw),
+    saturatedFat: null,
+    sugars: null,
+    fiber: null,
+    salt: null,
+    portionGrams: parseRequiredMacroNumber(portionRaw),
   };
 };
 
-const headersMatchContract = (headerRow: readonly string[]) => {
-  if (headerRow.length !== MEAL_NUTRITION_EXPORT_HEADERS.length) {
-    return false;
-  }
+const mapNewCsvRowToImportCandidate = (
+  cells: readonly string[],
+): MealNutritionImportRow => {
+  const [
+    variantId = "",
+    productTitle = "",
+    _variantTitle = "",
+    objective = "",
+    caloriesRaw = "",
+    proteinsRaw = "",
+    carbsRaw = "",
+    fatRaw = "",
+    saturatedFatRaw = "",
+    sugarsRaw = "",
+    fiberRaw = "",
+    saltRaw = "",
+    portionRaw = "",
+  ] = cells;
 
-  return MEAL_NUTRITION_EXPORT_HEADERS.every(
-    (expected, index) => headerRow[index]?.trim() === expected,
-  );
+  return {
+    variantId,
+    productTitle: productTitle.trim() || undefined,
+    objective: objective.trim() || undefined,
+    calories: parseRequiredMacroNumber(caloriesRaw),
+    proteins: parseRequiredMacroNumber(proteinsRaw),
+    carbs: parseRequiredMacroNumber(carbsRaw),
+    fat: parseRequiredMacroNumber(fatRaw),
+    saturatedFat: parseOptionalMacroNumber(saturatedFatRaw),
+    sugars: parseOptionalMacroNumber(sugarsRaw),
+    fiber: parseOptionalMacroNumber(fiberRaw),
+    salt: parseOptionalMacroNumber(saltRaw),
+    portionGrams: parseRequiredMacroNumber(portionRaw),
+  };
 };
+
+const mapCsvRowToImportCandidate = (
+  cells: readonly string[],
+  schema: MealNutritionCsvSchema,
+): MealNutritionImportRow =>
+  schema === "legacy"
+    ? mapLegacyCsvRowToImportCandidate(cells)
+    : mapNewCsvRowToImportCandidate(cells);
+
+const expectedHeadersLabel = () =>
+  [
+    `legacy (${MEAL_NUTRITION_LEGACY_EXPORT_HEADERS.join(", ")})`,
+    `new (${MEAL_NUTRITION_EXPORT_HEADERS.join(", ")})`,
+  ].join(" ou ");
 
 const collectDuplicateVariantIdIssues = (
   rows: readonly MealNutritionImportValidEntry[],
@@ -353,6 +467,11 @@ const collectDuplicateVariantIdIssues = (
   return issues;
 };
 
+const resolveAfterOptionalValue = (
+  csvValue: number | null,
+  catalogValue: number | null | undefined,
+): number | null => (csvValue === null ? (catalogValue ?? null) : csvValue);
+
 /**
  * Pure CSV → format preview. Does not touch Shopify.
  * Catalog checks live in enrichMealNutritionImportPreviewWithCatalog.
@@ -384,12 +503,14 @@ export const previewMealNutritionImportCsv = (
   }
 
   const [headerRow, ...dataRows] = matrix;
-  if (!headerRow || !headersMatchContract(headerRow)) {
+  const csvSchema = headerRow ? detectMealNutritionCsvSchema(headerRow) : null;
+
+  if (!headerRow || csvSchema === null) {
     return emptyPreview({
       issues: [
         {
           code: "invalid_headers",
-          message: `En-têtes CSV invalides. Attendu : ${MEAL_NUTRITION_EXPORT_HEADERS.join(", ")}.`,
+          message: `En-têtes CSV invalides. Attendu : ${expectedHeadersLabel()}.`,
           rowIndex: 0,
         },
       ],
@@ -407,19 +528,20 @@ export const previewMealNutritionImportCsv = (
       skippedEmptyRowCount += 1;
       continue;
     }
-    if (isIgnorableUnfilledNutritionRow(cells)) {
+    if (isIgnorableUnfilledNutritionRow(cells, csvSchema)) {
       ignoredRowCount += 1;
       continue;
     }
     mapped.push({
       rowIndex,
-      row: mapCsvRowToImportCandidate(cells),
+      row: mapCsvRowToImportCandidate(cells, csvSchema),
     });
   }
 
   if (mapped.length === 0) {
     if (ignoredRowCount > 0) {
       return {
+        csvSchema,
         diffs: [],
         issues: [],
         ok: true,
@@ -432,6 +554,7 @@ export const previewMealNutritionImportCsv = (
       };
     }
     return emptyPreview({
+      csvSchema,
       issues: [
         {
           code: "empty_file",
@@ -496,6 +619,7 @@ export const previewMealNutritionImportCsv = (
   const validRows = validEntries.map((entry) => entry.row);
 
   return {
+    csvSchema,
     diffs: [],
     issues: uniqueIssues,
     ok: uniqueIssues.length === 0,
@@ -519,6 +643,10 @@ export const indexMealNutritionCatalogVariants = (
       proteins: number | null;
       carbs: number | null;
       fat: number | null;
+      saturatedFat?: number | null;
+      sugars?: number | null;
+      fiber?: number | null;
+      salt?: number | null;
       portionGrams: number | null;
     }[];
   }[],
@@ -540,6 +668,10 @@ export const indexMealNutritionCatalogVariants = (
         proteins: variant.proteins,
         carbs: variant.carbs,
         fat: variant.fat,
+        saturatedFat: variant.saturatedFat ?? null,
+        sugars: variant.sugars ?? null,
+        fiber: variant.fiber ?? null,
+        salt: variant.salt ?? null,
         portionGrams: variant.portionGrams,
       });
     }
@@ -601,6 +733,10 @@ export const enrichMealNutritionImportPreviewWithCatalog = (
         proteins: catalog.proteins,
         carbs: catalog.carbs,
         fat: catalog.fat,
+        saturatedFat: catalog.saturatedFat ?? null,
+        sugars: catalog.sugars ?? null,
+        fiber: catalog.fiber ?? null,
+        salt: catalog.salt ?? null,
         portionGrams: catalog.portionGrams,
       },
       after: {
@@ -608,6 +744,13 @@ export const enrichMealNutritionImportPreviewWithCatalog = (
         proteins: entry.row.proteins,
         carbs: entry.row.carbs,
         fat: entry.row.fat,
+        saturatedFat: resolveAfterOptionalValue(
+          entry.row.saturatedFat,
+          catalog.saturatedFat,
+        ),
+        sugars: resolveAfterOptionalValue(entry.row.sugars, catalog.sugars),
+        fiber: resolveAfterOptionalValue(entry.row.fiber, catalog.fiber),
+        salt: resolveAfterOptionalValue(entry.row.salt, catalog.salt),
         portionGrams: entry.row.portionGrams,
       },
     });
@@ -618,12 +761,10 @@ export const enrichMealNutritionImportPreviewWithCatalog = (
   const validRows = validEntries.map((entry) => entry.row);
 
   return {
+    ...formatPreview,
     diffs,
     issues,
     ok: issues.length === 0,
-    rowCount: formatPreview.rowCount,
-    ignoredRowCount: formatPreview.ignoredRowCount,
-    skippedEmptyRowCount: formatPreview.skippedEmptyRowCount,
     validEntries,
     validRowCount: validRows.length,
     validRows,

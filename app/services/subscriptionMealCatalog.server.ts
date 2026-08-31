@@ -3,8 +3,12 @@ import {
   parseVariantCaloriesMetafield,
   parseVariantCarbsMetafield,
   parseVariantFatMetafield,
+  parseVariantFiberMetafield,
   parseVariantPortionGramsMetafield,
   parseVariantProteinsMetafield,
+  parseVariantSaltMetafield,
+  parseVariantSaturatedFatMetafield,
+  parseVariantSugarsMetafield,
 } from "../utils/mealMacroMetafields";
 import {
   parseAllergenesMetafield,
@@ -21,6 +25,10 @@ export type MealCatalogVariant = {
   proteins: number | null;
   carbs: number | null;
   fat: number | null;
+  saturatedFat: number | null;
+  sugars: number | null;
+  fiber: number | null;
+  salt: number | null;
   portionGrams: number | null;
 };
 
@@ -57,6 +65,10 @@ export type ShopifyMealCatalogVariantNode = {
   proteinsMetafield?: { value: string } | null;
   carbsMetafield?: { value: string } | null;
   fatMetafield?: { value: string } | null;
+  saturatedFatMetafield?: { value: string } | null;
+  sugarsMetafield?: { value: string } | null;
+  fiberMetafield?: { value: string } | null;
+  saltMetafield?: { value: string } | null;
   portionGramsMetafield?: { value: string } | null;
 };
 
@@ -108,6 +120,21 @@ const mealCollectionProductsQuery = `#graphql
               fatMetafield: metafield(namespace: "custom", key: "fat") {
                 value
               }
+              saturatedFatMetafield: metafield(
+                namespace: "custom"
+                key: "saturated_fat"
+              ) {
+                value
+              }
+              sugarsMetafield: metafield(namespace: "custom", key: "sugars") {
+                value
+              }
+              fiberMetafield: metafield(namespace: "custom", key: "fiber") {
+                value
+              }
+              saltMetafield: metafield(namespace: "custom", key: "salt") {
+                value
+              }
               portionGramsMetafield: metafield(
                 namespace: "custom"
                 key: "portion_grams"
@@ -146,6 +173,12 @@ export const toMealCatalogVariant = (
   proteins: parseVariantProteinsMetafield(variant.proteinsMetafield?.value),
   carbs: parseVariantCarbsMetafield(variant.carbsMetafield?.value),
   fat: parseVariantFatMetafield(variant.fatMetafield?.value),
+  saturatedFat: parseVariantSaturatedFatMetafield(
+    variant.saturatedFatMetafield?.value,
+  ),
+  sugars: parseVariantSugarsMetafield(variant.sugarsMetafield?.value),
+  fiber: parseVariantFiberMetafield(variant.fiberMetafield?.value),
+  salt: parseVariantSaltMetafield(variant.saltMetafield?.value),
   portionGrams: parseVariantPortionGramsMetafield(
     variant.portionGramsMetafield?.value,
   ),

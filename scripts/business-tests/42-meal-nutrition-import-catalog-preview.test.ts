@@ -8,7 +8,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { SUBSCRIPTION_OBJECTIVE } from "../../app/constants/subscriptionObjective";
-import { MEAL_NUTRITION_EXPORT_HEADERS } from "../../app/utils/mealNutritionExport";
+import {
+  MEAL_NUTRITION_EXPORT_HEADERS,
+  MEAL_NUTRITION_LEGACY_EXPORT_HEADERS,
+} from "../../app/utils/mealNutritionExport";
 import {
   enrichMealNutritionImportPreviewWithCatalog,
   indexMealNutritionCatalogVariants,
@@ -25,9 +28,48 @@ const repoRoot = join(__dirname, "../..");
 const readRepoFile = (relativePath: string) =>
   readFileSync(join(repoRoot, relativePath), "utf8");
 
-const headerLine = MEAL_NUTRITION_EXPORT_HEADERS.map((h) => `"${h}"`).join(",");
+const headerLine = (headers: readonly string[]) =>
+  headers.map((h) => `"${h}"`).join(",");
 
-const validDataLine = (
+const newHeaderLine = headerLine(MEAL_NUTRITION_EXPORT_HEADERS);
+const legacyHeaderLine = headerLine(MEAL_NUTRITION_LEGACY_EXPORT_HEADERS);
+
+const validNewDataLine = (
+  variantId: string,
+  overrides: Partial<{
+    calories: string;
+    proteins: string;
+    carbs: string;
+    fat: string;
+    saturatedFat: string;
+    sugars: string;
+    fiber: string;
+    salt: string;
+    portionGrams: string;
+    objective: string;
+    productTitle: string;
+    variantTitle: string;
+  }> = {},
+) =>
+  [
+    variantId,
+    overrides.productTitle ?? "Poulet riz",
+    overrides.variantTitle ?? "Équilibré",
+    overrides.objective ?? "balanced",
+    overrides.calories ?? "450",
+    overrides.proteins ?? "38.5",
+    overrides.carbs ?? "35",
+    overrides.fat ?? "12",
+    overrides.saturatedFat ?? "",
+    overrides.sugars ?? "",
+    overrides.fiber ?? "",
+    overrides.salt ?? "",
+    overrides.portionGrams ?? "350",
+  ]
+    .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+    .join(",");
+
+const validLegacyDataLine = (
   variantId: string,
   overrides: Partial<{
     calories: string;
@@ -66,6 +108,10 @@ const sampleCatalog = () => [
         proteins: 30,
         carbs: 40,
         fat: 10,
+        saturatedFat: 1.2,
+        sugars: 4,
+        fiber: 2,
+        salt: 1.2,
         portionGrams: 320,
       },
       {
@@ -76,6 +122,10 @@ const sampleCatalog = () => [
         proteins: null,
         carbs: null,
         fat: null,
+        saturatedFat: null,
+        sugars: null,
+        fiber: null,
+        salt: null,
         portionGrams: null,
       },
     ],
@@ -89,8 +139,8 @@ const runSuite = () => {
 
   ctx.scenario("A. variant_not_found");
   const unknownCsv = [
-    headerLine,
-    validDataLine("gid://shopify/ProductVariant/999"),
+    newHeaderLine,
+    validNewDataLine("gid://shopify/ProductVariant/999"),
   ].join("\n");
   const unknownFormat = previewMealNutritionImportCsv(unknownCsv);
   const unknownPreview = enrichMealNutritionImportPreviewWithCatalog(
@@ -107,8 +157,8 @@ const runSuite = () => {
 
   ctx.scenario("B. objective_mismatch");
   const mismatchCsv = [
-    headerLine,
-    validDataLine("gid://shopify/ProductVariant/101", {
+    newHeaderLine,
+    validNewDataLine("gid://shopify/ProductVariant/101", {
       objective: "bulk",
     }),
   ].join("\n");
@@ -125,17 +175,21 @@ const runSuite = () => {
   );
   ctx.assertEqual("no diffs on mismatch", mismatchPreview.diffs.length, 0);
 
-  ctx.scenario("C. Diff before/after correct");
+  ctx.scenario("C. Diff before/after correct — new schema");
   const okCsv = [
-    headerLine,
-    validDataLine("gid://shopify/ProductVariant/101", {
+    newHeaderLine,
+    validNewDataLine("gid://shopify/ProductVariant/101", {
       calories: "450",
       proteins: "38.5",
       carbs: "35",
       fat: "12",
+      saturatedFat: "2.4",
+      sugars: "5",
+      fiber: "3",
+      salt: "0.5",
       portionGrams: "350",
     }),
-    validDataLine("gid://shopify/ProductVariant/102", {
+    validNewDataLine("gid://shopify/ProductVariant/102", {
       objective: "weight_loss",
       variantTitle: "Perte de poids",
       calories: "420",
@@ -159,11 +213,69 @@ const runSuite = () => {
   ctx.assertEqual("after calories", first?.after.calories, 450);
   ctx.assertEqual("before proteins", first?.before.proteins, 30);
   ctx.assertEqual("after proteins", first?.after.proteins, 38.5);
+  ctx.assertEqual("before salt", first?.before.salt, 1.2);
+  ctx.assertEqual("after salt", first?.after.salt, 0.5);
+  ctx.assertEqual("before saturatedFat", first?.before.saturatedFat, 1.2);
+  ctx.assertEqual("after saturatedFat", first?.after.saturatedFat, 2.4);
   const second = okPreview.diffs[1];
   ctx.assertNull("before null calories", second?.before.calories ?? null);
   ctx.assertEqual("after from csv", second?.after.calories, 420);
 
-  ctx.scenario("D. Wiring Settings — catalogue + preview sans écriture");
+  ctx.scenario("D. Legacy CSV — nouveaux champs absents, pas d'effacement preview");
+  const legacyCsv = [
+    legacyHeaderLine,
+    validLegacyDataLine("gid://shopify/ProductVariant/101", {
+      calories: "450",
+      proteins: "38.5",
+      carbs: "35",
+      fat: "12",
+      portionGrams: "350",
+    }),
+  ].join("\n");
+  const legacyPreview = enrichMealNutritionImportPreviewWithCatalog(
+    previewMealNutritionImportCsv(legacyCsv),
+    indexMealNutritionCatalogVariants(sampleCatalog()),
+  );
+  ctx.assertTrue("legacy catalog preview ok", legacyPreview.ok);
+  const legacyDiff = legacyPreview.diffs[0];
+  ctx.assertEqual("legacy schema", legacyPreview.csvSchema, "legacy");
+  ctx.assertEqual("legacy before salt", legacyDiff?.before.salt, 1.2);
+  ctx.assertEqual(
+    "legacy after salt unchanged",
+    legacyDiff?.after.salt,
+    1.2,
+  );
+  ctx.assertEqual(
+    "legacy after saturatedFat unchanged",
+    legacyDiff?.after.saturatedFat,
+    1.2,
+  );
+
+  ctx.scenario("E. New schema — nouveaux champs vides, pas d'effacement preview");
+  const emptyNewFieldsCsv = [
+    newHeaderLine,
+    validNewDataLine("gid://shopify/ProductVariant/101", {
+      calories: "450",
+      proteins: "38.5",
+      carbs: "35",
+      fat: "12",
+      saturatedFat: "",
+      sugars: "",
+      fiber: "",
+      salt: "",
+      portionGrams: "350",
+    }),
+  ].join("\n");
+  const emptyNewPreview = enrichMealNutritionImportPreviewWithCatalog(
+    previewMealNutritionImportCsv(emptyNewFieldsCsv),
+    indexMealNutritionCatalogVariants(sampleCatalog()),
+  );
+  ctx.assertTrue("empty new fields preview ok", emptyNewPreview.ok);
+  const emptyNewDiff = emptyNewPreview.diffs[0];
+  ctx.assertEqual("empty new before salt", emptyNewDiff?.before.salt, 1.2);
+  ctx.assertEqual("empty new after salt unchanged", emptyNewDiff?.after.salt, 1.2);
+
+  ctx.scenario("F. Wiring Settings — catalogue + preview sans écriture");
   const importServer = readRepoFile(
     "app/features/settings/settings-meal-nutrition-import.server.ts",
   );

@@ -206,6 +206,7 @@ const buildCatalogMeals = (count: number): PortalMeal[] =>
       calories: null,
       carbs: null,
       fat: null,
+      fiber: null,
       // Portal catalog sets id = variantId (see portal-catalog.server.ts).
       id: variantId,
       imageAlt: "",
@@ -214,6 +215,9 @@ const buildCatalogMeals = (count: number): PortalMeal[] =>
       objective: "weight_loss" as const,
       portionGrams: null,
       proteins: null,
+      salt: null,
+      saturatedFat: null,
+      sugars: null,
       title: `Catalog Meal ${index + 1}`,
       variantId,
       variantTitle: "",

@@ -7,6 +7,7 @@
 
 export const MEAL_NUTRITION_METAFIELD_NAMESPACE = "custom" as const;
 
+/** Always written for a valid import row. */
 export const MEAL_NUTRITION_METAFIELD_KEYS = [
   "calories",
   "proteins",
@@ -15,10 +16,19 @@ export const MEAL_NUTRITION_METAFIELD_KEYS = [
   "portion_grams",
 ] as const;
 
-export type MealNutritionMetafieldKey =
-  (typeof MEAL_NUTRITION_METAFIELD_KEYS)[number];
+/** Written only when the CSV cell is non-empty (PATCH semantics). */
+export const MEAL_NUTRITION_OPTIONAL_METAFIELD_KEYS = [
+  "saturated_fat",
+  "sugars",
+  "fiber",
+  "salt",
+] as const;
 
-/** Row shape aligned with the future Excel nutrition import. */
+export type MealNutritionMetafieldKey =
+  | (typeof MEAL_NUTRITION_METAFIELD_KEYS)[number]
+  | (typeof MEAL_NUTRITION_OPTIONAL_METAFIELD_KEYS)[number];
+
+/** Row shape aligned with the Excel nutrition import (legacy + new schema). */
 export type MealNutritionImportRow = {
   variantId: string;
   productTitle?: string;
@@ -27,6 +37,10 @@ export type MealNutritionImportRow = {
   proteins: number;
   carbs: number;
   fat: number;
+  saturatedFat: number | null;
+  sugars: number | null;
+  fiber: number | null;
+  salt: number | null;
   portionGrams: number;
 };
 
@@ -36,6 +50,10 @@ export type MealNutritionImportIssueCode =
   | "invalid_proteins"
   | "invalid_carbs"
   | "invalid_fat"
+  | "invalid_saturated_fat"
+  | "invalid_sugars"
+  | "invalid_fiber"
+  | "invalid_salt"
   | "invalid_portion_grams"
   | "invalid_headers"
   | "duplicate_variant_id"
@@ -79,6 +97,10 @@ const isPositiveNumber = (value: unknown): value is number =>
 
 const isPositiveInteger = (value: unknown): value is number =>
   isPositiveNumber(value) && Number.isInteger(value);
+
+const isValidOptionalNutritionValue = (value: number | null): boolean =>
+  value === null ||
+  (typeof value === "number" && Number.isFinite(value) && value >= 0);
 
 /**
  * Pure row validation.
@@ -138,6 +160,38 @@ export const validateMealNutritionImportRows = (
       });
     }
 
+    if (!isValidOptionalNutritionValue(row.saturatedFat)) {
+      rowIssues.push({
+        code: "invalid_saturated_fat",
+        message: "saturatedFat doit être un nombre >= 0 ou vide.",
+        rowIndex,
+      });
+    }
+
+    if (!isValidOptionalNutritionValue(row.sugars)) {
+      rowIssues.push({
+        code: "invalid_sugars",
+        message: "sugars doit être un nombre >= 0 ou vide.",
+        rowIndex,
+      });
+    }
+
+    if (!isValidOptionalNutritionValue(row.fiber)) {
+      rowIssues.push({
+        code: "invalid_fiber",
+        message: "fiber doit être un nombre >= 0 ou vide.",
+        rowIndex,
+      });
+    }
+
+    if (!isValidOptionalNutritionValue(row.salt)) {
+      rowIssues.push({
+        code: "invalid_salt",
+        message: "salt doit être un nombre >= 0 ou vide.",
+        rowIndex,
+      });
+    }
+
     if (!isPositiveInteger(row.portionGrams)) {
       rowIssues.push({
         code: "invalid_portion_grams",
@@ -172,7 +226,7 @@ export const buildMealNutritionMetafieldsSetInputs = (
 ): MealNutritionMetafieldSetInput[] => {
   const ownerId = row.variantId.trim();
 
-  return [
+  const metafields: MealNutritionMetafieldSetInput[] = [
     {
       key: "calories",
       namespace: MEAL_NUTRITION_METAFIELD_NAMESPACE,
@@ -209,6 +263,48 @@ export const buildMealNutritionMetafieldsSetInputs = (
       value: String(row.portionGrams),
     },
   ];
+
+  if (row.saturatedFat !== null) {
+    metafields.push({
+      key: "saturated_fat",
+      namespace: MEAL_NUTRITION_METAFIELD_NAMESPACE,
+      ownerId,
+      type: "number_decimal",
+      value: String(row.saturatedFat),
+    });
+  }
+
+  if (row.sugars !== null) {
+    metafields.push({
+      key: "sugars",
+      namespace: MEAL_NUTRITION_METAFIELD_NAMESPACE,
+      ownerId,
+      type: "number_decimal",
+      value: String(row.sugars),
+    });
+  }
+
+  if (row.fiber !== null) {
+    metafields.push({
+      key: "fiber",
+      namespace: MEAL_NUTRITION_METAFIELD_NAMESPACE,
+      ownerId,
+      type: "number_decimal",
+      value: String(row.fiber),
+    });
+  }
+
+  if (row.salt !== null) {
+    metafields.push({
+      key: "salt",
+      namespace: MEAL_NUTRITION_METAFIELD_NAMESPACE,
+      ownerId,
+      type: "number_decimal",
+      value: String(row.salt),
+    });
+  }
+
+  return metafields;
 };
 
 export const buildMealNutritionWritePlans = (

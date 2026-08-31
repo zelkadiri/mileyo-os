@@ -96,6 +96,10 @@ export type BuilderMealOption = {
   proteins: number | null;
   carbs: number | null;
   fat: number | null;
+  saturatedFat: number | null;
+  sugars: number | null;
+  fiber: number | null;
+  salt: number | null;
   portionGrams: number | null;
   allergenes: string[];
   badges: string[];

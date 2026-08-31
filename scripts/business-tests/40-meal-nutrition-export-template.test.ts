@@ -14,6 +14,7 @@ import {
   flattenMealCatalogToExportRows,
   MEAL_NUTRITION_EXPORT_FILENAME,
   MEAL_NUTRITION_EXPORT_HEADERS,
+  MEAL_NUTRITION_LEGACY_EXPORT_HEADERS,
   type MealNutritionExportCatalogProduct,
 } from "../../app/utils/mealNutritionExport";
 import {
@@ -39,6 +40,10 @@ const sampleCatalog = (): MealNutritionExportCatalogProduct[] => [
         proteins: 40,
         carbs: 30,
         fat: 10,
+        saturatedFat: 2.4,
+        sugars: 5,
+        fiber: 3,
+        salt: 0.5,
         portionGrams: 350,
       },
       {
@@ -85,8 +90,37 @@ const runSuite = () => {
 
   ctx.scenario("A. Headers CSV — ordre exact du contrat import");
   ctx.assertEqual(
+    "headers count",
+    MEAL_NUTRITION_EXPORT_HEADERS.length,
+    13,
+  );
+  ctx.assertEqual(
     "headers order",
     MEAL_NUTRITION_EXPORT_HEADERS.join("|"),
+    [
+      "variantId",
+      "productTitle",
+      "variantTitle",
+      "objective",
+      "calories",
+      "proteins",
+      "carbs",
+      "fat",
+      "saturatedFat",
+      "sugars",
+      "fiber",
+      "salt",
+      "portionGrams",
+    ].join("|"),
+  );
+  ctx.assertEqual(
+    "legacy headers count",
+    MEAL_NUTRITION_LEGACY_EXPORT_HEADERS.length,
+    9,
+  );
+  ctx.assertEqual(
+    "legacy headers order",
+    MEAL_NUTRITION_LEGACY_EXPORT_HEADERS.join("|"),
     [
       "variantId",
       "productTitle",
@@ -131,8 +165,13 @@ const runSuite = () => {
 
   ctx.scenario("C. Macros existantes conservées — null → cellule vide");
   ctx.assertEqual("preserved calories", rows[0]?.calories, 420);
+  ctx.assertEqual("preserved saturatedFat", rows[0]?.saturatedFat, 2.4);
+  ctx.assertEqual("preserved sugars", rows[0]?.sugars, 5);
+  ctx.assertEqual("preserved fiber", rows[0]?.fiber, 3);
+  ctx.assertEqual("preserved salt", rows[0]?.salt, 0.5);
   ctx.assertEqual("preserved proteins decimal", rows[2]?.proteins, 45.5);
   ctx.assertNull("null calories kept", rows[1]?.calories);
+  ctx.assertNull("null saturatedFat kept", rows[1]?.saturatedFat);
   ctx.assertEqual("null objective → empty string", rows[1]?.objective, "");
 
   const csv = buildMealNutritionExportCsvContent(sampleCatalog());
@@ -153,11 +192,16 @@ const runSuite = () => {
   ctx.assertEqual(
     "null macros as empty quoted cells",
     balancedLine,
-    '"gid://shopify/ProductVariant/102","Poulet riz","Équilibré","","","","","",""',
+    '"gid://shopify/ProductVariant/102","Poulet riz","Équilibré","","","","","","","","","",""',
   );
   ctx.assertTrue(
     "existing macros in CSV",
     (lines[1] ?? "").includes('"420"') && (lines[1] ?? "").includes('"40"'),
+  );
+  ctx.assertTrue(
+    "new fields in CSV when present",
+    (lines[1] ?? "").includes('"2.4"') &&
+      (lines[1] ?? "").includes('"0.5"'),
   );
   ctx.assertTrue("blank variantId not in CSV", !csv.includes("Sans id"));
 

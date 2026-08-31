@@ -7,7 +7,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { MEAL_NUTRITION_EXPORT_HEADERS } from "../../app/utils/mealNutritionExport";
+import {
+  MEAL_NUTRITION_EXPORT_HEADERS,
+  MEAL_NUTRITION_LEGACY_EXPORT_HEADERS,
+} from "../../app/utils/mealNutritionExport";
 import {
   previewMealNutritionImportCsv,
 } from "../../app/utils/mealNutritionCsv";
@@ -22,7 +25,11 @@ const repoRoot = join(__dirname, "../..");
 const readRepoFile = (relativePath: string) =>
   readFileSync(join(repoRoot, relativePath), "utf8");
 
-const headerLine = MEAL_NUTRITION_EXPORT_HEADERS.map((h) => `"${h}"`).join(",");
+const headerLine = (headers: readonly string[]) =>
+  headers.map((h) => `"${h}"`).join(",");
+
+const legacyHeaderLine = headerLine(MEAL_NUTRITION_LEGACY_EXPORT_HEADERS);
+const newHeaderLine = headerLine(MEAL_NUTRITION_EXPORT_HEADERS);
 
 const identityLine = (
   variantId: string,
@@ -34,8 +41,9 @@ const identityLine = (
     fat: string;
     portionGrams: string;
   }> = {},
-) =>
-  [
+  schema: "legacy" | "new" = "legacy",
+) => {
+  const base = [
     variantId,
     "Poulet riz",
     "Équilibré",
@@ -44,26 +52,34 @@ const identityLine = (
     macros.proteins ?? "",
     macros.carbs ?? "",
     macros.fat ?? "",
-    macros.portionGrams ?? "",
-  ]
-    .map((value) => `"${String(value).replace(/"/g, '""')}"`)
-    .join(",");
+  ];
+  if (schema === "new") {
+    base.push("", "", "", "");
+  }
+  base.push(macros.portionGrams ?? "");
+  return base.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",");
+};
 
-const filledLine = (variantId: string) =>
-  identityLine(variantId, "balanced", {
-    calories: "450",
-    proteins: "38.5",
-    carbs: "35",
-    fat: "12",
-    portionGrams: "350",
-  });
+const filledLine = (variantId: string, schema: "legacy" | "new" = "legacy") =>
+  identityLine(
+    variantId,
+    "balanced",
+    {
+      calories: "450",
+      proteins: "38.5",
+      carbs: "35",
+      fat: "12",
+      portionGrams: "350",
+    },
+    schema,
+  );
 
 const runSuite = () => {
   const ctx = createBusinessTestContext("44-meal-nutrition-import-partial");
 
-  ctx.scenario("A. Export complet non rempli — tout ignoré, pas d’erreur");
+  ctx.scenario("A. Export complet non rempli — tout ignoré, pas d'erreur (legacy)");
   const allUnfilled = [
-    headerLine,
+    legacyHeaderLine,
     identityLine("gid://shopify/ProductVariant/1"),
     identityLine("gid://shopify/ProductVariant/2", "weight_loss"),
     identityLine("gid://shopify/ProductVariant/3", "bulk"),
@@ -74,9 +90,19 @@ const runSuite = () => {
   ctx.assertEqual("no valid", unfilledPreview.validRowCount, 0);
   ctx.assertEqual("no issues", unfilledPreview.issues.length, 0);
 
+  ctx.scenario("A2. Export complet non rempli — new schema");
+  const allUnfilledNew = [
+    newHeaderLine,
+    identityLine("gid://shopify/ProductVariant/1", "balanced", {}, "new"),
+    identityLine("gid://shopify/ProductVariant/2", "weight_loss", {}, "new"),
+  ].join("\n");
+  const unfilledNewPreview = previewMealNutritionImportCsv(allUnfilledNew);
+  ctx.assertTrue("new unfilled ok", unfilledNewPreview.ok);
+  ctx.assertEqual("new ignored two", unfilledNewPreview.ignoredRowCount, 2);
+
   ctx.scenario("B. Une ligne remplie + plusieurs vides");
   const mixed = [
-    headerLine,
+    legacyHeaderLine,
     identityLine("gid://shopify/ProductVariant/10"),
     filledLine("gid://shopify/ProductVariant/11"),
     identityLine("gid://shopify/ProductVariant/12"),
@@ -93,7 +119,7 @@ const runSuite = () => {
 
   ctx.scenario("C. Ligne partielle invalide reste bloquante");
   const partial = [
-    headerLine,
+    legacyHeaderLine,
     identityLine("gid://shopify/ProductVariant/20", "balanced", {
       calories: "500",
       proteins: "",
@@ -112,7 +138,47 @@ const runSuite = () => {
   );
   ctx.assertEqual("no ignored among these", partialPreview.ignoredRowCount, 0);
 
-  ctx.scenario("D. Apply / UI — validRows > 0 sans exiger preview.ok");
+  ctx.scenario("D. New schema — seulement nouveau champ sans macros historiques => erreur");
+  const saltOnlyLine = [
+    newHeaderLine,
+    [
+      "gid://shopify/ProductVariant/30",
+      "Poulet riz",
+      "Équilibré",
+      "balanced",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "0.5",
+      "",
+    ]
+      .map((value) => `"${value}"`)
+      .join(","),
+  ].join("\n");
+  const saltOnlyPreview = previewMealNutritionImportCsv(saltOnlyLine);
+  ctx.assertFalse("salt only not ok", saltOnlyPreview.ok);
+  ctx.assertEqual("salt only no valid", saltOnlyPreview.validRowCount, 0);
+  ctx.assertEqual("salt only not ignored", saltOnlyPreview.ignoredRowCount, 0);
+  ctx.assertTrue(
+    "salt only missing calories",
+    saltOnlyPreview.issues.some((issue) => issue.code === "invalid_calories"),
+  );
+
+  ctx.scenario("E. New schema — nouveaux champs vides, macros historiques remplies => ok");
+  const emptyNewFields = [
+    newHeaderLine,
+    filledLine("gid://shopify/ProductVariant/40", "new"),
+  ].join("\n");
+  const emptyNewPreview = previewMealNutritionImportCsv(emptyNewFields);
+  ctx.assertTrue("empty new fields ok", emptyNewPreview.ok);
+  ctx.assertEqual("empty new fields one valid", emptyNewPreview.validRowCount, 1);
+  ctx.assertNull("empty new saturatedFat null", emptyNewPreview.validRows[0]?.saturatedFat);
+
+  ctx.scenario("F. Apply / UI — validRows > 0 sans exiger preview.ok");
   const importServer = readRepoFile(
     "app/features/settings/settings-meal-nutrition-import.server.ts",
   );

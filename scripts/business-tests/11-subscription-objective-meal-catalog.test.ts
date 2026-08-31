@@ -8,6 +8,13 @@ import {
 } from "../../app/services/subscriptionMealCatalog.server";
 import { parseSubscriptionObjective } from "../../app/utils/subscriptionObjective";
 import {
+  parseVariantCaloriesMetafield,
+  parseVariantFiberMetafield,
+  parseVariantSaltMetafield,
+  parseVariantSaturatedFatMetafield,
+  parseVariantSugarsMetafield,
+} from "../../app/utils/mealMacroMetafields";
+import {
   createBusinessTestContext,
   finishSuite,
 } from "./_framework";
@@ -198,6 +205,101 @@ const runSuite = () => {
     "calories is not NaN",
     Number.isNaN(invalidVariant.calories),
   );
+
+  ctx.scenario("F. Extended nutrition metafield parsers (>= 0)");
+  const extendedNutritionCases = [
+    { input: "2.4", expected: 2.4 },
+    { input: "0", expected: 0 },
+    { input: "0.0", expected: 0 },
+    { input: "-1", expected: null },
+    { input: "abc", expected: null },
+    { input: null, expected: null },
+    { input: undefined, expected: null },
+    { input: "", expected: null },
+  ] as const;
+
+  const extendedParsers = [
+    { name: "saturated_fat", parse: parseVariantSaturatedFatMetafield },
+    { name: "sugars", parse: parseVariantSugarsMetafield },
+    { name: "fiber", parse: parseVariantFiberMetafield },
+    { name: "salt", parse: parseVariantSaltMetafield },
+  ] as const;
+
+  for (const parser of extendedParsers) {
+    for (const testCase of extendedNutritionCases) {
+      ctx.assertEqual(
+        `${parser.name} parses ${String(testCase.input)}`,
+        parser.parse(testCase.input),
+        testCase.expected,
+      );
+    }
+  }
+
+  ctx.assertNull(
+    "legacy calories rejects zero",
+    parseVariantCaloriesMetafield("0"),
+  );
+  ctx.assertNull(
+    "legacy calories rejects 0.0",
+    parseVariantCaloriesMetafield("0.0"),
+  );
+
+  ctx.scenario("G. Runtime catalogue — 4 nouveaux metafields");
+  const extendedRuntime = toMealCatalogProducts([
+    {
+      id: "gid://shopify/Product/ext-1",
+      title: "Plat étendu",
+      variants: {
+        nodes: [
+          {
+            id: "gid://shopify/ProductVariant/ext-filled",
+            title: "Équilibré",
+            objectiveMetafield: { value: "balanced" },
+            caloriesMetafield: { value: "450" },
+            proteinsMetafield: { value: "38" },
+            carbsMetafield: { value: "35" },
+            fatMetafield: { value: "12" },
+            saturatedFatMetafield: { value: "1.4" },
+            sugarsMetafield: { value: "3.2" },
+            fiberMetafield: { value: "5.6" },
+            saltMetafield: { value: "0.8" },
+            portionGramsMetafield: { value: "350" },
+          },
+          {
+            id: "gid://shopify/ProductVariant/ext-missing",
+            title: "Perte de poids",
+            objectiveMetafield: { value: "weight_loss" },
+            caloriesMetafield: { value: "400" },
+            proteinsMetafield: { value: "35" },
+            carbsMetafield: { value: "30" },
+            fatMetafield: { value: "10" },
+            portionGramsMetafield: { value: "320" },
+          },
+          {
+            id: "gid://shopify/ProductVariant/ext-zero",
+            title: "Prise de masse",
+            objectiveMetafield: { value: "bulk" },
+            caloriesMetafield: { value: "700" },
+            proteinsMetafield: { value: "50" },
+            carbsMetafield: { value: "60" },
+            fatMetafield: { value: "20" },
+            saltMetafield: { value: "0" },
+            portionGramsMetafield: { value: "450" },
+          },
+        ],
+      },
+    },
+  ]);
+  const [filled, missing, zeroSalt] = extendedRuntime[0]?.variants ?? [];
+  ctx.assertEqual("runtime saturatedFat", filled?.saturatedFat, 1.4);
+  ctx.assertEqual("runtime sugars", filled?.sugars, 3.2);
+  ctx.assertEqual("runtime fiber", filled?.fiber, 5.6);
+  ctx.assertEqual("runtime salt", filled?.salt, 0.8);
+  ctx.assertNull("missing saturatedFat null", missing?.saturatedFat ?? null);
+  ctx.assertNull("missing sugars null", missing?.sugars ?? null);
+  ctx.assertNull("missing fiber null", missing?.fiber ?? null);
+  ctx.assertNull("missing salt null", missing?.salt ?? null);
+  ctx.assertEqual("zero salt preserved", zeroSalt?.salt, 0);
 
   ctx.scenario("Recipe metadata preserved at product level");
   ctx.assertEqual(

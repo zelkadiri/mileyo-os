@@ -67,6 +67,42 @@ export const VARIANT_MEAL_FAT_METAFIELD_DEFINITION = {
   type: "number_decimal",
 } as const;
 
+export const VARIANT_MEAL_SATURATED_FAT_METAFIELD_DEFINITION = {
+  description: "Graisses saturées (g) de la portion pour cette variante repas.",
+  key: "saturated_fat",
+  name: "Graisses saturées",
+  namespace: "custom",
+  ownerType: "PRODUCTVARIANT",
+  type: "number_decimal",
+} as const;
+
+export const VARIANT_MEAL_SUGARS_METAFIELD_DEFINITION = {
+  description: "Sucres (g) de la portion pour cette variante repas.",
+  key: "sugars",
+  name: "Sucres",
+  namespace: "custom",
+  ownerType: "PRODUCTVARIANT",
+  type: "number_decimal",
+} as const;
+
+export const VARIANT_MEAL_FIBER_METAFIELD_DEFINITION = {
+  description: "Fibres (g) de la portion pour cette variante repas.",
+  key: "fiber",
+  name: "Fibres",
+  namespace: "custom",
+  ownerType: "PRODUCTVARIANT",
+  type: "number_decimal",
+} as const;
+
+export const VARIANT_MEAL_SALT_METAFIELD_DEFINITION = {
+  description: "Sel (g) de la portion pour cette variante repas.",
+  key: "salt",
+  name: "Sel",
+  namespace: "custom",
+  ownerType: "PRODUCTVARIANT",
+  type: "number_decimal",
+} as const;
+
 export const VARIANT_MEAL_PORTION_GRAMS_METAFIELD_DEFINITION = {
   description: "Poids de portion (g) pour cette variante repas.",
   key: "portion_grams",
@@ -83,6 +119,10 @@ export const MEAL_V2_METAFIELD_DEFINITIONS = [
   VARIANT_MEAL_PROTEINS_METAFIELD_DEFINITION,
   VARIANT_MEAL_CARBS_METAFIELD_DEFINITION,
   VARIANT_MEAL_FAT_METAFIELD_DEFINITION,
+  VARIANT_MEAL_SATURATED_FAT_METAFIELD_DEFINITION,
+  VARIANT_MEAL_SUGARS_METAFIELD_DEFINITION,
+  VARIANT_MEAL_FIBER_METAFIELD_DEFINITION,
+  VARIANT_MEAL_SALT_METAFIELD_DEFINITION,
   VARIANT_MEAL_PORTION_GRAMS_METAFIELD_DEFINITION,
 ] as const;
 

@@ -54,6 +54,10 @@ const buildThreeVariantProduct = (
       proteins: null,
       carbs: null,
       fat: null,
+      saturatedFat: null,
+      sugars: null,
+      fiber: null,
+      salt: null,
       portionGrams: null,
     },
     {
@@ -64,6 +68,10 @@ const buildThreeVariantProduct = (
       proteins: 40,
       carbs: 35,
       fat: 12,
+      saturatedFat: 1.4,
+      sugars: 3.2,
+      fiber: 5.6,
+      salt: 0.8,
       portionGrams: 380,
     },
     {
@@ -74,6 +82,10 @@ const buildThreeVariantProduct = (
       proteins: null,
       carbs: null,
       fat: null,
+      saturatedFat: null,
+      sugars: null,
+      fiber: null,
+      salt: null,
       portionGrams: null,
     },
   ],
@@ -115,6 +127,20 @@ const runSuite = () => {
       ?.calories,
     425,
   );
+  const balancedOption = options.find(
+    (option) => option.objective === SUBSCRIPTION_OBJECTIVE.BALANCED,
+  );
+  ctx.assertEqual("builder saturatedFat transported", balancedOption?.saturatedFat, 1.4);
+  ctx.assertEqual("builder sugars transported", balancedOption?.sugars, 3.2);
+  ctx.assertEqual("builder fiber transported", balancedOption?.fiber, 5.6);
+  ctx.assertEqual("builder salt transported", balancedOption?.salt, 0.8);
+  const weightLossOption = options.find(
+    (option) => option.objective === SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS,
+  );
+  ctx.assertNull("builder missing saturatedFat null", weightLossOption?.saturatedFat ?? null);
+  ctx.assertNull("builder missing sugars null", weightLossOption?.sugars ?? null);
+  ctx.assertNull("builder missing fiber null", weightLossOption?.fiber ?? null);
+  ctx.assertNull("builder missing salt null", weightLossOption?.salt ?? null);
   ctx.assertEqual(
     "adapter re-exported from catalog",
     toBuilderMealOptionsFromSelection,
@@ -133,6 +159,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
         {
@@ -143,6 +173,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
         {
@@ -153,6 +187,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
       ],
@@ -177,6 +215,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
         {
@@ -187,6 +229,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
         {
@@ -197,6 +243,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
         {
@@ -207,6 +257,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
       ],
@@ -241,6 +295,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
         {
@@ -251,6 +309,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
         {
@@ -261,6 +323,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
       ],
@@ -294,6 +360,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
         {
@@ -304,6 +374,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
         {
@@ -314,6 +388,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
       ],
@@ -357,6 +435,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
         {
@@ -367,6 +449,10 @@ const runSuite = () => {
           proteins: null,
           carbs: null,
           fat: null,
+          saturatedFat: null,
+          sugars: null,
+          fiber: null,
+          salt: null,
           portionGrams: null,
         },
       ],
@@ -494,6 +580,8 @@ const runSuite = () => {
   );
   const types = readRepoFile("app/features/builder/builder-types.ts");
   const render = readRepoFile("app/features/builder/builder-render.ts");
+  const styles = readRepoFile("app/features/builder/builder-styles.ts");
+  const nutritionFormat = readRepoFile("app/utils/mealNutritionFormat.ts");
 
   ctx.assertTrue(
     "loader uses fetchBuilderMealOptions",
@@ -547,11 +635,15 @@ const runSuite = () => {
       /export type BuilderMealOption = \{[^}]*\bprice\b/.test(types),
   );
   ctx.assertTrue(
-    "nutrition display uses formatMealNutrition",
+    "nutrition display uses formatMealNutrition for badge",
     client.includes("formatMealNutrition({") &&
       client.includes("proteins: meal.proteins") &&
       client.includes("carbs: meal.carbs") &&
       client.includes("fat: meal.fat") &&
+      client.includes("saturatedFat: meal.saturatedFat") &&
+      client.includes("sugars: meal.sugars") &&
+      client.includes("fiber: meal.fiber") &&
+      client.includes("salt: meal.salt") &&
       client.includes("portionGrams: meal.portionGrams"),
   );
   ctx.assertTrue(
@@ -564,13 +656,25 @@ const runSuite = () => {
       !render.includes('id="meal-nutrition-modal"'),
   );
   ctx.assertTrue(
-    "full nutrition details live only in meal drawer",
+    "full nutrition details live only in meal drawer table",
     client.includes("function openMealDetailDrawer") &&
-      client.includes("appendMealDetailNutritionRow(") &&
+      client.includes("appendMealNutritionTable(") &&
       client.includes("mealDetailDrawerNutrition") &&
-      client.includes('"Calories"') &&
+      nutritionFormat.includes("Pour 100 g") &&
+      nutritionFormat.includes("Votre portion") &&
+      nutritionFormat.includes("dont graisses saturées") &&
+      nutritionFormat.includes("dont sucres") &&
+      nutritionFormat.includes('"Fibres"') &&
+      nutritionFormat.includes('"Sel"') &&
+      nutritionFormat.includes("appendMealNutritionTable") &&
       render.includes('id="meal-detail-drawer-nutrition"') &&
+      !client.includes("appendMealDetailNutritionRow(") &&
       !client.includes("appendNutritionModalRow"),
+  );
+  ctx.assertTrue(
+    "builder styles include nutrition table",
+    styles.includes(".meal-nutrition-table") &&
+      styles.includes(".meal-nutrition-table-row--secondary"),
   );
   ctx.assertFalse(
     "no legacy info button on meal cards",
@@ -649,7 +753,7 @@ const runSuite = () => {
     client.includes("meal.ingredients") &&
       client.includes("meal.allergenes") &&
       client.includes("meal.badges") &&
-      client.includes("appendMealDetailNutritionRow(") &&
+      client.includes("appendMealNutritionTable(") &&
       render.includes('id="meal-detail-drawer-nutrition"'),
   );
   ctx.assertTrue(

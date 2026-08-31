@@ -26,6 +26,10 @@ const validRow = (
   proteins: 38.5,
   carbs: 35,
   fat: 12,
+  saturatedFat: null,
+  sugars: null,
+  fiber: null,
+  salt: null,
   portionGrams: 350,
   ...overrides,
 });
@@ -146,6 +150,119 @@ const runSuite = () => {
   ctx.assertTrue(
     "invalid portion decimal",
     nonInteger.issues.some((issue) => issue.code === "invalid_portion_grams"),
+  );
+
+  ctx.scenario("E. Nouveaux champs optionnels — null sans write");
+  const nullOptional = buildMealNutritionMetafieldsSetInputs(validRow());
+  ctx.assertEqual("legacy row five metafields", nullOptional.length, 5);
+  ctx.assertFalse(
+    "no saturated_fat when null",
+    nullOptional.some((entry) => entry.key === "saturated_fat"),
+  );
+  ctx.assertFalse(
+    "no sugars when null",
+    nullOptional.some((entry) => entry.key === "sugars"),
+  );
+  ctx.assertFalse(
+    "no fiber when null",
+    nullOptional.some((entry) => entry.key === "fiber"),
+  );
+  ctx.assertFalse(
+    "no salt when null",
+    nullOptional.some((entry) => entry.key === "salt"),
+  );
+
+  ctx.scenario("F. Nouveaux champs — zéro accepté et écrit");
+  const zeroOptional = buildMealNutritionMetafieldsSetInputs(
+    validRow({
+      saturatedFat: 0,
+      sugars: 0,
+      fiber: 0,
+      salt: 0,
+    }),
+  );
+  ctx.assertEqual("zero optional row nine metafields", zeroOptional.length, 9);
+  ctx.assertEqual(
+    "saturated_fat zero written",
+    zeroOptional.find((entry) => entry.key === "saturated_fat")?.value,
+    "0",
+  );
+  ctx.assertEqual(
+    "sugars zero written",
+    zeroOptional.find((entry) => entry.key === "sugars")?.value,
+    "0",
+  );
+  ctx.assertEqual(
+    "fiber zero written",
+    zeroOptional.find((entry) => entry.key === "fiber")?.value,
+    "0",
+  );
+  ctx.assertEqual(
+    "salt zero written",
+    zeroOptional.find((entry) => entry.key === "salt")?.value,
+    "0",
+  );
+  const zeroValidation = validateMealNutritionImportRows([
+    validRow({ saturatedFat: 0, sugars: 0, fiber: 0, salt: 0 }),
+  ]);
+  ctx.assertTrue("zero optional validation ok", zeroValidation.ok);
+
+  ctx.scenario("G. Nouveaux champs — négatif / invalide rejetés");
+  const invalidOptional = validateMealNutritionImportRows([
+    validRow({
+      saturatedFat: -1,
+      sugars: Number.NaN,
+      fiber: -0.5,
+      salt: Number.NaN,
+    }),
+  ]);
+  ctx.assertFalse("invalid optional not ok", invalidOptional.ok);
+  ctx.assertTrue(
+    "invalid_saturated_fat",
+    invalidOptional.issues.some((issue) => issue.code === "invalid_saturated_fat"),
+  );
+  ctx.assertTrue(
+    "invalid_sugars",
+    invalidOptional.issues.some((issue) => issue.code === "invalid_sugars"),
+  );
+  ctx.assertTrue(
+    "invalid_fiber",
+    invalidOptional.issues.some((issue) => issue.code === "invalid_fiber"),
+  );
+  ctx.assertTrue(
+    "invalid_salt",
+    invalidOptional.issues.some((issue) => issue.code === "invalid_salt"),
+  );
+
+  ctx.scenario("H. Row complète 4 nouveaux champs — 9 metafields anti-swap");
+  const fullOptional = buildMealNutritionMetafieldsSetInputs(
+    validRow({
+      saturatedFat: 1.1,
+      sugars: 2.2,
+      fiber: 7.7,
+      salt: 0.4,
+    }),
+  );
+  ctx.assertEqual("full optional nine metafields", fullOptional.length, 9);
+  ctx.assertEqual(
+    "saturated_fat maps 1.1",
+    fullOptional.find((entry) => entry.key === "saturated_fat")?.value,
+    "1.1",
+  );
+  ctx.assertEqual(
+    "sugars maps 2.2",
+    fullOptional.find((entry) => entry.key === "sugars")?.value,
+    "2.2",
+  );
+  ctx.assertEqual(
+    "fiber maps 7.7",
+    fullOptional.find((entry) => entry.key === "fiber")?.value,
+    "7.7",
+  );
+  ctx.assertEqual(
+    "salt maps 0.4",
+    fullOptional.find((entry) => entry.key === "salt")?.value,
+    "0.4",
   );
 
   return finishSuite("39-meal-nutrition-import-foundation", ctx);

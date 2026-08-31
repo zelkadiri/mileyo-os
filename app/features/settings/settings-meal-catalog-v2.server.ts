@@ -482,9 +482,17 @@ export const assertMealV2ProductSetInputPreservesIdentity = (
     const hasMacro = variant.metafields.some(
       (metafield) =>
         metafield.namespace === "custom" &&
-        ["calories", "proteins", "carbs", "fat", "portion_grams"].includes(
-          metafield.key,
-        ),
+        [
+          "calories",
+          "proteins",
+          "carbs",
+          "fat",
+          "saturated_fat",
+          "sugars",
+          "fiber",
+          "salt",
+          "portion_grams",
+        ].includes(metafield.key),
     );
     if (hasMacro) {
       reasons.push("variant metafields must not include macros during 13F-A");

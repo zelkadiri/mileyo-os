@@ -75,6 +75,7 @@ export const toBuilderMealOptions = (
       calories: candidate.variant.calories,
       carbs: candidate.variant.carbs,
       fat: candidate.variant.fat,
+      fiber: candidate.variant.fiber,
       imageAlt: candidate.product.imageAlt,
       imageUrl: candidate.product.imageUrl,
       ingredients: candidate.product.ingredients,
@@ -82,6 +83,9 @@ export const toBuilderMealOptions = (
       portionGrams: candidate.variant.portionGrams,
       productId: candidate.product.id,
       proteins: candidate.variant.proteins,
+      salt: candidate.variant.salt,
+      saturatedFat: candidate.variant.saturatedFat,
+      sugars: candidate.variant.sugars,
       title: candidate.product.title,
       variantId: candidate.variant.variantId.trim(),
     });

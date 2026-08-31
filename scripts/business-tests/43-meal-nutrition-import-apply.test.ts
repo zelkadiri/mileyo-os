@@ -138,11 +138,30 @@ const runSuite = () => {
       proteins: 38,
       carbs: 35,
       fat: 12,
+      saturatedFat: null,
+      sugars: null,
+      fiber: null,
+      salt: null,
       portionGrams: 350,
     },
   ]);
   ctx.assertEqual("one write plan", plans.length, 1);
-  ctx.assertEqual("five metafields", plans[0]?.metafields.length, 5);
+  ctx.assertEqual("five metafields legacy row", plans[0]?.metafields.length, 5);
+  const fullPlans = buildMealNutritionWritePlans([
+    {
+      variantId: "gid://shopify/ProductVariant/2",
+      calories: 450,
+      proteins: 38,
+      carbs: 35,
+      fat: 12,
+      saturatedFat: 2.4,
+      sugars: 5,
+      fiber: 3,
+      salt: 0.5,
+      portionGrams: 350,
+    },
+  ]);
+  ctx.assertEqual("nine metafields full row", fullPlans[0]?.metafields.length, 9);
   const rejected = validateMealNutritionImportRows([
     {
       variantId: "gid://shopify/ProductVariant/missing",
@@ -150,6 +169,10 @@ const runSuite = () => {
       proteins: 1,
       carbs: 1,
       fat: 1,
+      saturatedFat: null,
+      sugars: null,
+      fiber: null,
+      salt: null,
       portionGrams: 1,
     },
   ]);

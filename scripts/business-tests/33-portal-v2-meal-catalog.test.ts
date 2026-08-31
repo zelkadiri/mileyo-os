@@ -31,6 +31,7 @@ const buildMeal = (
   calories: 400,
   carbs: 40,
   fat: 10,
+  fiber: null,
   imageAlt: title,
   imageUrl: null,
   ingredients: [],
@@ -38,6 +39,9 @@ const buildMeal = (
   portionGrams: 350,
   productId: `gid://shopify/Product/${title}`,
   proteins: 30,
+  salt: null,
+  saturatedFat: null,
+  sugars: null,
   title,
   variantId: `gid://shopify/ProductVariant/${variantSuffix}`,
 });
@@ -61,6 +65,7 @@ const runSuite = () => {
   const portalFormatters = readSource("app/features/portal/portal-formatters.ts");
   const portalStyles = readSource("app/features/portal/portal-styles.ts");
   const catalog = buildCatalog();
+  const nutritionFormat = readSource("app/utils/mealNutritionFormat.ts");
   const createPortalMealCardSource = portalClient.slice(
     portalClient.indexOf("function createPortalMealCard"),
     portalClient.indexOf("function selectedTotal"),
@@ -241,6 +246,10 @@ const runSuite = () => {
           meal.proteins === source.proteins &&
           meal.carbs === source.carbs &&
           meal.fat === source.fat &&
+          meal.saturatedFat === source.saturatedFat &&
+          meal.sugars === source.sugars &&
+          meal.fiber === source.fiber &&
+          meal.salt === source.salt &&
           meal.portionGrams === source.portionGrams &&
           meal.id === meal.variantId
         );
@@ -289,6 +298,10 @@ const runSuite = () => {
   distinctMacros.proteins = 28.5;
   distinctMacros.carbs = 61;
   distinctMacros.fat = 14;
+  distinctMacros.saturatedFat = 1.4;
+  distinctMacros.sugars = 3.2;
+  distinctMacros.fiber = 5.6;
+  distinctMacros.salt = 0.8;
   distinctMacros.portionGrams = 420;
   distinctMacros.badges = ["Végétarien", "Sans gluten"];
   distinctMacros.allergenes = ["Gluten", "Lait"];
@@ -306,6 +319,10 @@ const runSuite = () => {
   );
   ctx.assertEqual("distinct carbs copied", mappedDistinct?.carbs, 61);
   ctx.assertEqual("distinct fat copied", mappedDistinct?.fat, 14);
+  ctx.assertEqual("portal saturatedFat copied", mappedDistinct?.saturatedFat, 1.4);
+  ctx.assertEqual("portal sugars copied", mappedDistinct?.sugars, 3.2);
+  ctx.assertEqual("portal fiber copied", mappedDistinct?.fiber, 5.6);
+  ctx.assertEqual("portal salt copied", mappedDistinct?.salt, 0.8);
   ctx.assertEqual(
     "distinct portionGrams copied",
     mappedDistinct?.portionGrams,
@@ -341,6 +358,10 @@ const runSuite = () => {
   nullMacros.proteins = null;
   nullMacros.carbs = null;
   nullMacros.fat = null;
+  nullMacros.saturatedFat = null;
+  nullMacros.sugars = null;
+  nullMacros.fiber = null;
+  nullMacros.salt = null;
   nullMacros.portionGrams = null;
   const [mappedNull] = toPortalMealsFromBuilder([nullMacros]);
   ctx.assertTrue(
@@ -349,6 +370,10 @@ const runSuite = () => {
       mappedNull?.proteins === null &&
       mappedNull?.carbs === null &&
       mappedNull?.fat === null &&
+      mappedNull?.saturatedFat === null &&
+      mappedNull?.sugars === null &&
+      mappedNull?.fiber === null &&
+      mappedNull?.salt === null &&
       mappedNull?.portionGrams === null,
   );
 
@@ -360,14 +385,20 @@ const runSuite = () => {
       portalClient.includes("${mealNutritionFormatRuntimeScript}"),
   );
   ctx.assertTrue(
-    "helper interne utilise formatMealNutrition",
+    "helper interne utilise formatMealNutrition + table",
     portalClient.includes("function appendMealNutritionBadge") &&
       portalClient.includes("function openMealNutritionModal") &&
       portalClient.includes("formatMealNutrition({") &&
+      portalClient.includes("appendMealNutritionTable(") &&
+      portalClient.includes("formatMealNutritionTable(") &&
       portalClient.includes("calories: meal.calories") &&
       portalClient.includes("proteins: meal.proteins") &&
       portalClient.includes("carbs: meal.carbs") &&
       portalClient.includes("fat: meal.fat") &&
+      portalClient.includes("saturatedFat: meal.saturatedFat") &&
+      portalClient.includes("sugars: meal.sugars") &&
+      portalClient.includes("fiber: meal.fiber") &&
+      portalClient.includes("salt: meal.salt") &&
       portalClient.includes("portionGrams: meal.portionGrams") &&
       portalClient.includes("nutrition.lines.length") &&
       portalClient.includes("nutrition.calories"),
@@ -409,13 +440,21 @@ const runSuite = () => {
       renderBoxChangeMealGridSource.includes("variantTitle"),
   );
   ctx.assertTrue(
-    "modal nutrition présente",
+    "modal nutrition présente avec tableau",
     portalRender.includes('id="meal-nutrition-modal"') &&
       portalRender.includes("Informations nutritionnelles") &&
       portalClient.includes('className = "meal-nutrition-badge"') &&
       portalClient.includes('className = "meal-card-media"') &&
+      portalClient.includes("appendMealNutritionTable(") &&
+      nutritionFormat.includes("Pour 100 g") &&
+      nutritionFormat.includes("Votre portion") &&
+      nutritionFormat.includes("dont graisses saturées") &&
+      nutritionFormat.includes("dont sucres") &&
+      nutritionFormat.includes('"Fibres"') &&
+      nutritionFormat.includes('"Sel"') &&
       portalStyles.includes(".meal-nutrition-modal") &&
       portalStyles.includes(".meal-nutrition-badge") &&
+      portalStyles.includes(".meal-nutrition-table") &&
       portalStyles.includes(".meal-card-media"),
   );
   ctx.assertFalse(

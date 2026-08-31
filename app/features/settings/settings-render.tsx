@@ -6,8 +6,12 @@ import {
   formatMealCaloriesLabel,
   formatMealCarbsLabel,
   formatMealFatLabel,
+  formatMealFiberLabel,
   formatMealPortionGramsLabel,
   formatMealProteinsLabel,
+  formatMealSaltLabel,
+  formatMealSaturatedFatLabel,
+  formatMealSugarsLabel,
 } from "../../utils/mealNutritionFormat";
 import type { MealNutritionMacroSnapshot } from "../../utils/mealNutritionCsv";
 import type { loadSettingsPageData } from "./settings-catalog.server";
@@ -34,6 +38,10 @@ const formatImportMacroSnapshotLines = (macros: MealNutritionMacroSnapshot) => [
   `Protéines : ${formatImportMacroOrUnset(formatMealProteinsLabel(macros.proteins), "")}`,
   `Glucides : ${formatImportMacroOrUnset(formatMealCarbsLabel(macros.carbs), "")}`,
   `Lipides : ${formatImportMacroOrUnset(formatMealFatLabel(macros.fat), "")}`,
+  `Graisses saturées : ${formatImportMacroOrUnset(formatMealSaturatedFatLabel(macros.saturatedFat), "")}`,
+  `Sucres : ${formatImportMacroOrUnset(formatMealSugarsLabel(macros.sugars), "")}`,
+  `Fibres : ${formatImportMacroOrUnset(formatMealFiberLabel(macros.fiber), "")}`,
+  `Sel : ${formatImportMacroOrUnset(formatMealSaltLabel(macros.salt), "")}`,
   `Portion : ${formatImportMacroOrUnset(formatMealPortionGramsLabel(macros.portionGrams), "")}`,
 ];
 

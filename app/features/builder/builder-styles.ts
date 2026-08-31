@@ -1759,74 +1759,135 @@ body {
   margin-top: 4px;
 }
 
-.meal-detail-drawer-nutrition-heading {
+.meal-nutrition-table {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.96),
+    rgba(252, 248, 246, 0.96)
+  );
+  border: 1px solid rgba(185, 138, 215, 0.14);
+  border-radius: 18px;
+  box-shadow: var(--mileyo-shadow-soft);
+  overflow: hidden;
+  padding: 14px 14px 10px;
+}
+
+.meal-nutrition-table-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.meal-nutrition-table-title {
   color: var(--mileyo-purple-black);
   font-size: 0.92rem;
   font-weight: 800;
-  margin: 4px 0 2px;
+  letter-spacing: 0.01em;
+  margin: 0;
 }
 
-.meal-detail-drawer-nutrition-row {
-  align-items: center;
-  background: rgba(246, 240, 248, 0.92);
-  border-radius: 14px;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  padding: 12px 14px;
-}
-
-.meal-detail-drawer-nutrition-label {
-  align-items: center;
+.meal-nutrition-table-portion {
   color: var(--mileyo-muted);
-  display: inline-flex;
-  font-size: 0.88rem;
+  font-size: 0.78rem;
   font-weight: 600;
-  gap: 10px;
+  margin: 0;
 }
 
-.meal-detail-drawer-nutrition-icon {
-  align-items: center;
+.meal-nutrition-table-grid {
+  display: flex;
+  flex-direction: column;
+}
+
+.meal-nutrition-table-row {
+  align-items: baseline;
+  border-top: 1px solid rgba(90, 27, 105, 0.08);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(4.25rem, 0.7fr) minmax(6.75rem, 1fr);
+  padding: 9px 2px;
+}
+
+.meal-nutrition-table-row--header {
+  border-top: 0;
+  padding-bottom: 6px;
+  padding-top: 0;
+}
+
+.meal-nutrition-table-row--header .meal-nutrition-table-cell {
+  color: var(--mileyo-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.meal-nutrition-table-row--secondary .meal-nutrition-table-cell--label {
+  color: var(--mileyo-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding-left: 12px;
+}
+
+.meal-nutrition-table-row--energy {
+  border-top-color: rgba(90, 27, 105, 0.14);
+}
+
+.meal-nutrition-table-row--energy .meal-nutrition-table-cell--label,
+.meal-nutrition-table-row--energy .meal-nutrition-table-cell--portion {
   color: var(--mileyo-purple-black);
-  display: inline-flex;
-  flex: 0 0 auto;
-  height: 20px;
-  justify-content: center;
-  line-height: 0;
-  width: 20px;
-}
-
-.meal-detail-drawer-nutrition-icon svg {
-  display: block;
-  height: 18px;
-  width: 18px;
-}
-
-.meal-detail-drawer-nutrition-icon--calories {
-  color: #e45a2b;
-}
-
-.meal-detail-drawer-nutrition-icon--proteins {
-  color: #3d9b6e;
-}
-
-.meal-detail-drawer-nutrition-icon--carbs {
-  color: #d4a017;
-}
-
-.meal-detail-drawer-nutrition-icon--fat {
-  color: #e07a3a;
-}
-
-.meal-detail-drawer-nutrition-icon--portion {
-  color: #5b7fd6;
-}
-
-.meal-detail-drawer-nutrition-value {
-  color: var(--mileyo-purple-black);
-  font-size: 0.95rem;
   font-weight: 800;
+}
+
+.meal-nutrition-table-cell {
+  color: var(--mileyo-text);
+  font-size: 0.86rem;
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.meal-nutrition-table-cell--label {
+  font-weight: 650;
+}
+
+.meal-nutrition-table-cell--value {
+  font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
+}
+
+.meal-nutrition-table-cell--portion {
+  font-weight: 700;
+}
+
+.meal-nutrition-table-row > .meal-nutrition-table-cell:last-child {
+  padding-right: 12px;
+}
+
+@media (max-width: 420px) {
+  .meal-nutrition-table {
+    padding: 12px 10px 8px;
+  }
+
+  .meal-nutrition-table-row {
+    gap: 6px;
+    grid-template-columns: minmax(0, 1.15fr) minmax(3.5rem, 0.65fr) minmax(5.75rem, 1fr);
+    padding: 8px 0;
+  }
+
+  .meal-nutrition-table-cell {
+    font-size: 0.8rem;
+  }
+
+  .meal-nutrition-table-row--header .meal-nutrition-table-cell {
+    font-size: 0.62rem;
+  }
+
+  .meal-nutrition-table-row--secondary .meal-nutrition-table-cell--label {
+    padding-left: 8px;
+  }
 }
 
 .meal-badges {

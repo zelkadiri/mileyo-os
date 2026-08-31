@@ -1198,70 +1198,6 @@ export const builderClientScript = `
     }
   }
 
-  function getMealNutritionIcon(kind) {
-    if (kind === "calories") {
-      return (
-        '<svg viewBox="21 1 142 182" width="18" height="18" fill="currentColor" focusable="false" aria-hidden="true">' +
-        '<path d="M92 3L103 13L110 28L112 61L117 79L122 84L132 84L137 80L140 70L142 70L149 90L149 104L146 115L152 111L154 102L157 103L161 114L159 135L145 158L129 171L107 180L82 181L64 176L47 166L32 149L25 132L23 120L24 102L27 92L34 78L46 62L46 75L51 89L59 96L71 97L71 95L60 85L58 75L62 66L83 47L89 37L93 24L92 4Z"/>' +
-        "</svg>"
-      );
-    }
-    if (kind === "proteins") {
-      return (
-        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" focusable="false" aria-hidden="true">' +
-        '<path d="M7 10c0-2.2 1.8-4 4-4h2c2.2 0 4 1.8 4 4v2c0 3.3-2.7 6-6 6h0c-3.3 0-6-2.7-6-6v-1" stroke-linecap="round"/>' +
-        '<path d="M9 8.5V6.8M15 8.5V6.8" stroke-linecap="round"/>' +
-        "</svg>"
-      );
-    }
-    if (kind === "carbs") {
-      return (
-        '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" focusable="false" aria-hidden="true">' +
-        '<path d="M12 3c2.5 2.2 4 5.1 4 8.2 0 3.4-1.8 5.8-4 7.8-2.2-2-4-4.4-4-7.8C8 8.1 9.5 5.2 12 3z" stroke-linejoin="round"/>' +
-        '<path d="M12 11v8" stroke-linecap="round"/>' +
-        "</svg>"
-      );
-    }
-    if (kind === "fat") {
-      return (
-        '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" focusable="false" aria-hidden="true">' +
-        '<path d="M12 3.2c2.8 3.2 6.2 6.8 6.2 10.4A6.2 6.2 0 0 1 12 20a6.2 6.2 0 0 1-6.2-6.4C5.8 10 9.2 6.4 12 3.2z"/>' +
-        "</svg>"
-      );
-    }
-    return (
-      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" focusable="false" aria-hidden="true">' +
-      '<path d="M5 18h14M7 18l1.2-8h7.6L17 18M9.5 10l.7-4h3.6l.7 4" stroke-linecap="round" stroke-linejoin="round"/>' +
-      "</svg>"
-    );
-  }
-
-  function appendMealDetailNutritionRow(list, kind, label, value) {
-    if (!value) return;
-    var row = document.createElement("div");
-    row.className = "meal-detail-drawer-nutrition-row";
-
-    var term = document.createElement("span");
-    term.className = "meal-detail-drawer-nutrition-label";
-    term.innerHTML =
-      '<span class="meal-detail-drawer-nutrition-icon meal-detail-drawer-nutrition-icon--' +
-      kind +
-      '" aria-hidden="true">' +
-      getMealNutritionIcon(kind) +
-      "</span>" +
-      "<span>" +
-      label +
-      "</span>";
-
-    var definition = document.createElement("span");
-    definition.className = "meal-detail-drawer-nutrition-value";
-    definition.textContent = value;
-
-    row.appendChild(term);
-    row.appendChild(definition);
-    list.appendChild(row);
-  }
-
   function closeMealDetailDrawer() {
     if (!mealDetailDrawer || mealDetailDrawer.classList.contains("hidden")) return;
     mealDetailDrawer.classList.remove("is-open");
@@ -1341,51 +1277,17 @@ export const builderClientScript = `
 
     if (mealDetailDrawerNutrition) {
       mealDetailDrawerNutrition.innerHTML = "";
-      var nutrition = formatMealNutrition({
+      appendMealNutritionTable(mealDetailDrawerNutrition, {
         calories: meal.calories,
         proteins: meal.proteins,
         carbs: meal.carbs,
         fat: meal.fat,
+        saturatedFat: meal.saturatedFat,
+        sugars: meal.sugars,
+        fiber: meal.fiber,
+        salt: meal.salt,
         portionGrams: meal.portionGrams,
       });
-      if (nutrition.lines.length) {
-        var heading = document.createElement("p");
-        heading.className = "meal-detail-drawer-nutrition-heading";
-        heading.textContent = nutrition.portionGrams
-          ? "Informations nutritionnelles · Par portion (" + nutrition.portionGrams + ")"
-          : "Informations nutritionnelles";
-        mealDetailDrawerNutrition.appendChild(heading);
-        appendMealDetailNutritionRow(
-          mealDetailDrawerNutrition,
-          "calories",
-          "Calories",
-          nutrition.calories,
-        );
-        appendMealDetailNutritionRow(
-          mealDetailDrawerNutrition,
-          "proteins",
-          "Protéines",
-          nutrition.proteins,
-        );
-        appendMealDetailNutritionRow(
-          mealDetailDrawerNutrition,
-          "carbs",
-          "Glucides",
-          nutrition.carbs,
-        );
-        appendMealDetailNutritionRow(
-          mealDetailDrawerNutrition,
-          "fat",
-          "Lipides",
-          nutrition.fat,
-        );
-        appendMealDetailNutritionRow(
-          mealDetailDrawerNutrition,
-          "portion",
-          "Portion",
-          nutrition.portionGrams,
-        );
-      }
     }
 
     mealDetailDrawer.classList.remove("hidden");
@@ -1402,6 +1304,10 @@ export const builderClientScript = `
       proteins: meal.proteins,
       carbs: meal.carbs,
       fat: meal.fat,
+      saturatedFat: meal.saturatedFat,
+      sugars: meal.sugars,
+      fiber: meal.fiber,
+      salt: meal.salt,
       portionGrams: meal.portionGrams,
     });
     if (!nutrition.calories || !nutrition.lines.length) return;
