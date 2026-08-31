@@ -385,12 +385,12 @@ const runSuite = () => {
       !previewBuilderBody.includes("await applyMealNutritionMetafields"),
   );
   ctx.assertTrue(
-    "section Import nutrition after Export",
-    render.indexOf('heading="Export nutrition"') >= 0 &&
-      render.indexOf('heading="Import nutrition"') >
-        render.indexOf('heading="Export nutrition"') &&
-      render.indexOf('heading="Catalogue Box V2"') >
-        render.indexOf('heading="Import nutrition"'),
+    "import block after export in Nutrition section",
+    render.indexOf("Export nutrition CSV") >= 0 &&
+      render.indexOf("Import nutrition CSV") >
+        render.indexOf("Export nutrition CSV") &&
+      render.indexOf("<strong>Catalogue Box V2</strong>") >
+        render.indexOf("Import nutrition CSV"),
   );
   ctx.assertTrue(
     "multipart + Analyser button present",

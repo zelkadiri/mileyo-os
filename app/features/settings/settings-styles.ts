@@ -48,3 +48,16 @@ export const productImageStyle = {
   objectFit: "cover",
   width: "96px",
 } as const;
+
+export const maintenanceDetailsStyle = {
+  border: "1px solid #e1e3e5",
+  borderRadius: "0.5rem",
+  marginTop: "0.75rem",
+  padding: "0.25rem 1rem 1rem",
+} as const;
+
+export const maintenanceSummaryStyle = {
+  cursor: "pointer",
+  fontWeight: 600,
+  padding: "0.75rem 0",
+} as const;

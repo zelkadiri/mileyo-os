@@ -222,8 +222,12 @@ const runSuite = () => {
   );
 
   ctx.assertTrue(
-    "section Export nutrition",
-    render.includes('heading="Export nutrition"'),
+    "section Nutrition (export + import)",
+    render.includes('heading="Nutrition"'),
+  );
+  ctx.assertTrue(
+    "export block label",
+    render.includes("Export nutrition CSV"),
   );
   ctx.assertTrue(
     "button label",
@@ -245,16 +249,23 @@ const runSuite = () => {
       exportUtil.includes("downloadMealNutritionCsv") &&
       exportUtil.includes("createObjectURL"),
   );
-  const repasIdx = render.indexOf('heading="Catalogue Repas V2"');
-  const exportIdx = render.indexOf('heading="Export nutrition"');
-  const boxIdx = render.indexOf('heading="Catalogue Box V2"');
+  const nutritionIdx = render.indexOf('heading="Nutrition"');
+  const maintenanceIdx = render.indexOf(
+    'heading="Maintenance / Configuration avancée"',
+  );
+  const repasIdx = render.indexOf("<strong>Catalogue Repas V2</strong>");
+  const boxIdx = render.indexOf("<strong>Catalogue Box V2</strong>");
   ctx.assertTrue(
-    "Export nutrition after Catalogue Repas V2",
-    repasIdx >= 0 && exportIdx > repasIdx,
+    "Nutrition before Maintenance",
+    nutritionIdx >= 0 && maintenanceIdx > nutritionIdx,
   );
   ctx.assertTrue(
-    "Export nutrition before Catalogue Box V2",
-    exportIdx >= 0 && boxIdx > exportIdx,
+    "Catalogue Repas V2 inside Maintenance after Nutrition",
+    repasIdx > nutritionIdx,
+  );
+  ctx.assertTrue(
+    "Catalogue Box V2 after Catalogue Repas V2 in Maintenance",
+    repasIdx >= 0 && boxIdx > repasIdx,
   );
 
   ctx.assertTrue(

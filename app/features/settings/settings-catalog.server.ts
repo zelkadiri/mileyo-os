@@ -161,15 +161,9 @@ export const loadSettingsPageData = async (
     where: { shop },
   });
   const collections = await getCollections(admin);
-  const [boxProducts, mealProducts] = await Promise.all([
-    getCollectionProducts(admin, settings.boxCollectionId),
-    getCollectionProducts(admin, settings.mealCollectionId),
-  ]);
 
   return {
-    boxProducts: toSettingsBoxProducts(boxProducts),
     collections,
-    mealProducts,
     settings,
     shop,
   };

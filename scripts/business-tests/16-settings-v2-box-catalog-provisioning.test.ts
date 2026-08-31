@@ -730,8 +730,8 @@ const runSuite = async () => {
     catalogBlock.includes("createOrUpdateWeeklySellingPlans("),
   );
   ctx.assertTrue(
-    "UI has Catalogue Box V2 section",
-    uiSource.includes('heading="Catalogue Box V2"'),
+    "UI has Catalogue Box V2 block",
+    uiSource.includes("<strong>Catalogue Box V2</strong>"),
   );
   ctx.assertTrue(
     "UI button label",
@@ -756,8 +756,8 @@ const runSuite = async () => {
     uiSource.includes("DRAFT"),
   );
   ctx.assertTrue(
-    "Abonnements Box V2 section remains",
-    uiSource.includes('heading="Abonnements Box V2"'),
+    "Abonnements Box V2 block remains",
+    uiSource.includes("<strong>Abonnements Box V2</strong>"),
   );
 
   ctx.scenario("J. Isolation — no selling plan / legacy / A2b edits");

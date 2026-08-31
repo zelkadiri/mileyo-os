@@ -1084,8 +1084,8 @@ const runSuite = async () => {
     "UI says no extra discount",
     uiSource.includes("Aucun") && uiSource.includes("discount"),
   );
-  ctx.assertTrue(
-    "legacy weekly selling-plan button remains",
+  ctx.assertFalse(
+    "legacy weekly selling-plan button removed from settings UI",
     uiSource.includes("Créer / mettre à jour les abonnements hebdomadaires"),
   );
 
