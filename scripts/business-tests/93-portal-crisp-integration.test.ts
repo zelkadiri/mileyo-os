@@ -101,12 +101,24 @@ const renderPortalHtml = async () =>
     terminalSelections: [],
   }).text();
 
-const withEnv = async <T>(
+const restoreEnv = (
+  previous: Record<string, string | undefined>,
   values: Record<string, string | undefined>,
-  run: () => Promise<T>,
-): Promise<T> => {
-  const previous: Record<string, string | undefined> = {};
+) => {
+  for (const key of Object.keys(values)) {
+    const value = previous[key];
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+};
 
+const applyEnv = (
+  values: Record<string, string | undefined>,
+  previous: Record<string, string | undefined>,
+) => {
   for (const [key, value] of Object.entries(values)) {
     previous[key] = process.env[key];
     if (value === undefined) {
@@ -115,17 +127,33 @@ const withEnv = async <T>(
       process.env[key] = value;
     }
   }
+};
+
+const withEnvSync = <T>(
+  values: Record<string, string | undefined>,
+  run: () => T,
+): T => {
+  const previous: Record<string, string | undefined> = {};
+  applyEnv(values, previous);
+
+  try {
+    return run();
+  } finally {
+    restoreEnv(previous, values);
+  }
+};
+
+const withEnv = async <T>(
+  values: Record<string, string | undefined>,
+  run: () => Promise<T>,
+): Promise<T> => {
+  const previous: Record<string, string | undefined> = {};
+  applyEnv(values, previous);
 
   try {
     return await run();
   } finally {
-    for (const [key, value] of Object.entries(previous)) {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    }
+    restoreEnv(previous, values);
   }
 };
 
@@ -136,33 +164,58 @@ const runSuite = async () => {
   const portalRender = readSource("app/features/portal/portal-render.ts");
 
   ctx.scenario("A. Config — Crisp désactivé");
-  ctx.assertFalse(
-    "flag absent → disabled",
-    resolvePortalCrispConfig({
-      crispWebsiteId: TEST_CRISP_WEBSITE_ID,
-      enablePortalCrisp: undefined,
-    }).enabled,
-  );
-  ctx.assertFalse(
-    "flag false → disabled",
-    resolvePortalCrispConfig({
-      crispWebsiteId: TEST_CRISP_WEBSITE_ID,
-      enablePortalCrisp: "false",
-    }).enabled,
-  );
-  ctx.assertFalse(
-    "Website ID absent → disabled",
-    resolvePortalCrispConfig({
-      crispWebsiteId: "",
-      enablePortalCrisp: "true",
-    }).enabled,
-  );
-  ctx.assertTrue(
-    "flag true + Website ID → enabled",
-    resolvePortalCrispConfig({
-      crispWebsiteId: TEST_CRISP_WEBSITE_ID,
-      enablePortalCrisp: "true",
-    }).enabled,
+  withEnvSync(
+    {
+      CRISP_WEBSITE_ID: undefined,
+      ENABLE_PORTAL_CRISP: undefined,
+    },
+    () => {
+      ctx.assertFalse(
+        "flag absent → disabled",
+        resolvePortalCrispConfig({
+          crispWebsiteId: TEST_CRISP_WEBSITE_ID,
+        }).enabled,
+      );
+      ctx.assertFalse(
+        "flag false → disabled",
+        resolvePortalCrispConfig({
+          crispWebsiteId: TEST_CRISP_WEBSITE_ID,
+          enablePortalCrisp: "false",
+        }).enabled,
+      );
+      ctx.assertFalse(
+        "Website ID absent → disabled",
+        resolvePortalCrispConfig({
+          crispWebsiteId: "",
+          enablePortalCrisp: "true",
+        }).enabled,
+      );
+      ctx.assertFalse(
+        "Website ID whitespace → disabled",
+        resolvePortalCrispConfig({
+          crispWebsiteId: "   ",
+          enablePortalCrisp: "true",
+        }).enabled,
+      );
+      ctx.assertFalse(
+        "flag whitespace → disabled",
+        resolvePortalCrispConfig({
+          crispWebsiteId: TEST_CRISP_WEBSITE_ID,
+          enablePortalCrisp: "   ",
+        }).enabled,
+      );
+      ctx.assertTrue(
+        "flag true + Website ID → enabled",
+        resolvePortalCrispConfig({
+          crispWebsiteId: TEST_CRISP_WEBSITE_ID,
+          enablePortalCrisp: "true",
+        }).enabled,
+      );
+      ctx.assertFalse(
+        "no env fallback when flag absent",
+        resolvePortalCrispConfig().enabled,
+      );
+    },
   );
 
   const disabledHtml = await withEnv(
