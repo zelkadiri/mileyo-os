@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import {
   buildMealSelectionConfirmedEmailData,
   buildMealSelectionReminderEmailData,
+  formatMealSelectionDeliveryDateLabel,
   hasExplicitMealSelectionForDelivery,
   renderEmailTemplate,
   resolveMealSelectionCycle,
@@ -77,7 +78,7 @@ const runSuite = async () => {
   ctx.scenario("C. Renderer — MealSelectionConfirmedEmail");
   const confirmedRendered = await renderEmailTemplate("meal-selection-confirmed", {
     customerName: "Alice",
-    deliveryDateLabel: "jeudi 27 août 2026",
+    deliveryDateLabel: "entre jeudi 27 août et samedi 29 août",
     mealsCount: 8,
     portalUrl: "https://mileyo-dev.myshopify.com/apps/box-builder/portal",
     selectedCount: 8,
@@ -89,8 +90,14 @@ const runSuite = async () => {
     confirmedRendered.html.includes("Vos repas sont confirmés"),
   );
   ctx.assertTrue(
-    "confirmed html contient la date",
-    confirmedRendered.html.includes("jeudi 27 août 2026"),
+    "confirmed html contient la fenêtre jeudi→samedi",
+    confirmedRendered.html.includes("entre jeudi 27 août et samedi 29 août"),
+  );
+  ctx.assertTrue(
+    "confirmed html wording sans double entre",
+    confirmedRendered.html.includes("pour la livraison entre jeudi") &&
+      !confirmedRendered.html.includes("livraison du entre") &&
+      !confirmedRendered.html.includes("livraison entre entre"),
   );
   ctx.assertTrue(
     "confirmed html contient CTA modifier",
@@ -102,7 +109,7 @@ const runSuite = async () => {
   const reminderRendered = await renderEmailTemplate("meal-selection-reminder", {
     customerName: "Bob",
     cutoffLabel: "lundi 24 août à 23h59",
-    deliveryDateLabel: "jeudi 27 août 2026",
+    deliveryDateLabel: "entre jeudi 27 août et samedi 29 août",
     mealsCount: 8,
     portalUrl: "https://mileyo-dev.myshopify.com/apps/box-builder/portal",
   });
@@ -320,9 +327,10 @@ const runSuite = async () => {
   });
   ctx.assertEqual("confirmed data name trimmed", confirmedData.customerName, "Alice");
   ctx.assertEqual("confirmed data selectedCount", confirmedData.selectedCount, 2);
-  ctx.assertTrue(
-    "confirmed data deliveryDateLabel formatée",
-    confirmedData.deliveryDateLabel.includes("2026"),
+  ctx.assertEqual(
+    "confirmed data deliveryDateLabel fenêtre jeudi→samedi",
+    confirmedData.deliveryDateLabel,
+    "entre jeudi 27 août et samedi 29 août",
   );
   ctx.assertEqual(
     "confirmed data portalUrl depuis shop",
@@ -340,9 +348,31 @@ const runSuite = async () => {
     "reminder data cutoffLabel présent",
     reminderData.cutoffLabel.length > 0,
   );
-  ctx.assertTrue(
-    "reminder data deliveryDateLabel formatée",
-    reminderData.deliveryDateLabel.includes("2026"),
+  ctx.assertEqual(
+    "reminder data deliveryDateLabel fenêtre jeudi→samedi",
+    reminderData.deliveryDateLabel,
+    "entre jeudi 27 août et samedi 29 août",
+  );
+
+  ctx.assertEqual(
+    "meal selection same-month window",
+    formatMealSelectionDeliveryDateLabel("2026-09-10"),
+    "entre jeudi 10 septembre et samedi 12 septembre",
+  );
+  ctx.assertEqual(
+    "meal selection cross-month window",
+    formatMealSelectionDeliveryDateLabel("2026-04-30"),
+    "entre jeudi 30 avril et samedi 2 mai",
+  );
+  ctx.assertEqual(
+    "meal selection cross-year window",
+    formatMealSelectionDeliveryDateLabel("2026-12-31"),
+    "entre jeudi 31 décembre et samedi 2 janvier",
+  );
+  ctx.assertEqual(
+    "meal selection source thursday unchanged in formatter input semantics",
+    "2026-09-10",
+    "2026-09-10",
   );
 
   ctx.scenario("P. Explicit date identique — confirmation éligible");

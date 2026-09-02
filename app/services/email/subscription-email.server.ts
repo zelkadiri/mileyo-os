@@ -11,6 +11,11 @@ import {
 } from "../../constants/mileyoPortal";
 import { SUBSCRIPTION_CYCLE_TIMEZONE } from "../../constants/subscriptionCycle";
 import db from "../../db.server";
+import {
+  formatDeliveryWindowRangeLabel,
+  getDeliveryWindowEndDate,
+  parseDeliveryDate,
+} from "../../utils/deliveryDate";
 import { isMileyoTransactionalEmailEnabled } from "./email-client.server";
 import type {
   EmailRecipient,
@@ -67,6 +72,11 @@ export const isAllowedSubscriptionPauseCause = (
  */
 export const buildSubscriptionPortalUrl = getMileyoPortalUrl;
 
+/**
+ * Single calendar date for email display (no delivery window).
+ * Prefer {@link formatSubscriptionEmailDeliveryWindowLabel} when communicating
+ * the customer-facing Thursday→Saturday delivery range.
+ */
 export const formatSubscriptionEmailDeliveryDate = (
   value: string | null | undefined,
 ): string | null => {
@@ -87,6 +97,27 @@ export const formatSubscriptionEmailDeliveryDate = (
     year: "numeric",
     timeZone: SUBSCRIPTION_CYCLE_TIMEZONE,
   });
+};
+
+/**
+ * Customer-facing delivery WINDOW for Mileyo emails.
+ * Business input stays the Thursday ISO; display is Thursday→Saturday (+2 days).
+ * Returns `entre jeudi … et samedi …` (no "Livraison" prefix — email labels own that word).
+ */
+export const formatSubscriptionEmailDeliveryWindowLabel = (
+  value: string | null | undefined,
+): string | null => {
+  const parsed = parseDeliveryDate(value?.trim());
+
+  if (!parsed) {
+    return null;
+  }
+
+  return formatDeliveryWindowRangeLabel(
+    parsed,
+    getDeliveryWindowEndDate(parsed),
+    { includeLivraisonPrefix: false },
+  );
 };
 
 export const formatSubscriptionEmailDateTime = (
@@ -189,7 +220,9 @@ export const buildSubscriptionCreatedEmailData = ({
 }): SubscriptionCreatedEmailData => ({
   customerName: customerName?.trim() || null,
   mealsCount: mealsCount ?? null,
-  nextDelivery: formatSubscriptionEmailDeliveryDate(nextScheduledDeliveryDate),
+  nextDelivery: formatSubscriptionEmailDeliveryWindowLabel(
+    nextScheduledDeliveryDate,
+  ),
   portalUrl: buildSubscriptionPortalUrl({ shop, portalUrl }),
 });
 

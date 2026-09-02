@@ -12,6 +12,7 @@ import {
   buildSubscriptionCreatedEmailData,
   buildSubscriptionPausedEmailData,
   formatSubscriptionEmailDeliveryDate,
+  formatSubscriptionEmailDeliveryWindowLabel,
   renderEmailTemplate,
   resolveSubscriptionEmailRecipient,
   shouldSendSubscriptionCreatedEmail,
@@ -81,7 +82,7 @@ const runSuite = async () => {
   const createdRendered = await renderEmailTemplate("subscription-created", {
     customerName: "Alice",
     mealsCount: 8,
-    nextDelivery: "jeudi 28 août 2026",
+    nextDelivery: "entre jeudi 27 août et samedi 29 août",
     portalUrl: "https://mileyo-dev.myshopify.com/apps/box-builder/portal",
   });
   ctx.assertTrue("created html non vide", createdRendered.html.length > 0);
@@ -98,8 +99,8 @@ const runSuite = async () => {
     createdRendered.html.includes("8 repas"),
   );
   ctx.assertTrue(
-    "created html contient nextDelivery",
-    createdRendered.html.includes("jeudi 28 août 2026"),
+    "created html contient nextDelivery fenêtre",
+    createdRendered.html.includes("entre jeudi 27 août et samedi 29 août"),
   );
   ctx.assertTrue(
     "created html contient le lien portail",
@@ -266,16 +267,40 @@ const runSuite = async () => {
   );
 
   ctx.scenario("I. Format date FR + builders");
-  const formattedDelivery = formatSubscriptionEmailDeliveryDate("2026-08-28");
-  ctx.assertTrue(
-    "date livraison formatée en français",
-    formattedDelivery !== null && formattedDelivery.includes("2026"),
+  const formattedSingle = formatSubscriptionEmailDeliveryDate("2026-08-27");
+  ctx.assertEqual(
+    "date unique reste date unique",
+    formattedSingle,
+    "27 août 2026",
+  );
+  const formattedWindow = formatSubscriptionEmailDeliveryWindowLabel(
+    "2026-08-27",
+  );
+  ctx.assertEqual(
+    "fenêtre email jeudi→samedi",
+    formattedWindow,
+    "entre jeudi 27 août et samedi 29 août",
+  );
+  ctx.assertEqual(
+    "fenêtre same-month",
+    formatSubscriptionEmailDeliveryWindowLabel("2026-09-10"),
+    "entre jeudi 10 septembre et samedi 12 septembre",
+  );
+  ctx.assertEqual(
+    "fenêtre cross-month",
+    formatSubscriptionEmailDeliveryWindowLabel("2026-04-30"),
+    "entre jeudi 30 avril et samedi 2 mai",
+  );
+  ctx.assertEqual(
+    "fenêtre cross-year",
+    formatSubscriptionEmailDeliveryWindowLabel("2026-12-31"),
+    "entre jeudi 31 décembre et samedi 2 janvier",
   );
 
   const createdData = buildSubscriptionCreatedEmailData({
     customerName: " Alice ",
     mealsCount: 6,
-    nextScheduledDeliveryDate: "2026-08-28",
+    nextScheduledDeliveryDate: "2026-08-27",
     shop: "mileyo-dev.myshopify.com",
   });
   ctx.assertEqual("created data name trimmed", createdData.customerName, "Alice");
@@ -285,9 +310,10 @@ const runSuite = async () => {
     createdData.portalUrl,
     `https://mileyo-dev.myshopify.com${SUBSCRIPTION_PORTAL_PATH}`,
   );
-  ctx.assertTrue(
-    "created data nextDelivery formatée",
-    Boolean(createdData.nextDelivery && createdData.nextDelivery.length > 0),
+  ctx.assertEqual(
+    "created data nextDelivery fenêtre jeudi→samedi",
+    createdData.nextDelivery,
+    "entre jeudi 27 août et samedi 29 août",
   );
 
   const pausedData = buildSubscriptionPausedEmailData({

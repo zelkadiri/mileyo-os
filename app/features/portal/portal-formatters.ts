@@ -3,7 +3,8 @@ import {
   type PortalSubscriptionState,
 } from "../../constants/subscriptionStatus";
 import {
-  formatDeliveryDateLabel,
+  formatDeliveryWindowRangeLabel,
+  getDeliveryWindowEndDate,
   parseDeliveryDate,
 } from "../../utils/deliveryDate";
 import type { SubscriptionObjective } from "../../constants/subscriptionObjective";
@@ -27,6 +28,11 @@ export const formatFrenchDateTime = (isoDate: string) =>
 export const formatFrenchDate = (isoDate: string) =>
   new Date(isoDate).toLocaleDateString("fr-FR", { dateStyle: "long" });
 
+/**
+ * Customer-facing delivery window derived from the business Thursday date.
+ * Returns `entre jeudi … et samedi …` (no "Livraison" prefix — hero/legacy labels own that word).
+ * Does not alter `nextScheduledDeliveryDate` / business Thursday.
+ */
 export const formatScheduledDeliveryLabel = (
   scheduledDeliveryDate: string | null,
 ) => {
@@ -40,7 +46,11 @@ export const formatScheduledDeliveryLabel = (
     return null;
   }
 
-  return formatDeliveryDateLabel(parsed);
+  return formatDeliveryWindowRangeLabel(
+    parsed,
+    getDeliveryWindowEndDate(parsed),
+    { includeLivraisonPrefix: false },
+  );
 };
 
 export const formatOrderPrice = (price: string | null) => {

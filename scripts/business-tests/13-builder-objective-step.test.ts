@@ -427,6 +427,100 @@ const runSuite = () => {
     ),
   );
 
+  ctx.scenario("G. Objective reassurance highlights — compact, UI only");
+  const objectiveStepSource =
+    renderSource.match(
+      /id="step-objective"[\s\S]*?id="step-formula"/,
+    )?.[0] ?? "";
+  ctx.assertTrue("objective step markup captured", objectiveStepSource.length > 0);
+  ctx.assertTrue(
+    "Sans engagement on objective step",
+    objectiveStepSource.includes("Sans engagement"),
+  );
+  ctx.assertTrue(
+    "Livraison offerte on objective step",
+    objectiveStepSource.includes("Livraison offerte"),
+  );
+  ctx.assertTrue(
+    "highlights block in objective step",
+    objectiveStepSource.includes('class="objective-highlights"'),
+  );
+  ctx.assertTrue(
+    "highlights between lead and grid",
+    /objective-lead[\s\S]*objective-highlights[\s\S]*objective-grid/.test(
+      objectiveStepSource,
+    ),
+  );
+  ctx.assertTrue(
+    "decorative icons aria-hidden",
+    /objective-highlight-icon[\s\S]*aria-hidden="true"/.test(objectiveStepSource),
+  );
+  ctx.assertEqual(
+    "three objective options unchanged",
+    BUILDER_OBJECTIVE_OPTIONS.length,
+    3,
+  );
+  ctx.assertTrue(
+    "renderObjectives still present",
+    clientSource.includes("function renderObjectives"),
+  );
+  ctx.assertTrue(
+    "formula detailed benefits preserved",
+    renderSource.includes('class="formula-benefits"') &&
+      renderSource.includes("Repas halal") &&
+      renderSource.includes("Modifiable chaque semaine"),
+  );
+  ctx.assertTrue(
+    "formula trust section preserved",
+    renderSource.includes('class="trust-section"') &&
+      renderSource.includes("Livraison offerte à domicile") &&
+      renderSource.includes("Sans engagement"),
+  );
+  ctx.assertTrue(
+    "formula FAQ preserved",
+    renderSource.includes('class="faq-section"') &&
+      renderSource.includes("Est-ce sans engagement ?"),
+  );
+
+  ctx.scenario("H. Tunnel promo banner — UI only, objective step intact");
+  const promoBlock =
+    renderSource.match(/class="tunnel-promo"[\s\S]*?<\/div>/)?.[0] ?? "";
+  ctx.assertTrue(
+    "tunnel promo in builder render",
+    renderSource.includes('class="tunnel-promo"'),
+  );
+  ctx.assertTrue(
+    "promo before tunnel header",
+    /tunnel-promo[\s\S]*<header class="tunnel-header"/.test(renderSource),
+  );
+  ctx.assertTrue(
+    "promo uses FIRST_BOX_LAUNCH_DISCOUNT_EUR in title",
+    renderSource.includes("${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € offerts") ||
+      promoBlock.includes("€ offerts sur votre première box"),
+  );
+  ctx.assertTrue(
+    "promo subtitle present",
+    promoBlock.includes("Appliqués automatiquement au paiement"),
+  );
+  ctx.assertEqual(
+    "promo appears once",
+    (renderSource.match(/class="tunnel-promo"/g) ?? []).length,
+    1,
+  );
+  const renderMessageFn =
+    renderSource.match(/export const renderMessage[\s\S]*?`\);/)?.[0] ?? "";
+  ctx.assertFalse(
+    "renderMessage error shell has no promo",
+    renderMessageFn.includes("tunnel-promo"),
+  );
+  ctx.assertFalse(
+    "checkout has no promo discount logic added",
+    /tunnel-promo|20 € offerts/.test(
+      clientSource.match(/function createBuilderCheckout[\s\S]*?\n {2}function /)?.[0] ??
+        "",
+    ),
+  );
+
   return finishSuite("13-builder-objective-step", ctx);
 };
 

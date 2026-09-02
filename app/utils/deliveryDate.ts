@@ -22,12 +22,19 @@ import {
 /** Thursday weekday in JS Date#getDay convention. */
 const DELIVERY_WINDOW_THURSDAY_WEEKDAY = 4;
 
+/**
+ * Display-only offset: customer-visible window ends Saturday = Thursday + 2.
+ * Does not change the business `scheduledDeliveryDate` (always Thursday).
+ */
+const DELIVERY_WINDOW_DISPLAY_END_OFFSET_DAYS = 2;
+
 /** Tuesday and Wednesday — imminent delivery window is skipped after Monday cutoff. */
 const DELIVERY_WINDOW_SKIP_WEEKDAYS = [2, 3] as const;
 
 export type BuilderDeliveryWindowOption = {
   cardLabel: string;
-  fridayDate: DeliveryDateString;
+  /** Visible window end (Saturday) — display only, not the business delivery date. */
+  deliveryWindowEndDate: DeliveryDateString;
   key: DeliveryDateString;
   rangeLabel: string;
   scheduledDeliveryDate: DeliveryDateString;
@@ -981,24 +988,25 @@ const formatDeliveryWindowWeekdayDayMonth = (
 
 export const formatDeliveryWindowRangeLabel = (
   thursdayDate: DeliveryDateString,
-  fridayDate: DeliveryDateString,
-  options?: { locale?: string },
+  deliveryWindowEndDate: DeliveryDateString,
+  options?: { includeLivraisonPrefix?: boolean; locale?: string },
 ): string => {
   const locale = options?.locale ?? "fr-FR";
+  const includeLivraisonPrefix = options?.includeLivraisonPrefix ?? true;
   const thursdayLabel = formatDeliveryWindowWeekdayDayMonth(thursdayDate, locale);
-  const fridayLabel = formatDeliveryWindowWeekdayDayMonth(fridayDate, locale);
-  const thursdayParts = splitDeliveryDate(thursdayDate);
-  const fridayParts = splitDeliveryDate(fridayDate);
-  const sameMonth =
-    thursdayParts.year === fridayParts.year &&
-    thursdayParts.month === fridayParts.month;
+  const endLabel = formatDeliveryWindowWeekdayDayMonth(
+    deliveryWindowEndDate,
+    locale,
+  );
+  const rangeCore = `entre ${thursdayLabel} et ${endLabel}`;
 
-  if (sameMonth) {
-    return `Livraison entre ${thursdayLabel} et ${fridayLabel}`;
-  }
-
-  return `Livraison entre ${thursdayLabel} et ${fridayLabel}`;
+  return includeLivraisonPrefix ? `Livraison ${rangeCore}` : rangeCore;
 };
+
+export const getDeliveryWindowEndDate = (
+  thursdayDate: DeliveryDateString,
+): DeliveryDateString =>
+  addCalendarDays(thursdayDate, DELIVERY_WINDOW_DISPLAY_END_OFFSET_DAYS);
 
 export const buildWeeklyDeliveryWindow = ({
   cardLabel,
@@ -1009,16 +1017,20 @@ export const buildWeeklyDeliveryWindow = ({
   locale?: string;
   thursdayDate: DeliveryDateString;
 }): BuilderDeliveryWindowOption => {
-  const fridayDate = addCalendarDays(thursdayDate, 1);
+  const deliveryWindowEndDate = getDeliveryWindowEndDate(thursdayDate);
   const weekStartDate = getDeliveryWeekStartForDate(thursdayDate);
 
   return {
     cardLabel,
-    fridayDate,
+    deliveryWindowEndDate,
     key: weekStartDate,
-    rangeLabel: formatDeliveryWindowRangeLabel(thursdayDate, fridayDate, {
-      locale,
-    }),
+    rangeLabel: formatDeliveryWindowRangeLabel(
+      thursdayDate,
+      deliveryWindowEndDate,
+      {
+        locale,
+      },
+    ),
     scheduledDeliveryDate: thursdayDate,
     thursdayDate,
     weekStartDate,

@@ -55,7 +55,8 @@ body {
 .tunnel-promo {
   background: linear-gradient(90deg, rgba(124, 201, 167, 0.2), rgba(220, 194, 240, 0.28));
   border-bottom: 1px solid rgba(185, 138, 215, 0.12);
-  padding: 6px 16px;
+  padding: 6px 36px 6px 16px;
+  position: relative;
   text-align: center;
 }
 
@@ -72,6 +73,37 @@ body {
   font-size: 0.72rem;
   line-height: 1.25;
   margin: 1px 0 0;
+}
+
+.tunnel-promo-dismiss {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--mileyo-muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+}
+
+.tunnel-promo-dismiss:hover,
+.tunnel-promo-dismiss:focus-visible {
+  background: rgba(90, 27, 105, 0.08);
+  color: var(--mileyo-purple-black);
+  outline: none;
+}
+
+.tunnel-promo-dismiss-icon {
+  display: block;
+  pointer-events: none;
 }
 
 .visually-hidden {
@@ -651,6 +683,7 @@ body {
   line-height: 1.4;
   margin: 0 auto;
   max-width: 34rem;
+  text-align: center;
 }
 
 .formula-benefits {
@@ -715,6 +748,7 @@ body {
   line-height: 1.5;
   margin: 0 auto;
   max-width: 34rem;
+  text-align: center;
 }
 
 .delivery-window-grid {
@@ -765,6 +799,8 @@ body {
   color: rgba(45, 27, 54, 0.82);
   font-size: 0.88rem;
   font-weight: 500;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .delivery-date-grid {
@@ -892,18 +928,11 @@ body {
 }
 
 .email-offer-note,
-.email-weekly-price,
 .email-privacy {
   color: var(--mileyo-muted);
   font-size: 0.86rem;
   line-height: 1.45;
   margin: 0;
-}
-
-.email-weekly-price {
-  color: var(--mileyo-purple-black);
-  font-weight: 600;
-  margin-top: 8px;
 }
 
 .email-privacy {
@@ -1054,6 +1083,34 @@ body {
   line-height: 1.5;
   margin: 0 auto;
   max-width: 34rem;
+  text-align: center;
+}
+
+.objective-highlights {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  justify-content: center;
+  margin: 0 auto 14px;
+  max-width: 34rem;
+  text-align: center;
+}
+
+.objective-highlight {
+  align-items: center;
+  color: var(--mileyo-text);
+  display: inline-flex;
+  font-size: 0.78rem;
+  font-weight: 600;
+  gap: 5px;
+  line-height: 1.3;
+}
+
+.objective-highlight-icon {
+  color: var(--mileyo-purple);
+  flex-shrink: 0;
+  opacity: 0.88;
 }
 
 .objective-grid {
@@ -1186,7 +1243,19 @@ body {
 .setup-card p {
   color: var(--mileyo-muted);
   font-size: 1rem;
+}
+
+.meals-lead,
+.email-lead,
+.setup-card p {
   margin: 0;
+}
+
+.formula-lead,
+.objective-lead,
+.delivery-lead {
+  margin: 0 auto;
+  text-align: center;
 }
 
 .setup-card {
@@ -1724,13 +1793,14 @@ body {
 }
 
 .meal-detail-drawer-media {
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 3;
   background: linear-gradient(
     135deg,
     rgba(220, 194, 240, 0.28) 0%,
     rgba(239, 196, 214, 0.22) 100%
   );
   border-radius: 18px;
+  flex: 0 0 auto;
   overflow: hidden;
   width: 100%;
 }
@@ -1885,6 +1955,21 @@ body {
 }
 
 @media (max-width: 420px) {
+  .objective-highlights {
+    gap: 5px 10px;
+    margin-bottom: 12px;
+  }
+
+  .objective-highlight {
+    font-size: 0.72rem;
+    gap: 4px;
+  }
+
+  .objective-highlight-icon {
+    height: 13px;
+    width: 13px;
+  }
+
   .meal-nutrition-table {
     padding: 12px 10px 8px;
   }
@@ -2522,7 +2607,7 @@ button:disabled {
   }
 
   .tunnel-promo {
-    padding: 10px 24px;
+    padding: 10px 40px 10px 24px;
   }
 
   .tunnel-promo-title {
@@ -2728,7 +2813,10 @@ button:disabled {
 
   .formula-lead {
     font-size: 1rem;
+    margin-left: auto;
+    margin-right: auto;
     max-width: 36rem;
+    text-align: center;
   }
 
   .formula-benefits {

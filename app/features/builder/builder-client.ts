@@ -69,6 +69,8 @@ export const builderClientScript = `
   var boxHelper = document.getElementById("box-helper");
   var errorMessage = document.getElementById("error-message");
   var tunnelBack = document.getElementById("tunnel-back");
+  var tunnelPromo = document.getElementById("tunnel-promo");
+  var tunnelPromoDismiss = document.getElementById("tunnel-promo-dismiss");
   var tunnelStepLabel = document.getElementById("tunnel-step-label");
   var tunnelProgressFill = document.getElementById("tunnel-progress-fill");
   var objectiveContinue = document.getElementById("objective-continue");
@@ -94,7 +96,6 @@ export const builderClientScript = `
   var emailFooter = document.getElementById("email-footer");
   var emailContinue = document.getElementById("email-continue");
   var emailInput = document.getElementById("checkout-email");
-  var emailWeeklyPrice = document.getElementById("email-weekly-price");
   var recapFooter = document.getElementById("recap-footer");
   var recapContinue = document.getElementById("recap-continue");
   var recapObjective = document.getElementById("recap-objective");
@@ -206,6 +207,14 @@ export const builderClientScript = `
   function formatEurosFromCents(cents) {
     if (typeof cents !== "number" || !Number.isFinite(cents)) return "";
     return formatEuros(cents / 100);
+  }
+
+  /** UI-only label for formula cards — mealCount numeric identity unchanged elsewhere. */
+  function formatBoxMealCountDisplay(mealCount) {
+    if (mealCount === 16 || mealCount === 20 || mealCount === 24) {
+      return mealCount + " repas (Duo)";
+    }
+    return mealCount + " repas";
   }
 
   function parsePriceToCents(price) {
@@ -698,15 +707,6 @@ export const builderClientScript = `
     recapContinue.textContent = "Passer au paiement";
   }
 
-  function updateEmailWeeklyPrice() {
-    if (!emailWeeklyPrice) return;
-    if (!selectedBox || !selectedBox.price) {
-      emailWeeklyPrice.textContent = "";
-      return;
-    }
-    emailWeeklyPrice.textContent = "Puis " + formatEuros(selectedBox.price) + "/semaine.";
-  }
-
   function updateTunnelChrome(step) {
     var isObjective = step === "objectif";
     var isFormula = step === "formule";
@@ -932,7 +932,6 @@ export const builderClientScript = `
       renderDeliveryWindows();
       updateDeliveryCta();
     } else if (step === "email") {
-      updateEmailWeeklyPrice();
       updateEmailCta();
       if (emailInput) {
         emailInput.value = selectedEmail;
@@ -1138,7 +1137,7 @@ export const builderClientScript = `
       if (isAvailable) {
         var mealCount = document.createElement("span");
         mealCount.className = "box-meal-count";
-        mealCount.textContent = box.mealCount + " repas";
+        mealCount.textContent = formatBoxMealCountDisplay(box.mealCount);
         button.appendChild(mealCount);
         appendSubscriptionPricing(button, box);
       } else {
@@ -1826,6 +1825,23 @@ export const builderClientScript = `
 
   window.addEventListener("popstate", handleHistoryNavigation);
   window.addEventListener("hashchange", handleHistoryNavigation);
+
+  (function initTunnelPromoDismiss() {
+    var storageKey = "mileyo-tunnel-promo-dismissed";
+    if (!tunnelPromo) return;
+    try {
+      if (window.sessionStorage.getItem(storageKey) === "1") {
+        tunnelPromo.classList.add("hidden");
+      }
+    } catch (error) {}
+    if (!tunnelPromoDismiss) return;
+    tunnelPromoDismiss.addEventListener("click", function () {
+      tunnelPromo.classList.add("hidden");
+      try {
+        window.sessionStorage.setItem(storageKey, "1");
+      } catch (error) {}
+    });
+  })();
 
   renderObjectives();
   updateObjectiveCta();

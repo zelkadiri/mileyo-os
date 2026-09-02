@@ -36,13 +36,13 @@ export const MealSelectionConfirmedEmail = ({
 
   return (
     <MileyoEmailLayout
-      preview={`Vos repas pour le ${previewDate} sont enregistrés.`}
+      preview={`Vos repas pour la livraison ${previewDate} sont enregistrés.`}
       eyebrow="Votre sélection"
       title="Vos repas sont confirmés"
     >
       <MileyoEmailText>{greeting}</MileyoEmailText>
       <MileyoEmailText>
-        Votre sélection pour la livraison du {deliveryDateLabel} est bien
+        Votre sélection pour la livraison {deliveryDateLabel} est bien
         enregistrée.
       </MileyoEmailText>
       {count > 0 ? (

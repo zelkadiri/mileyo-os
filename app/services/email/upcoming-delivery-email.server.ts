@@ -31,7 +31,7 @@ import { isMileyoTransactionalEmailEnabled } from "./email-client.server";
 import type { UpcomingDeliveryEmailData } from "./email.types";
 import {
   buildSubscriptionPortalUrl,
-  formatSubscriptionEmailDeliveryDate,
+  formatSubscriptionEmailDeliveryWindowLabel,
   resolveSubscriptionEmailRecipient,
   type SubscriptionEmailOrderSource,
   type SubscriptionEmailSelectionSource,
@@ -285,7 +285,8 @@ export const shouldSendUpcomingDeliveryEmail = ({
 
 export const formatUpcomingDeliveryDateLabel = (
   effectiveDeliveryDate: string | null | undefined,
-): string | null => formatSubscriptionEmailDeliveryDate(effectiveDeliveryDate);
+): string | null =>
+  formatSubscriptionEmailDeliveryWindowLabel(effectiveDeliveryDate);
 
 export const buildUpcomingDeliveryEmailData = ({
   customerName,

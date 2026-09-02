@@ -568,6 +568,8 @@ body {
   font-weight: 700;
   letter-spacing: -0.015em;
   line-height: 1.25;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .hero-delivery-value--pending {

@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   buildUpcomingDeliveryEmailData,
+  formatUpcomingDeliveryDateLabel,
   hasUsableUpcomingDeliveryMeals,
   isUpcomingDeliveryCutoffSatisfied,
   isUpcomingDeliveryEmailAlreadySentForDelivery,
@@ -357,9 +358,10 @@ const runSuite = async () => {
   });
   ctx.assertTrue("builder retourne data", data != null);
   ctx.assertEqual("customerName trimmed", data!.customerName, "Alice");
-  ctx.assertTrue(
-    "deliveryDateLabel formatée",
-    data!.deliveryDateLabel.includes("2026"),
+  ctx.assertEqual(
+    "deliveryDateLabel fenêtre jeudi→samedi",
+    data!.deliveryDateLabel,
+    "entre jeudi 27 août et samedi 29 août",
   );
   ctx.assertEqual("mealsCount", data!.mealsCount, 8);
   ctx.assertEqual("selectedMeals length", data!.selectedMeals.length, 2);
@@ -370,10 +372,26 @@ const runSuite = async () => {
     `https://mileyo-dev.myshopify.com${SUBSCRIPTION_PORTAL_PATH}`,
   );
 
+  ctx.assertEqual(
+    "upcoming same-month window",
+    formatUpcomingDeliveryDateLabel("2026-09-10"),
+    "entre jeudi 10 septembre et samedi 12 septembre",
+  );
+  ctx.assertEqual(
+    "upcoming cross-month window",
+    formatUpcomingDeliveryDateLabel("2026-04-30"),
+    "entre jeudi 30 avril et samedi 2 mai",
+  );
+  ctx.assertEqual(
+    "upcoming cross-year window",
+    formatUpcomingDeliveryDateLabel("2026-12-31"),
+    "entre jeudi 31 décembre et samedi 2 janvier",
+  );
+
   ctx.scenario("K. Renderer — UpcomingDeliveryEmail polish");
   const portalUrl = "https://mileyo-dev.myshopify.com/apps/box-builder/portal";
   const baseRenderProps = {
-    deliveryDateLabel: "jeudi 27 août 2026",
+    deliveryDateLabel: "entre jeudi 27 août et samedi 29 août",
     mealsCount: 8,
     portalUrl,
     selectedMeals: ["Poulet curry", "Saumon teriyaki", "Lasagnes"],
@@ -409,7 +427,7 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "date livraison présente",
-    renderedWithName.html.includes("jeudi 27 août 2026"),
+    renderedWithName.html.includes("entre jeudi 27 août et samedi 29 août"),
   );
   ctx.assertTrue(
     "mealsCount rendu",

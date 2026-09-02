@@ -183,6 +183,7 @@ export {
   buildSubscriptionPortalUrl,
   formatSubscriptionEmailDateTime,
   formatSubscriptionEmailDeliveryDate,
+  formatSubscriptionEmailDeliveryWindowLabel,
   isAllowedSubscriptionPauseCause,
   resolveSubscriptionEmailRecipient,
   shouldSendSubscriptionCreatedEmail,

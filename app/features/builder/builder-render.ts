@@ -54,6 +54,20 @@ export const renderBuilder = ({
   <style>${builderStyles}</style>
 </head>
 <body class="tunnel-body">
+  <div class="tunnel-promo" id="tunnel-promo" role="note">
+    <p class="tunnel-promo-title">🎁 ${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € offerts sur votre première box</p>
+    <p class="tunnel-promo-subtitle">Appliqués automatiquement au paiement</p>
+    <button
+      aria-label="Fermer le bandeau promotionnel"
+      class="tunnel-promo-dismiss"
+      id="tunnel-promo-dismiss"
+      type="button"
+    >
+      <svg aria-hidden="true" class="tunnel-promo-dismiss-icon" fill="none" height="14" viewBox="0 0 14 14" width="14" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 3l8 8M11 3L3 11" stroke="currentColor" stroke-linecap="round" stroke-width="1.7"/>
+      </svg>
+    </button>
+  </div>
   <header class="tunnel-header">
     <button class="tunnel-back" id="tunnel-back" type="button">
       <span class="tunnel-back-text tunnel-back-text--objective">← Retour</span>
@@ -81,6 +95,24 @@ export const renderBuilder = ({
         <div class="objective-intro">
           <h1>Quel est votre objectif ?</h1>
           <p class="objective-lead">Choisissez l’objectif qui vous correspond.</p>
+        </div>
+        <div class="objective-highlights" aria-label="Avantages de l'abonnement">
+          <span class="objective-highlight">
+            <svg aria-hidden="true" class="objective-highlight-icon" fill="none" height="14" viewBox="0 0 24 24" width="14" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 3l7 3v6c0 5-3.5 8.5-7 9-3.5-.5-7-4-7-9V6l7-3z" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"/>
+              <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"/>
+            </svg>
+            Sans engagement
+          </span>
+          <span class="objective-highlight">
+            <svg aria-hidden="true" class="objective-highlight-icon" fill="none" height="14" viewBox="0 0 24 24" width="14" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 7h11v8H3V7z" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"/>
+              <path d="M14 10h4l3 3v2h-7v-5z" stroke="currentColor" stroke-linejoin="round" stroke-width="1.8"/>
+              <circle cx="7" cy="17" r="1.8" stroke="currentColor" stroke-width="1.8"/>
+              <circle cx="17" cy="17" r="1.8" stroke="currentColor" stroke-width="1.8"/>
+            </svg>
+            Livraison offerte
+          </span>
         </div>
         <div class="objective-grid" id="objective-grid" role="group" aria-label="Objectifs disponibles"></div>
         <p class="objective-launch-eligibility-note">
@@ -161,7 +193,7 @@ export const renderBuilder = ({
       <div class="delivery-decision">
         <div class="delivery-intro">
           <h1>Choisissez votre semaine de livraison</h1>
-          <p class="delivery-lead">Votre box sera livrée entre jeudi et vendredi.</p>
+          <p class="delivery-lead">Votre box sera livrée entre jeudi et samedi.</p>
         </div>
         <div class="delivery-window-grid" id="delivery-window-grid" role="group" aria-label="Fenêtres de livraison disponibles"></div>
       </div>
@@ -231,7 +263,6 @@ export const renderBuilder = ({
           <p class="email-offer-kicker">Offre de lancement</p>
           <p class="email-offer-title">Nouveaux clients : ${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € de réduction sur votre première box.</p>
           <p class="email-offer-note">La remise est appliquée automatiquement au paiement si vous êtes éligible.</p>
-          <p class="email-weekly-price" id="email-weekly-price"></p>
         </aside>
 
         <p class="email-privacy">Nous utilisons votre e-mail pour vous accompagner dans votre commande et, si nécessaire, vous recontacter au sujet de celle-ci.</p>

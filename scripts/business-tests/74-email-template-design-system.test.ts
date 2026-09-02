@@ -218,7 +218,7 @@ const runSuite = async () => {
     await renderEmailTemplate("subscription-created", {
       customerName: "Alice",
       mealsCount: 8,
-      nextDelivery: "27 août 2026",
+      nextDelivery: "entre jeudi 27 août et samedi 29 août",
       portalUrl,
     }),
     await renderEmailTemplate("subscription-paused", {
@@ -243,7 +243,7 @@ const runSuite = async () => {
     }),
     await renderEmailTemplate("meal-selection-confirmed", {
       customerName: "Fay",
-      deliveryDateLabel: "27 août 2026",
+      deliveryDateLabel: "entre jeudi 27 août et samedi 29 août",
       mealsCount: 2,
       portalUrl,
       selectedCount: 2,
@@ -252,13 +252,13 @@ const runSuite = async () => {
     await renderEmailTemplate("meal-selection-reminder", {
       customerName: "Gus",
       cutoffLabel: "24 août 2026",
-      deliveryDateLabel: "27 août 2026",
+      deliveryDateLabel: "entre jeudi 27 août et samedi 29 août",
       mealsCount: 8,
       portalUrl,
     }),
     await renderEmailTemplate("upcoming-delivery", {
       customerName: "Hana",
-      deliveryDateLabel: "27 août 2026",
+      deliveryDateLabel: "entre jeudi 27 août et samedi 29 août",
       mealsCount: 3,
       portalUrl,
       selectedMeals: ["Poulet curry", "Saumon teriyaki", "Lasagnes"],

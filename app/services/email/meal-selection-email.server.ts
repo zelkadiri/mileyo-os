@@ -28,7 +28,7 @@ import type {
 } from "./email.types";
 import {
   buildSubscriptionPortalUrl,
-  formatSubscriptionEmailDeliveryDate,
+  formatSubscriptionEmailDeliveryWindowLabel,
   resolveSubscriptionEmailRecipient,
   type SubscriptionEmailOrderSource,
   type SubscriptionEmailSelectionSource,
@@ -396,7 +396,7 @@ export const shouldSendMealSelectionReminderEmail = ({
 export const formatMealSelectionDeliveryDateLabel = (
   effectiveDeliveryDate: string | null | undefined,
 ): string | null =>
-  formatSubscriptionEmailDeliveryDate(effectiveDeliveryDate);
+  formatSubscriptionEmailDeliveryWindowLabel(effectiveDeliveryDate);
 
 export const formatMealSelectionCutoffLabel = (
   effectiveDeliveryDate: string | null | undefined,

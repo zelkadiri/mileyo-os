@@ -658,10 +658,38 @@ const runSuite = () => {
     "no subscriptionPrice pricing",
     clientSource.includes("subscriptionPrice"),
   );
-  ctx.assertFalse(
-    "no tunnel promo banner",
-    renderSource.includes("tunnel-promo") ||
-      renderSource.includes("20 € offerts"),
+  const promoBlock =
+    renderSource.match(/class="tunnel-promo"[\s\S]*?<\/div>/)?.[0] ?? "";
+  ctx.assertTrue(
+    "tunnel promo banner present",
+    renderSource.includes('class="tunnel-promo"'),
+  );
+  ctx.assertTrue(
+    "promo before tunnel header",
+    /tunnel-promo[\s\S]*tunnel-header/.test(renderSource),
+  );
+  ctx.assertEqual(
+    "promo appears once in builder render",
+    (renderSource.match(/class="tunnel-promo"/g) ?? []).length,
+    1,
+  );
+  ctx.assertTrue(
+    "promo uses FIRST_BOX_LAUNCH_DISCOUNT_EUR",
+    renderSource.includes("${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € offerts") ||
+      promoBlock.includes(`${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € offerts`),
+  );
+  ctx.assertTrue(
+    "promo mentions première box",
+    promoBlock.includes("première box"),
+  );
+  ctx.assertTrue(
+    "promo subtitle present",
+    promoBlock.includes("Appliqués automatiquement au paiement"),
+  );
+  ctx.assertTrue(
+    "promo dismiss control present",
+    renderSource.includes('id="tunnel-promo-dismiss"') &&
+      clientSource.includes("initTunnelPromoDismiss"),
   );
   ctx.assertFalse(
     "no FAQ remise 20 €",
@@ -1103,6 +1131,57 @@ const runSuite = () => {
     /launchPrice|launchPricePerMeal|discountCents|LAUNCH_DISCOUNT/.test(
       createCheckoutFn,
     ),
+  );
+
+  ctx.scenario("L. Formula card meal count — Duo display (UI only)");
+  ctx.assertTrue(
+    "formatBoxMealCountDisplay helper present",
+    clientSource.includes("function formatBoxMealCountDisplay"),
+  );
+  ctx.assertTrue(
+    "renderBoxes uses display helper",
+    clientSource.includes(
+      "mealCount.textContent = formatBoxMealCountDisplay(box.mealCount)",
+    ),
+  );
+  ctx.assertFalse(
+    "renderBoxes no raw mealCount + repas label",
+    /mealCount\.textContent = box\.mealCount \+ " repas"/.test(clientSource),
+  );
+  ctx.assertFalse(
+    "checkout still uses numeric mealCount",
+    /mealCount: formatBoxMealCountDisplay/.test(createCheckoutFn),
+  );
+
+  const formatBoxMealCountDisplaySource =
+    clientSource.match(
+      /function formatBoxMealCountDisplay\(mealCount\) \{[\s\S]*?\n  \}/,
+    )?.[0] ?? "";
+  ctx.assertTrue(
+    "formatBoxMealCountDisplay body found",
+    formatBoxMealCountDisplaySource.length > 0,
+  );
+  const formatBoxMealCountDisplay = new Function(
+    `${formatBoxMealCountDisplaySource}; return formatBoxMealCountDisplay;`,
+  )() as (mealCount: number) => string;
+
+  ctx.assertEqual("8 repas without Duo", formatBoxMealCountDisplay(8), "8 repas");
+  ctx.assertEqual("10 repas without Duo", formatBoxMealCountDisplay(10), "10 repas");
+  ctx.assertEqual("12 repas without Duo", formatBoxMealCountDisplay(12), "12 repas");
+  ctx.assertEqual(
+    "16 repas with Duo",
+    formatBoxMealCountDisplay(16),
+    "16 repas (Duo)",
+  );
+  ctx.assertEqual(
+    "20 repas with Duo",
+    formatBoxMealCountDisplay(20),
+    "20 repas (Duo)",
+  );
+  ctx.assertEqual(
+    "24 repas with Duo",
+    formatBoxMealCountDisplay(24),
+    "24 repas (Duo)",
   );
 
   return finishSuite("17-builder-v2-box-step", ctx);

@@ -178,9 +178,23 @@ const runSuite = () => {
     "eligibility nuance",
     renderSource.includes("si vous êtes éligible"),
   );
+  ctx.assertFalse(
+    "email weekly price element removed from render",
+    renderSource.includes('id="email-weekly-price"') ||
+      renderSource.includes("email-weekly-price"),
+  );
+  ctx.assertFalse(
+    "updateEmailWeeklyPrice removed from client",
+    clientSource.includes("updateEmailWeeklyPrice"),
+  );
+  ctx.assertFalse(
+    "email step Puis/semaine copy removed from client",
+    clientSource.includes('"Puis " + formatEuros(selectedBox.price) + "/semaine."'),
+  );
   ctx.assertTrue(
-    "Puis weekly copy in client",
-    clientSource.includes('"Puis "') && clientSource.includes("/semaine."),
+    "recap weekly pricing preserved elsewhere",
+    renderSource.includes('id="recap-weekly-price"') &&
+      clientSource.includes("function getBuilderLaunchPricing"),
   );
   ctx.assertTrue(
     "privacy note",
@@ -229,10 +243,40 @@ const runSuite = () => {
     renderSource.includes("Vous bénéficiez de 20") ||
       clientSource.includes("Vous bénéficiez de 20"),
   );
+  const promoBlock =
+    renderSource.match(/class="tunnel-promo"[\s\S]*?<\/div>/)?.[0] ?? "";
+  ctx.assertTrue(
+    "tunnel promo banner present",
+    renderSource.includes('class="tunnel-promo"'),
+  );
+  ctx.assertTrue(
+    "promo before tunnel header",
+    /tunnel-promo[\s\S]*tunnel-header/.test(renderSource),
+  );
+  ctx.assertEqual(
+    "promo appears once in builder render",
+    (renderSource.match(/class="tunnel-promo"/g) ?? []).length,
+    1,
+  );
+  ctx.assertTrue(
+    "promo uses FIRST_BOX_LAUNCH_DISCOUNT_EUR",
+    renderSource.includes("${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € offerts") ||
+      promoBlock.includes(`${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € offerts`),
+  );
+  ctx.assertTrue(
+    "promo mentions première box",
+    promoBlock.includes("première box"),
+  );
+  ctx.assertTrue(
+    "promo subtitle present",
+    promoBlock.includes("Appliqués automatiquement au paiement"),
+  );
   ctx.assertFalse(
-    "no 20 € offerts banner",
-    renderSource.includes("20 € offerts") ||
-      renderSource.includes("tunnel-promo"),
+    "checkout has no promo discount logic added",
+    /tunnel-promo|20 € offerts/.test(
+      clientSource.match(/function createBuilderCheckout[\s\S]*?\n {2}function /)?.[0] ??
+        "",
+    ),
   );
   ctx.assertEqual(
     "UI constant is 20",

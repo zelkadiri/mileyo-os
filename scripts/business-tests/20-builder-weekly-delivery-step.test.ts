@@ -47,7 +47,7 @@ const assertWindowPair = (
   ctx: ReturnType<typeof createBusinessTestContext>,
   referenceDate: string,
   expectedThursday: string,
-  expectedFriday: string,
+  expectedSaturday: string,
   expectedSecondThursday?: ReturnType<typeof requireDate>,
 ) => {
   const options = buildBuilderDeliveryWindowOptionsFromReferenceDate(
@@ -68,9 +68,9 @@ const assertWindowPair = (
     expectedThursday,
   );
   ctx.assertEqual(
-    `${referenceDate} first window friday`,
-    options[0]?.fridayDate,
-    expectedFriday,
+    `${referenceDate} first window saturday`,
+    options[0]?.deliveryWindowEndDate,
+    expectedSaturday,
   );
   ctx.assertEqual(
     `${referenceDate} second window thursday`,
@@ -78,26 +78,26 @@ const assertWindowPair = (
     secondThursday,
   );
   ctx.assertEqual(
-    `${referenceDate} second window friday`,
-    options[1]?.fridayDate,
-    addCalendarDays(secondThursday, 1),
+    `${referenceDate} second window saturday`,
+    options[1]?.deliveryWindowEndDate,
+    addCalendarDays(secondThursday, 2),
   );
 };
 
 const runSuite = () => {
   const ctx = createBusinessTestContext("20-builder-weekly-delivery-step");
 
-  ctx.scenario("Matrice centrale — fenêtres jeudi/vendredi août 2026");
-  assertWindowPair(ctx, "2026-08-13", "2026-08-20", "2026-08-21");
-  assertWindowPair(ctx, "2026-08-14", "2026-08-20", "2026-08-21");
-  assertWindowPair(ctx, "2026-08-15", "2026-08-20", "2026-08-21");
-  assertWindowPair(ctx, "2026-08-16", "2026-08-20", "2026-08-21");
-  assertWindowPair(ctx, "2026-08-17", "2026-08-20", "2026-08-21");
-  assertWindowPair(ctx, "2026-08-18", "2026-08-27", "2026-08-28", requireDate("2026-09-03"));
-  assertWindowPair(ctx, "2026-08-19", "2026-08-27", "2026-08-28", requireDate("2026-09-03"));
-  assertWindowPair(ctx, "2026-08-20", "2026-08-27", "2026-08-28", requireDate("2026-09-03"));
+  ctx.scenario("Matrice centrale — fenêtres jeudi/samedi août 2026");
+  assertWindowPair(ctx, "2026-08-13", "2026-08-20", "2026-08-22");
+  assertWindowPair(ctx, "2026-08-14", "2026-08-20", "2026-08-22");
+  assertWindowPair(ctx, "2026-08-15", "2026-08-20", "2026-08-22");
+  assertWindowPair(ctx, "2026-08-16", "2026-08-20", "2026-08-22");
+  assertWindowPair(ctx, "2026-08-17", "2026-08-20", "2026-08-22");
+  assertWindowPair(ctx, "2026-08-18", "2026-08-27", "2026-08-29", requireDate("2026-09-03"));
+  assertWindowPair(ctx, "2026-08-19", "2026-08-27", "2026-08-29", requireDate("2026-09-03"));
+  assertWindowPair(ctx, "2026-08-20", "2026-08-27", "2026-08-29", requireDate("2026-09-03"));
 
-  ctx.scenario("Monday 23:59 Paris reste sur 20–21 / 27–28");
+  ctx.scenario("Monday 23:59 Paris reste sur 20–22 / 27–29");
   const mondayLate = parisWallClockToInstant({
     date: requireDate("2026-08-17"),
     hour: 23,
@@ -111,7 +111,7 @@ const runSuite = () => {
   ctx.assertEqual("monday 23:59 first thursday", mondayLateOptions[0]?.thursdayDate, "2026-08-20");
   ctx.assertEqual("monday 23:59 second thursday", mondayLateOptions[1]?.thursdayDate, "2026-08-27");
 
-  ctx.scenario("Tuesday 00:00 Paris bascule vers 27–28 / 03–04");
+  ctx.scenario("Tuesday 00:00 Paris bascule vers 27–29 / 03–05");
   const tuesdayStart = parisWallClockToInstant({
     date: requireDate("2026-08-18"),
     hour: 0,
@@ -149,9 +149,9 @@ const runSuite = () => {
       option.thursdayDate,
     );
     ctx.assertEqual(
-      `${option.key} friday is thursday + 1`,
-      option.fridayDate,
-      addCalendarDays(option.thursdayDate, 1),
+      `${option.key} saturday is thursday + 2`,
+      option.deliveryWindowEndDate,
+      addCalendarDays(option.thursdayDate, 2),
     );
     ctx.assertEqual(
       `${option.key} weekStart is monday`,
@@ -159,15 +159,23 @@ const runSuite = () => {
       getDeliveryWeekStartForDate(option.thursdayDate),
     );
     ctx.assertEqual(`${option.key} key equals weekStartDate`, option.key, option.weekStartDate);
+    ctx.assertTrue(
+      `${option.key} rangeLabel contains samedi not vendredi end`,
+      option.rangeLabel.includes("samedi") && !option.rangeLabel.includes("vendredi"),
+    );
   }
 
   ctx.scenario("Boundaries — fin de mois et année");
   const decemberOptions = buildBuilderDeliveryWindowOptionsFromReferenceDate(
     requireDate("2026-12-28"),
   );
-  ctx.assertEqual("december cross-month first thursday", decemberOptions[0]?.thursdayDate, "2026-12-31");
-  ctx.assertEqual("december cross-month first friday", decemberOptions[0]?.fridayDate, "2027-01-01");
-  ctx.assertEqual("december cross-month second thursday", decemberOptions[1]?.thursdayDate, "2027-01-07");
+  ctx.assertEqual("december cross-year first thursday", decemberOptions[0]?.thursdayDate, "2026-12-31");
+  ctx.assertEqual("december cross-year first saturday", decemberOptions[0]?.deliveryWindowEndDate, "2027-01-02");
+  ctx.assertEqual("december cross-year second thursday", decemberOptions[1]?.thursdayDate, "2027-01-07");
+  ctx.assertTrue(
+    "december cross-year range mentions janvier",
+    decemberOptions[0]?.rangeLabel.includes("janvier") === true,
+  );
 
   ctx.scenario("Boundaries — février");
   const februaryOptions = buildBuilderDeliveryWindowOptionsFromReferenceDate(
@@ -291,29 +299,37 @@ const runSuite = () => {
     "2026-08-27",
   );
 
-  ctx.scenario("Format FR range label");
+  ctx.scenario("Format FR range label — même mois / mois / année");
   ctx.assertEqual(
     "same month range label",
     formatDeliveryWindowRangeLabel(
-      requireDate("2026-08-20"),
-      requireDate("2026-08-21"),
+      requireDate("2026-09-10"),
+      requireDate("2026-09-12"),
     ),
-    "Livraison entre jeudi 20 août et vendredi 21 août",
+    "Livraison entre jeudi 10 septembre et samedi 12 septembre",
   );
   ctx.assertEqual(
     "cross month range label",
     formatDeliveryWindowRangeLabel(
-      requireDate("2026-08-27"),
-      requireDate("2026-08-28"),
-    ).includes("août"),
-    true,
+      requireDate("2026-04-30"),
+      requireDate("2026-05-02"),
+    ),
+    "Livraison entre jeudi 30 avril et samedi 2 mai",
+  );
+  ctx.assertEqual(
+    "cross year range label",
+    formatDeliveryWindowRangeLabel(
+      requireDate("2026-12-31"),
+      requireDate("2027-01-02"),
+    ),
+    "Livraison entre jeudi 31 décembre et samedi 2 janvier",
   );
   ctx.assertTrue(
-    "cross month september label",
-    formatDeliveryWindowRangeLabel(
-      requireDate("2026-08-27"),
-      requireDate("2026-09-04"),
-    ).includes("septembre"),
+    "range label no longer uses vendredi as window end",
+    !formatDeliveryWindowRangeLabel(
+      requireDate("2026-09-10"),
+      requireDate("2026-09-12"),
+    ).includes("vendredi"),
   );
 
   ctx.scenario("Builder source — weekly payload and no auto-select");
@@ -356,6 +372,14 @@ const runSuite = () => {
   ctx.assertTrue(
     "render weekly step title",
     renderSource.includes("Choisissez votre semaine de livraison"),
+  );
+  ctx.assertTrue(
+    "render static lead says jeudi et samedi",
+    renderSource.includes("Votre box sera livrée entre jeudi et samedi."),
+  );
+  ctx.assertFalse(
+    "render static lead no longer says vendredi",
+    renderSource.includes("entre jeudi et vendredi"),
   );
   ctx.assertTrue(
     "weekly card labels defined server-side",

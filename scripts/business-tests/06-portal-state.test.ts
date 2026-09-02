@@ -53,10 +53,35 @@ const runSuite = () => {
     projected.effectiveDeliveryDate,
     "2026-07-23",
   );
+  const projectedLabel = formatScheduledDeliveryLabel(
+    projected.effectiveDeliveryDate,
+  );
   ctx.assertEqual(
-    "portal delivery label formatted in French",
-    formatScheduledDeliveryLabel(projected.effectiveDeliveryDate)?.includes("juillet"),
-    true,
+    "portal delivery label is thursday→saturday window",
+    projectedLabel,
+    "entre jeudi 23 juillet et samedi 25 juillet",
+  );
+  ctx.assertTrue(
+    "portal delivery label omits Livraison prefix for hero",
+    projectedLabel !== null && !projectedLabel.startsWith("Livraison"),
+  );
+
+  ctx.scenario("Portail — fenêtre d'affichage dérivée du jeudi métier");
+  ctx.given("nextScheduledDeliveryDate reste un jeudi ISO");
+  ctx.assertEqual(
+    "source thursday unchanged for september window",
+    formatScheduledDeliveryLabel("2026-09-10"),
+    "entre jeudi 10 septembre et samedi 12 septembre",
+  );
+  ctx.assertEqual(
+    "cross-month display from thursday 30 avril",
+    formatScheduledDeliveryLabel("2026-04-30"),
+    "entre jeudi 30 avril et samedi 2 mai",
+  );
+  ctx.assertEqual(
+    "cross-year display from thursday 31 décembre",
+    formatScheduledDeliveryLabel("2026-12-31"),
+    "entre jeudi 31 décembre et samedi 2 janvier",
   );
 
   ctx.scenario("Portail affiche cutoff cohérent sur date projetée");
