@@ -167,19 +167,23 @@ const runSuite = () => {
   );
 
   ctx.scenario("C. Step order — objectif first");
-  ctx.assertEqual("step count is 6", BUILDER_STEP_COUNT, 6);
+  ctx.assertEqual("step count is 5", BUILDER_STEP_COUNT, 5);
   ctx.assertEqual("first step is objectif", BUILDER_STEPS[0], "objectif");
   ctx.assertEqual(
     "full step order",
     BUILDER_STEPS.join("→"),
-    "objectif→formule→livraison→repas→email→recap",
+    "objectif→formule→livraison→repas→email",
   );
   ctx.assertEqual("objectif index", getBuilderStepIndex("objectif"), 0);
   ctx.assertEqual("formule index", getBuilderStepIndex("formule"), 1);
   ctx.assertEqual("livraison index", getBuilderStepIndex("livraison"), 2);
   ctx.assertEqual("repas index", getBuilderStepIndex("repas"), 3);
   ctx.assertEqual("email index", getBuilderStepIndex("email"), 4);
-  ctx.assertEqual("recap index", getBuilderStepIndex("recap"), 5);
+  ctx.assertEqual("email is last", BUILDER_STEPS[4], "email");
+  ctx.assertFalse(
+    "recap removed from BUILDER_STEPS",
+    (BUILDER_STEPS as readonly string[]).includes("recap"),
+  );
   ctx.assertEqual(
     "internal formule id preserved (UX copy is Box)",
     BUILDER_STEPS[1],
@@ -224,43 +228,41 @@ const runSuite = () => {
     );
   }
 
-  ctx.scenario("Progress labels for 6 steps");
+  ctx.scenario("Progress labels for 5 steps");
   ctx.assertEqual(
     "objectif label",
     getBuilderStepLabel("objectif"),
-    "Étape 1 sur 6",
+    "Étape 1 sur 5",
   );
   ctx.assertEqual(
     "formule label",
     getBuilderStepLabel("formule"),
-    "Étape 2 sur 6",
+    "Étape 2 sur 5",
   );
   ctx.assertEqual(
     "livraison label",
     getBuilderStepLabel("livraison"),
-    "Étape 3 sur 6",
+    "Étape 3 sur 5",
   );
-  ctx.assertEqual("repas label", getBuilderStepLabel("repas"), "Étape 4 sur 6");
-  ctx.assertEqual("email label", getBuilderStepLabel("email"), "Étape 5 sur 6");
-  ctx.assertEqual("recap label", getBuilderStepLabel("recap"), "Étape 6 sur 6");
+  ctx.assertEqual("repas label", getBuilderStepLabel("repas"), "Étape 4 sur 5");
+  ctx.assertEqual("email label", getBuilderStepLabel("email"), "Étape 5 sur 5");
   ctx.assertEqual(
     "objectif progress",
     getBuilderStepProgressPercent("objectif"),
-    17,
+    20,
   );
   ctx.assertEqual(
     "formule progress",
     getBuilderStepProgressPercent("formule"),
-    33,
+    40,
   );
   ctx.assertEqual(
     "livraison progress",
     getBuilderStepProgressPercent("livraison"),
-    50,
+    60,
   );
-  ctx.assertEqual("repas progress", getBuilderStepProgressPercent("repas"), 67);
-  ctx.assertEqual("email progress", getBuilderStepProgressPercent("email"), 83);
-  ctx.assertEqual("recap progress", getBuilderStepProgressPercent("recap"), 100);
+  ctx.assertEqual("repas progress", getBuilderStepProgressPercent("repas"), 80);
+  ctx.assertEqual("email progress", getBuilderStepProgressPercent("email"), 100);
 
   ctx.scenario("F. Objective launch pricing — shared helper, same reference box");
   const labels = getObjectiveStartingPriceLabels(pricedBoxes);

@@ -76,11 +76,10 @@ export const renderBuilder = ({
       <span class="tunnel-back-text tunnel-back-text--meals-long">← Livraison</span>
       <span class="tunnel-back-text tunnel-back-text--meals-short">← Livraison</span>
       <span class="tunnel-back-text tunnel-back-text--email">← Repas</span>
-      <span class="tunnel-back-text tunnel-back-text--recap">← Email</span>
     </button>
     ${renderMileyoLogoImg("tunnel-logo")}
     <div class="tunnel-progress-block">
-      <p class="tunnel-step-label" id="tunnel-step-label">Étape 1 sur 6</p>
+      <p class="tunnel-step-label" id="tunnel-step-label">Étape 1 sur 5</p>
       <div aria-hidden="true" class="tunnel-progress">
         <div class="tunnel-progress-fill" id="tunnel-progress-fill"></div>
       </div>
@@ -259,6 +258,36 @@ export const renderBuilder = ({
           />
         </label>
 
+        <div
+          aria-labelledby="email-mini-recap-title"
+          class="email-mini-recap"
+          id="email-mini-recap"
+        >
+          <h2 class="email-mini-recap-title" id="email-mini-recap-title">Votre sélection</h2>
+          <dl class="email-mini-recap-list">
+            <div class="email-mini-recap-row">
+              <dt>Formule</dt>
+              <dd id="email-mini-recap-box"></dd>
+            </div>
+            <div class="email-mini-recap-row">
+              <dt>Objectif</dt>
+              <dd id="email-mini-recap-objective"></dd>
+            </div>
+            <div class="email-mini-recap-row">
+              <dt>Livraison</dt>
+              <dd id="email-mini-recap-delivery"></dd>
+            </div>
+            <div class="email-mini-recap-row">
+              <dt>Plats</dt>
+              <dd id="email-mini-recap-meals"></dd>
+            </div>
+            <div class="email-mini-recap-row email-mini-recap-row--price">
+              <dt>Première box</dt>
+              <dd id="email-mini-recap-price"></dd>
+            </div>
+          </dl>
+        </div>
+
         <aside class="email-offer-card" aria-label="Offre de lancement">
           <p class="email-offer-kicker">Offre de lancement</p>
           <p class="email-offer-title">Nouveaux clients : ${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € de réduction sur votre première box.</p>
@@ -266,54 +295,6 @@ export const renderBuilder = ({
         </aside>
 
         <p class="email-privacy">Nous utilisons votre e-mail pour vous accompagner dans votre commande et, si nécessaire, vous recontacter au sujet de celle-ci.</p>
-      </div>
-    </section>
-
-    <section class="builder-step builder-step--recap hidden" id="step-recap">
-      <div class="recap-decision">
-        <div class="recap-intro">
-          <h1>Votre box</h1>
-          <p class="recap-lead">Vérifiez votre sélection avant de passer au paiement.</p>
-        </div>
-
-        <div class="recap-card">
-          <section class="recap-section" aria-label="Objectif">
-            <h2 class="recap-section-label">Objectif</h2>
-            <p class="recap-section-value" id="recap-objective"></p>
-          </section>
-
-          <section class="recap-section" aria-label="Box">
-            <h2 class="recap-section-label">Box</h2>
-            <p class="recap-section-value" id="recap-box"></p>
-            <div class="recap-pricing" id="recap-pricing">
-              <p class="recap-launch-price" id="recap-launch-price"></p>
-              <p class="recap-per-meal" id="recap-per-meal"></p>
-              <p class="recap-weekly-price" id="recap-weekly-price"></p>
-              <p class="recap-eligible-note">*Pour les nouveaux clients éligibles. Remise automatique appliquée au paiement par Shopify.</p>
-            </div>
-          </section>
-
-          <section class="recap-section" aria-label="Livraison">
-            <h2 class="recap-section-label">Livraison</h2>
-            <p class="recap-section-value" id="recap-delivery"></p>
-          </section>
-
-          <section class="recap-section" aria-label="Vos repas">
-            <h2 class="recap-section-label">Vos repas</h2>
-            <ul class="recap-meals" id="recap-meals"></ul>
-          </section>
-
-          <section class="recap-section" aria-label="Email">
-            <h2 class="recap-section-label">Email</h2>
-            <p class="recap-section-value recap-email" id="recap-email"></p>
-          </section>
-        </div>
-
-        <aside class="email-offer-card" aria-label="Offre de lancement">
-          <p class="email-offer-kicker">Offre de lancement</p>
-          <p class="email-offer-title">Nouveaux clients : ${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € de réduction sur votre première box.</p>
-          <p class="email-offer-note">La remise est appliquée automatiquement au paiement si vous êtes éligible.</p>
-        </aside>
       </div>
     </section>
   </main>
@@ -336,10 +317,6 @@ export const renderBuilder = ({
 
   <footer class="tunnel-footer email-footer hidden" id="email-footer">
     <button class="tunnel-cta" disabled id="email-continue" type="button">Entrez votre e-mail</button>
-  </footer>
-
-  <footer class="tunnel-footer recap-footer hidden" id="recap-footer">
-    <button class="tunnel-cta" id="recap-continue" type="button">Passer au paiement</button>
   </footer>
 
   <div

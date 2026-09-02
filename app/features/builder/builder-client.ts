@@ -19,7 +19,6 @@ const builderStepLabelsJson = JSON.stringify({
   formule: getBuilderStepLabel("formule"),
   livraison: getBuilderStepLabel("livraison"),
   objectif: getBuilderStepLabel("objectif"),
-  recap: getBuilderStepLabel("recap"),
   repas: getBuilderStepLabel("repas"),
 });
 
@@ -28,7 +27,6 @@ const builderStepProgressJson = JSON.stringify({
   formule: getBuilderStepProgressPercent("formule"),
   livraison: getBuilderStepProgressPercent("livraison"),
   objectif: getBuilderStepProgressPercent("objectif"),
-  recap: getBuilderStepProgressPercent("recap"),
   repas: getBuilderStepProgressPercent("repas"),
 });
 
@@ -96,17 +94,11 @@ export const builderClientScript = `
   var emailFooter = document.getElementById("email-footer");
   var emailContinue = document.getElementById("email-continue");
   var emailInput = document.getElementById("checkout-email");
-  var recapFooter = document.getElementById("recap-footer");
-  var recapContinue = document.getElementById("recap-continue");
-  var recapObjective = document.getElementById("recap-objective");
-  var recapBox = document.getElementById("recap-box");
-  var recapLaunchPrice = document.getElementById("recap-launch-price");
-  var recapPerMeal = document.getElementById("recap-per-meal");
-  var recapWeeklyPrice = document.getElementById("recap-weekly-price");
-  var recapPricing = document.getElementById("recap-pricing");
-  var recapDelivery = document.getElementById("recap-delivery");
-  var recapMeals = document.getElementById("recap-meals");
-  var recapEmail = document.getElementById("recap-email");
+  var emailMiniRecapBox = document.getElementById("email-mini-recap-box");
+  var emailMiniRecapObjective = document.getElementById("email-mini-recap-objective");
+  var emailMiniRecapDelivery = document.getElementById("email-mini-recap-delivery");
+  var emailMiniRecapMeals = document.getElementById("email-mini-recap-meals");
+  var emailMiniRecapPrice = document.getElementById("email-mini-recap-price");
   var CAPTURE_LEAD_INTENT = ${JSON.stringify(CAPTURE_CHECKOUT_LEAD_INTENT)};
   var CREATE_CHECKOUT_INTENT = ${JSON.stringify(CREATE_BUILDER_CHECKOUT_INTENT)};
   var CART_PREPARE_ERROR = ${JSON.stringify(BUILDER_CART_PREPARE_ERROR)};
@@ -676,15 +668,16 @@ export const builderClientScript = `
     );
   }
 
-  function canEnterRecapStep() {
-    return canEnterEmailStep() && isBuilderEmailValid(selectedEmail) && isCapturedLeadFresh();
-  }
-
   function updateEmailCta() {
     if (!emailContinue) return;
     if (isSubmittingLead) {
       emailContinue.disabled = true;
       emailContinue.textContent = "Un instant…";
+      return;
+    }
+    if (isSubmittingCheckout) {
+      emailContinue.disabled = true;
+      emailContinue.textContent = "Préparation du paiement…";
       return;
     }
     if (!isBuilderEmailValid(selectedEmail)) {
@@ -693,18 +686,7 @@ export const builderClientScript = `
       return;
     }
     emailContinue.disabled = false;
-    emailContinue.textContent = "Continuer";
-  }
-
-  function updateRecapCta() {
-    if (!recapContinue) return;
-    if (isSubmittingCheckout) {
-      recapContinue.disabled = true;
-      recapContinue.textContent = "Préparation du paiement…";
-      return;
-    }
-    recapContinue.disabled = !canEnterRecapStep();
-    recapContinue.textContent = "Passer au paiement";
+    emailContinue.textContent = "Passer au paiement";
   }
 
   function updateTunnelChrome(step) {
@@ -713,14 +695,12 @@ export const builderClientScript = `
     var isDelivery = step === "livraison";
     var isMeals = step === "repas";
     var isEmail = step === "email";
-    var isRecap = step === "recap";
     currentStep = step;
     document.body.classList.toggle("is-step-objective", isObjective);
     document.body.classList.toggle("is-step-formule", isFormula);
     document.body.classList.toggle("is-step-meals", isMeals);
     document.body.classList.toggle("is-step-livraison", isDelivery);
     document.body.classList.toggle("is-step-email", isEmail);
-    document.body.classList.toggle("is-step-recap", isRecap);
 
     if (tunnelStepLabel) {
       tunnelStepLabel.textContent = STEP_LABELS[step] || ("Étape 1 sur " + STEP_COUNT);
@@ -731,15 +711,13 @@ export const builderClientScript = `
         "is-step-2",
         "is-step-3",
         "is-step-4",
-        "is-step-5",
-        "is-step-6"
+        "is-step-5"
       );
       if (isObjective) tunnelProgressFill.classList.add("is-step-1");
       else if (isFormula) tunnelProgressFill.classList.add("is-step-2");
       else if (isDelivery) tunnelProgressFill.classList.add("is-step-3");
       else if (isMeals) tunnelProgressFill.classList.add("is-step-4");
       else if (isEmail) tunnelProgressFill.classList.add("is-step-5");
-      else if (isRecap) tunnelProgressFill.classList.add("is-step-6");
       var percent = STEP_PROGRESS[step];
       if (typeof percent === "number") {
         tunnelProgressFill.style.width = percent + "%";
@@ -750,7 +728,6 @@ export const builderClientScript = `
       tunnelBack.classList.toggle("is-delivery-step", isDelivery);
       tunnelBack.classList.toggle("is-meals-step", isMeals);
       tunnelBack.classList.toggle("is-email-step", isEmail);
-      tunnelBack.classList.toggle("is-recap-step", isRecap);
     }
     if (objectiveFooter) {
       objectiveFooter.classList.toggle("hidden", !isObjective);
@@ -767,9 +744,6 @@ export const builderClientScript = `
     if (emailFooter) {
       emailFooter.classList.toggle("hidden", !isEmail);
     }
-    if (recapFooter) {
-      recapFooter.classList.toggle("hidden", !isRecap);
-    }
     if (mealsLead && selectedBox && requiredMeals) {
       mealsLead.textContent = "Pour votre box de " + requiredMeals + " repas";
     }
@@ -783,94 +757,50 @@ export const builderClientScript = `
     return match ? match.label : "";
   }
 
-  function formatRecapMealLabel(title, quantity) {
-    return quantity > 1 ? title + " ×" + quantity : title;
-  }
-
-  function renderRecap() {
-    if (recapObjective) {
-      recapObjective.textContent = findObjectiveLabel(selectedObjective);
+  /** Display-only summary on the email step — no lead/checkout side effects. */
+  function renderEmailMiniRecap() {
+    if (emailMiniRecapBox) {
+      emailMiniRecapBox.textContent = selectedBox
+        ? formatBoxMealCountDisplay(selectedBox.mealCount)
+        : "";
     }
-    if (recapBox) {
-      recapBox.textContent = selectedBox ? selectedBox.mealCount + " repas" : "";
+    if (emailMiniRecapObjective) {
+      emailMiniRecapObjective.textContent = findObjectiveLabel(selectedObjective);
     }
-    if (recapPricing) {
+    if (emailMiniRecapDelivery) {
+      var selectedWindow = findDeliveryWindowOption(selectedDeliveryWindowKey);
+      emailMiniRecapDelivery.textContent = selectedWindow ? selectedWindow.rangeLabel : "";
+    }
+    if (emailMiniRecapMeals) {
+      var total = selectedTotal();
+      var required = selectedBox && selectedBox.mealCount != null
+        ? selectedBox.mealCount
+        : requiredMeals;
+      emailMiniRecapMeals.textContent =
+        total + " / " + required + " plats sélectionnés";
+    }
+    if (emailMiniRecapPrice) {
       var launchPricing =
         selectedBox && selectedBox.price
           ? getBuilderLaunchPricing(selectedBox.price, selectedBox.mealCount)
           : null;
-      if (launchPricing) {
-        recapPricing.classList.remove("is-regular-only");
-        if (recapLaunchPrice) {
-          recapLaunchPrice.textContent =
-            formatEurosFromCents(launchPricing.launchPriceCents) + " la première box*";
-        }
-        if (recapPerMeal) {
-          recapPerMeal.textContent =
-            formatEurosFromCents(launchPricing.launchPricePerMealCents) + " / repas";
-        }
-        if (recapWeeklyPrice) {
-          recapWeeklyPrice.textContent =
-            "Puis " + formatEurosFromCents(launchPricing.regularPriceCents) + " / semaine";
-        }
-      } else {
-        recapPricing.classList.add("is-regular-only");
-        if (recapLaunchPrice) {
-          recapLaunchPrice.textContent = "";
-        }
-        if (recapPerMeal) {
-          recapPerMeal.textContent = "";
-        }
-        if (recapWeeklyPrice) {
-          recapWeeklyPrice.textContent =
-            selectedBox && selectedBox.price
-              ? formatEuros(selectedBox.price) + " / semaine"
-              : "";
-        }
-      }
+      emailMiniRecapPrice.textContent = launchPricing
+        ? formatEurosFromCents(launchPricing.launchPriceCents) + " la première box*"
+        : "";
     }
-    if (recapDelivery) {
-      var selectedWindow = findDeliveryWindowOption(selectedDeliveryWindowKey);
-      recapDelivery.textContent = selectedWindow ? selectedWindow.rangeLabel : "";
-    }
-    if (recapMeals) {
-      recapMeals.innerHTML = "";
-      (data.meals || []).forEach(function (meal) {
-        if (selectedObjective && meal.objective && meal.objective !== selectedObjective) {
-          return;
-        }
-        var quantity = selectedMeals[meal.variantId] || 0;
-        if (quantity <= 0) return;
-        var item = document.createElement("li");
-        item.textContent = formatRecapMealLabel(meal.title, quantity);
-        recapMeals.appendChild(item);
-      });
-    }
-    if (recapEmail) {
-      recapEmail.textContent = selectedEmail;
-    }
-    updateRecapCta();
   }
 
   function showStep(step, options) {
     var pushHistory = !options || options.pushHistory !== false;
     var replaceHistory = options && options.replaceHistory;
 
+    // Legacy step id "recap" remapped to email (guards fall back if incomplete).
+    if (step === "recap") {
+      step = "email";
+    }
+
     if (!isValidObjective(selectedObjective) && step !== "objectif") {
       step = "objectif";
-    }
-    if (step === "recap") {
-      if (!isValidObjective(selectedObjective)) {
-        step = "objectif";
-      } else if (!selectedBox || !selectedBox.sellingPlanId) {
-        step = "formule";
-      } else if (!isSelectedDeliveryWindowValid()) {
-        step = "livraison";
-      } else if (!isMealsSelectionComplete()) {
-        step = "repas";
-      } else if (!isBuilderEmailValid(selectedEmail) || !isCapturedLeadFresh()) {
-        step = "email";
-      }
     }
     if (step === "email") {
       if (!isValidObjective(selectedObjective)) {
@@ -892,7 +822,7 @@ export const builderClientScript = `
     if (step === "livraison" && !selectedBox) {
       step = "formule";
     }
-    if ((step === "formule" || step === "livraison" || step === "repas" || step === "email" || step === "recap") && !isValidObjective(selectedObjective)) {
+    if ((step === "formule" || step === "livraison" || step === "repas" || step === "email") && !isValidObjective(selectedObjective)) {
       step = "objectif";
     }
 
@@ -911,10 +841,6 @@ export const builderClientScript = `
     if (stepEmail) {
       stepEmail.classList.toggle("hidden", step !== "email");
     }
-    var stepRecap = document.getElementById("step-recap");
-    if (stepRecap) {
-      stepRecap.classList.toggle("hidden", step !== "recap");
-    }
 
     if (step === "objectif") {
       renderObjectives();
@@ -932,12 +858,11 @@ export const builderClientScript = `
       renderDeliveryWindows();
       updateDeliveryCta();
     } else if (step === "email") {
+      renderEmailMiniRecap();
       updateEmailCta();
       if (emailInput) {
         emailInput.value = selectedEmail;
       }
-    } else if (step === "recap") {
-      renderRecap();
     } else {
       syncMealFiltersDraftFromSelected();
       renderMealFilters();
@@ -960,10 +885,6 @@ export const builderClientScript = `
       history.back();
       return;
     }
-    if (currentStep === "recap") {
-      showStep("email", { pushHistory: false });
-      return;
-    }
     if (currentStep === "email") {
       showStep("repas", { pushHistory: false });
       return;
@@ -982,7 +903,7 @@ export const builderClientScript = `
   }
 
   function handleTunnelBack() {
-    if (currentStep === "recap" || currentStep === "email" || currentStep === "repas" || currentStep === "livraison" || currentStep === "formule") {
+    if (currentStep === "email" || currentStep === "repas" || currentStep === "livraison" || currentStep === "formule") {
       goToPreviousStep();
       return;
     }
@@ -995,8 +916,9 @@ export const builderClientScript = `
       showStep("objectif", { pushHistory: false });
       return;
     }
-    if (hash === "recap" && canEnterRecapStep()) {
-      showStep("recap", { pushHistory: false });
+    // Legacy hash: never open dead recap step / never auto-checkout.
+    if (hash === "recap") {
+      showStep("email", { pushHistory: false });
       return;
     }
     if (hash === "email" && canEnterEmailStep()) {
@@ -1588,32 +1510,23 @@ export const builderClientScript = `
     });
   }
 
-  function redirectInvalidCheckoutState() {
-    if (!isValidObjective(selectedObjective)) {
-      showStep("objectif");
-      return true;
-    }
-    if (!selectedBox || !selectedBox.variantId || !selectedBox.sellingPlanId) {
-      setError("Choisissez votre box pour continuer.");
-      showStep("formule");
-      return true;
-    }
-    if (!isSelectedDeliveryWindowValid()) {
-      setError("Choisissez une fenêtre de livraison pour continuer.");
-      showStep("livraison");
-      return true;
-    }
-    if (!isMealsSelectionComplete()) {
-      setError("Choisissez vos repas avant de continuer.");
-      showStep("repas");
-      return true;
-    }
-    if (!isBuilderEmailValid(selectedEmail) || !isCapturedLeadFresh()) {
-      setError("Entrez une adresse e-mail valide.");
-      showStep("email");
-      return true;
-    }
-    return false;
+  function beginCheckoutFromEmail() {
+    isSubmittingCheckout = true;
+    updateEmailCta();
+    setError("");
+
+    createBuilderCheckout()
+      .catch(function (error) {
+        isSubmittingCheckout = false;
+        updateEmailCta();
+        if (error && error.message === "checkout_create_failed") {
+          setError(CART_PREPARE_ERROR);
+          return;
+        }
+        if (!errorMessage.textContent) {
+          setError("Impossible d’ajouter la box au panier. Réessayez dans un instant.");
+        }
+      });
   }
 
   function handleEmailSubmit() {
@@ -1630,15 +1543,31 @@ export const builderClientScript = `
       return;
     }
 
-    if (!isMealsSelectionComplete()) {
-      setError("Choisissez vos repas avant de continuer.");
-      showStep("repas");
+    if (!isValidObjective(selectedObjective)) {
+      showStep("objectif");
+      return;
+    }
+
+    if (!selectedBox || !selectedBox.variantId || !selectedBox.sellingPlanId) {
+      setError("Choisissez votre box pour continuer.");
+      showStep("formule");
       return;
     }
 
     if (!isSelectedDeliveryWindowValid()) {
       setError("Choisissez une fenêtre de livraison avant de continuer.");
       showStep("livraison");
+      return;
+    }
+
+    if (!isMealsSelectionComplete()) {
+      setError("Choisissez vos repas avant de continuer.");
+      showStep("repas");
+      return;
+    }
+
+    if (isCapturedLeadFresh()) {
+      beginCheckoutFromEmail();
       return;
     }
 
@@ -1650,8 +1579,7 @@ export const builderClientScript = `
       .then(function () {
         capturedLeadKey = currentLeadKey();
         isSubmittingLead = false;
-        updateEmailCta();
-        showStep("recap");
+        beginCheckoutFromEmail();
       })
       .catch(function () {
         isSubmittingLead = false;
@@ -1660,38 +1588,8 @@ export const builderClientScript = `
       });
   }
 
-  function handleRecapSubmit() {
-    if (isSubmittingCheckout || isSubmittingLead) return;
-
-    if (redirectInvalidCheckoutState()) {
-      updateRecapCta();
-      return;
-    }
-
-    isSubmittingCheckout = true;
-    updateRecapCta();
-    setError("");
-
-    createBuilderCheckout()
-      .catch(function (error) {
-        isSubmittingCheckout = false;
-        updateRecapCta();
-        if (error && error.message === "checkout_create_failed") {
-          setError(CART_PREPARE_ERROR);
-          return;
-        }
-        if (!errorMessage.textContent) {
-          setError("Impossible d’ajouter la box au panier. Réessayez dans un instant.");
-        }
-      });
-  }
-
   if (emailContinue) {
     emailContinue.addEventListener("click", handleEmailSubmit);
-  }
-
-  if (recapContinue) {
-    recapContinue.addEventListener("click", handleRecapSubmit);
   }
 
   if (emailInput) {
@@ -1851,8 +1749,9 @@ export const builderClientScript = `
 
   if (!isValidObjective(selectedObjective)) {
     showStep("objectif", { replaceHistory: true });
-  } else if (location.hash === "#recap" && canEnterRecapStep()) {
-    showStep("recap", { replaceHistory: true });
+  } else if (location.hash === "#recap") {
+    // Legacy hash → email (or earlier step via showStep guards). Never auto-checkout.
+    showStep("email", { replaceHistory: true });
   } else if (location.hash === "#email" && canEnterEmailStep()) {
     showStep("email", { replaceHistory: true });
   } else if (location.hash === "#repas" && selectedBox && isSelectedDeliveryWindowValid()) {

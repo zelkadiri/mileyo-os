@@ -99,16 +99,23 @@ const runSuite = () => {
   }
 
   ctx.scenario("B. Step system");
-  ctx.assertEqual("step count is 6", BUILDER_STEP_COUNT, 6);
+  ctx.assertEqual("step count is 5", BUILDER_STEP_COUNT, 5);
   ctx.assertEqual(
     "exact step order",
     BUILDER_STEPS.join("→"),
-    "objectif→formule→livraison→repas→email→recap",
+    "objectif→formule→livraison→repas→email",
   );
-  ctx.assertEqual("email remains fifth", BUILDER_STEPS[4], "email");
-  ctx.assertEqual("recap is last", BUILDER_STEPS[5], "recap");
+  ctx.assertEqual("email is last", BUILDER_STEPS[4], "email");
+  ctx.assertFalse(
+    "recap not in BUILDER_STEPS",
+    (BUILDER_STEPS as readonly string[]).includes("recap"),
+  );
   ctx.assertTrue("hash #email in client", clientSource.includes('"#email"'));
-  ctx.assertTrue("hash #recap in client", clientSource.includes('"#recap"'));
+  ctx.assertTrue(
+    "legacy hash #recap still handled",
+    clientSource.includes('hash === "recap"') ||
+      clientSource.includes('location.hash === "#recap"'),
+  );
   ctx.assertTrue("hash #repas preserved", clientSource.includes('"#repas"'));
   ctx.assertTrue(
     "hash #livraison preserved",
@@ -121,6 +128,23 @@ const runSuite = () => {
   ctx.assertTrue(
     "formule id preserved",
     BUILDER_STEPS[1] === "formule" && renderSource.includes('id="step-formula"'),
+  );
+  ctx.assertTrue(
+    "legacy #recap maps to email not showStep(recap)",
+    /hash === "recap"[\s\S]*?showStep\("email"/.test(clientSource) &&
+      !/hash === "recap"[\s\S]*?showStep\("recap"/.test(clientSource),
+  );
+  ctx.assertFalse(
+    "no active showStep recap destination",
+    /showStep\(\s*"recap"/.test(clientSource),
+  );
+  ctx.assertTrue(
+    "back from email goes to repas",
+    /currentStep === "email"[\s\S]*?showStep\("repas"/.test(clientSource),
+  );
+  ctx.assertFalse(
+    "no active back from recap",
+    /currentStep === "recap"[\s\S]*?showStep\("email"/.test(clientSource),
   );
 
   ctx.scenario("C. Repas CTA goes to email, not cart");
@@ -192,9 +216,12 @@ const runSuite = () => {
     clientSource.includes('"Puis " + formatEuros(selectedBox.price) + "/semaine."'),
   );
   ctx.assertTrue(
-    "recap weekly pricing preserved elsewhere",
-    renderSource.includes('id="recap-weekly-price"') &&
-      clientSource.includes("function getBuilderLaunchPricing"),
+    "launch pricing helper still used for display",
+    clientSource.includes("function getBuilderLaunchPricing"),
+  );
+  ctx.assertFalse(
+    "dedicated recap weekly price element removed",
+    renderSource.includes('id="recap-weekly-price"'),
   );
   ctx.assertTrue(
     "privacy note",
@@ -210,12 +237,166 @@ const runSuite = () => {
   );
   ctx.assertTrue(
     "email CTA label",
+    clientSource.includes('emailContinue.textContent = "Passer au paiement"'),
+  );
+  ctx.assertFalse(
+    "email CTA is no longer Continuer",
     clientSource.includes('emailContinue.textContent = "Continuer"'),
   );
   ctx.assertFalse(
     "email CTA is no longer add to cart",
     clientSource.includes('"Ajouter ma box au panier"') ||
       renderSource.includes("Ajouter ma box au panier"),
+  );
+
+  ctx.scenario("D2. Email mini-recap (Lot A — display only)");
+  const emailStepMatch =
+    renderSource.match(/id="step-email"[\s\S]*?<\/section>\s*<\/main>/) ?? [];
+  const emailStepMarkup = emailStepMatch[0] ?? "";
+  ctx.assertTrue("email step markup found", emailStepMarkup.includes('id="step-email"'));
+  ctx.assertTrue(
+    "mini-recap inside email step",
+    emailStepMarkup.includes('id="email-mini-recap"'),
+  );
+  ctx.assertTrue(
+    "mini-recap title Votre sélection",
+    emailStepMarkup.includes("Votre sélection"),
+  );
+  ctx.assertTrue(
+    "mini-recap formule field",
+    emailStepMarkup.includes('id="email-mini-recap-box"') &&
+      emailStepMarkup.includes(">Formule<"),
+  );
+  ctx.assertTrue(
+    "mini-recap objectif field",
+    emailStepMarkup.includes('id="email-mini-recap-objective"') &&
+      emailStepMarkup.includes(">Objectif<"),
+  );
+  ctx.assertTrue(
+    "mini-recap livraison field",
+    emailStepMarkup.includes('id="email-mini-recap-delivery"') &&
+      emailStepMarkup.includes(">Livraison<"),
+  );
+  ctx.assertTrue(
+    "mini-recap plats field",
+    emailStepMarkup.includes('id="email-mini-recap-meals"') &&
+      emailStepMarkup.includes(">Plats<"),
+  );
+  ctx.assertTrue(
+    "mini-recap première box price field",
+    emailStepMarkup.includes('id="email-mini-recap-price"') &&
+      emailStepMarkup.includes(">Première box<"),
+  );
+  ctx.assertFalse(
+    "mini-recap has no meal list ul",
+    /id="email-mini-recap"[\s\S]*?<ul[\s\S]*?<\/ul>/.test(emailStepMarkup) ||
+      emailStepMarkup.includes('id="email-mini-recap-meals-list"'),
+  );
+  ctx.assertFalse(
+    "email step has no Puis/semaine",
+    /Puis .+ \/ semaine/.test(emailStepMarkup) ||
+      emailStepMarkup.includes("Puis ") && emailStepMarkup.includes("/semaine"),
+  );
+  ctx.assertEqual(
+    "email step still has exactly one offer card",
+    (emailStepMarkup.match(/class="email-offer-card"/g) ?? []).length,
+    1,
+  );
+  const miniRecapBlock =
+    emailStepMarkup.match(
+      /id="email-mini-recap"[\s\S]*?<\/dl>\s*<\/div>/,
+    )?.[0] ?? "";
+  ctx.assertTrue("mini-recap block extracted", miniRecapBlock.length > 0);
+  ctx.assertFalse(
+    "mini-recap block has no nested offer card",
+    miniRecapBlock.includes("email-offer-card") ||
+      miniRecapBlock.includes("Offre de lancement"),
+  );
+  ctx.assertTrue(
+    "renderEmailMiniRecap helper exists",
+    clientSource.includes("function renderEmailMiniRecap"),
+  );
+  ctx.assertTrue(
+    "email step calls renderEmailMiniRecap",
+    /step === "email"[\s\S]*?renderEmailMiniRecap\(\)/.test(clientSource),
+  );
+  ctx.assertTrue(
+    "mini-recap uses formatBoxMealCountDisplay",
+    clientSource.includes("formatBoxMealCountDisplay(selectedBox.mealCount)"),
+  );
+  ctx.assertTrue(
+    "mini-recap uses findObjectiveLabel",
+    /function renderEmailMiniRecap[\s\S]*?findObjectiveLabel\(selectedObjective\)/.test(
+      clientSource,
+    ),
+  );
+  ctx.assertTrue(
+    "mini-recap uses delivery rangeLabel",
+    /function renderEmailMiniRecap[\s\S]*?selectedWindow\.rangeLabel/.test(
+      clientSource,
+    ),
+  );
+  ctx.assertTrue(
+    "mini-recap uses selectedTotal counter",
+    /function renderEmailMiniRecap[\s\S]*?selectedTotal\(\)/.test(clientSource),
+  );
+  ctx.assertTrue(
+    "mini-recap uses getBuilderLaunchPricing",
+    /function renderEmailMiniRecap[\s\S]*?getBuilderLaunchPricing\(/.test(
+      clientSource,
+    ),
+  );
+  ctx.assertFalse(
+    "mini-recap does not show Puis weekly",
+    /function renderEmailMiniRecap[\s\S]*?\n  function /.test(clientSource) &&
+      /function renderEmailMiniRecap[\s\S]*?"Puis "/.test(
+        clientSource.match(
+          /function renderEmailMiniRecap[\s\S]*?\n  function /,
+        )?.[0] ?? "",
+      ),
+  );
+  const miniRecapFn =
+    clientSource.match(
+      /function renderEmailMiniRecap\(\) \{[\s\S]*?\n  function /,
+    )?.[0] ?? "";
+  ctx.assertFalse(
+    "mini-recap does not capture lead",
+    miniRecapFn.includes("captureCheckoutLead"),
+  );
+  ctx.assertFalse(
+    "mini-recap does not create checkout",
+    miniRecapFn.includes("createBuilderCheckout"),
+  );
+  ctx.assertFalse(
+    "mini-recap does not change hash/step",
+    miniRecapFn.includes("showStep(") || miniRecapFn.includes("history."),
+  );
+  ctx.assertFalse(
+    "dedicated recap step removed",
+    renderSource.includes('id="step-recap"') ||
+      renderSource.includes('id="recap-footer"') ||
+      renderSource.includes('id="recap-continue"'),
+  );
+  ctx.assertFalse(
+    "email submit no longer navigates to recap",
+    /function handleEmailSubmit\(\) \{[\s\S]*?\n {2}if \(/.test(clientSource) &&
+      (
+        clientSource.match(
+          /function handleEmailSubmit\(\) \{[\s\S]*?\n {2}if \(/,
+        )?.[0] ?? ""
+      ).includes('showStep("recap")'),
+  );
+  ctx.assertFalse(
+    "handleRecapSubmit removed",
+    clientSource.includes("function handleRecapSubmit"),
+  );
+  ctx.assertFalse(
+    "renderRecap removed",
+    clientSource.includes("function renderRecap"),
+  );
+  ctx.assertFalse(
+    "canEnterRecapStep removed",
+    clientSource.includes("function canEnterRecapStep"),
   );
 
   ctx.scenario("E. Launch offer display math — no guaranteed checkout price");
@@ -381,29 +562,59 @@ const runSuite = () => {
     /JSON\.stringify\(\{[\s\S]*shop:/.test(clientSource),
   );
   const emailSubmitMatch = clientSource.match(
-    /function handleEmailSubmit\(\) \{[\s\S]*?\n {2}function handleRecapSubmit/,
+    /function handleEmailSubmit\(\) \{[\s\S]*?\n {2}if \(emailContinue\)/,
   );
+  const emailSubmitBody = emailSubmitMatch?.[0] ?? "";
+  const beginCheckoutBody =
+    clientSource.match(
+      /function beginCheckoutFromEmail\(\) \{[\s\S]*?\n {2}function handleEmailSubmit/,
+    )?.[0] ?? "";
   ctx.assertTrue("email submit handler exists", Boolean(emailSubmitMatch));
   ctx.assertTrue(
-    "lead then recap",
-    Boolean(
-      emailSubmitMatch?.[0].includes("captureCheckoutLead") &&
-        emailSubmitMatch?.[0].includes('showStep("recap")'),
-    ),
+    "beginCheckoutFromEmail helper exists",
+    clientSource.includes("function beginCheckoutFromEmail"),
   );
-  ctx.assertFalse(
-    "email submit does not add to cart",
-    Boolean(emailSubmitMatch?.[0].includes("addSelectedBoxToCart")),
+  ctx.assertTrue(
+    "email lead then checkout on same click",
+    emailSubmitBody.includes("captureCheckoutLead") &&
+      emailSubmitBody.includes("capturedLeadKey = currentLeadKey()") &&
+      emailSubmitBody.includes("beginCheckoutFromEmail()") &&
+      !emailSubmitBody.includes('showStep("recap")'),
   );
-  ctx.assertFalse(
-    "email submit does not call cart/add.js",
-    Boolean(emailSubmitMatch?.[0].includes("/cart/add.js")),
+  ctx.assertTrue(
+    "fresh lead skips recapture",
+    emailSubmitBody.includes("isCapturedLeadFresh()") &&
+      /if \(isCapturedLeadFresh\(\)\) \{[\s\S]*?beginCheckoutFromEmail\(\)/.test(
+        emailSubmitBody,
+      ),
+  );
+  ctx.assertTrue(
+    "double-submit guard on email",
+    emailSubmitBody.includes("isSubmittingLead || isSubmittingCheckout"),
+  );
+  ctx.assertTrue(
+    "checkout starts only after lead success path",
+    beginCheckoutBody.includes("createBuilderCheckout") &&
+      beginCheckoutBody.includes("isSubmittingCheckout = true"),
+  );
+  ctx.assertTrue(
+    "checkout failure re-enables email CTA",
+    beginCheckoutBody.includes("isSubmittingCheckout = false") &&
+      beginCheckoutBody.includes("updateEmailCta()"),
   );
   ctx.assertTrue(
     "lead failure copy",
-    clientSource.includes(
+    emailSubmitBody.includes(
       "Impossible de continuer pour le moment. Réessayez.",
-    ),
+    ) && !/catch\(function \(\) \{[\s\S]*createBuilderCheckout/.test(emailSubmitBody),
+  );
+  ctx.assertFalse(
+    "email submit does not add to cart",
+    Boolean(emailSubmitBody.includes("addSelectedBoxToCart")),
+  );
+  ctx.assertFalse(
+    "email submit does not call cart/add.js",
+    Boolean(emailSubmitBody.includes("/cart/add.js")),
   );
   ctx.assertTrue(
     "upsert does not touch convertedAt",

@@ -794,9 +794,9 @@ const runSuite = () => {
 
   ctx.scenario("J. Copy Box / step id formule + loader");
   ctx.assertEqual(
-    "internal steps include email then recap after repas",
+    "internal steps email last after repas",
     BUILDER_STEPS.join("→"),
-    "objectif→formule→livraison→repas→email→recap",
+    "objectif→formule→livraison→repas→email",
   );
   ctx.assertTrue(
     "render copy Choisissez votre box",

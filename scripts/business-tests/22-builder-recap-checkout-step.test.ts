@@ -30,7 +30,6 @@ import {
   BUILDER_OBJECTIVE_OPTIONS,
   BUILDER_STEP_COUNT,
   BUILDER_STEPS,
-  getBuilderStepIndex,
   getBuilderStepLabel,
   getBuilderStepProgressPercent,
 } from "../../app/features/builder/builder-objective-options";
@@ -123,7 +122,10 @@ const runSuite = () => {
     "app/features/settings/settings-selling-plans-v2.server.ts",
   );
   const emailSubmit = extractFunction(clientSource, "handleEmailSubmit");
-  const recapSubmit = extractFunction(clientSource, "handleRecapSubmit");
+  const beginCheckoutFromEmail = extractFunction(
+    clientSource,
+    "beginCheckoutFromEmail",
+  );
   const createCheckoutFn = extractFunction(clientSource, "createBuilderCheckout");
   const checkoutServerSource = readRepoFile(
     "app/features/builder/builder-checkout.server.ts",
@@ -134,53 +136,102 @@ const runSuite = () => {
   const routeSource = readRepoFile("app/routes/apps.box-builder.tsx");
   const emailModuleSource = readRepoFile("app/features/builder/builder-email.ts");
 
-  ctx.scenario("A. Step system — 6 steps including recap");
-  ctx.assertEqual("step count is 6", BUILDER_STEP_COUNT, 6);
+  ctx.scenario("A. Step system — 5 steps, email last (Lot C)");
+  ctx.assertEqual("step count is 5", BUILDER_STEP_COUNT, 5);
   ctx.assertEqual(
     "exact step order",
     BUILDER_STEPS.join("→"),
-    "objectif→formule→livraison→repas→email→recap",
+    "objectif→formule→livraison→repas→email",
   );
-  ctx.assertEqual("recap is last", BUILDER_STEPS[5], "recap");
+  ctx.assertEqual("email is last", BUILDER_STEPS[4], "email");
   ctx.assertEqual("formule id preserved", BUILDER_STEPS[1], "formule");
-  ctx.assertEqual("email remains fifth", BUILDER_STEPS[4], "email");
-  ctx.assertEqual("recap index", getBuilderStepIndex("recap"), 5);
-  ctx.assertTrue("hash #recap", clientSource.includes('"#recap"'));
-  ctx.assertTrue(
-    "recap step markup",
-    renderSource.includes('id="step-recap"'),
-  );
-  ctx.assertEqual(
-    "recap label",
-    getBuilderStepLabel("recap"),
-    "Étape 6 sur 6",
-  );
-  ctx.assertEqual(
-    "email label is step 5 of 6",
-    getBuilderStepLabel("email"),
-    "Étape 5 sur 6",
-  );
-  ctx.assertEqual("step 1 progress", getBuilderStepProgressPercent("objectif"), 17);
-  ctx.assertEqual("step 2 progress", getBuilderStepProgressPercent("formule"), 33);
-  ctx.assertEqual("step 3 progress", getBuilderStepProgressPercent("livraison"), 50);
-  ctx.assertEqual("step 4 progress", getBuilderStepProgressPercent("repas"), 67);
-  ctx.assertEqual("step 5 progress", getBuilderStepProgressPercent("email"), 83);
-  ctx.assertEqual("step 6 progress", getBuilderStepProgressPercent("recap"), 100);
-  ctx.assertTrue("css is-step-6", stylesSource.includes(".tunnel-progress-fill.is-step-6"));
-  ctx.assertTrue("css 17 percent", stylesSource.includes("width: 17%"));
   ctx.assertFalse(
-    "stale 20/40/60/80 five-step widths",
-    stylesSource.includes(".tunnel-progress-fill.is-step-1 {\n  width: 20%;") ||
-      stylesSource.includes("width: 40%"),
+    "recap removed from BUILDER_STEPS",
+    (BUILDER_STEPS as readonly string[]).includes("recap"),
   );
   ctx.assertTrue(
-    "initial label 6 steps",
-    renderSource.includes("Étape 1 sur 6"),
+    "legacy #recap handled",
+    clientSource.includes('location.hash === "#recap"') ||
+      clientSource.includes('hash === "recap"'),
+  );
+  ctx.assertFalse(
+    "dedicated recap step markup removed",
+    renderSource.includes('id="step-recap"') ||
+      renderSource.includes('id="recap-footer"') ||
+      renderSource.includes('id="recap-continue"'),
+  );
+  ctx.assertFalse(
+    "dedicated recap client APIs removed",
+    clientSource.includes("function renderRecap") ||
+      clientSource.includes("function handleRecapSubmit") ||
+      clientSource.includes("function canEnterRecapStep") ||
+      clientSource.includes("function updateRecapCta"),
+  );
+  ctx.assertFalse(
+    "dead recap CSS removed",
+    stylesSource.includes(".builder-step--recap") ||
+      stylesSource.includes(".is-step-recap") ||
+      stylesSource.includes(".tunnel-progress-fill.is-step-6") ||
+      stylesSource.includes("--recap-step-max-width"),
+  );
+  ctx.assertEqual(
+    "email label is step 5 of 5",
+    getBuilderStepLabel("email"),
+    "Étape 5 sur 5",
+  );
+  ctx.assertEqual("step 1 progress", getBuilderStepProgressPercent("objectif"), 20);
+  ctx.assertEqual("step 2 progress", getBuilderStepProgressPercent("formule"), 40);
+  ctx.assertEqual("step 3 progress", getBuilderStepProgressPercent("livraison"), 60);
+  ctx.assertEqual("step 4 progress", getBuilderStepProgressPercent("repas"), 80);
+  ctx.assertEqual("step 5 progress", getBuilderStepProgressPercent("email"), 100);
+  ctx.assertTrue(
+    "css is-step-5 is 100%",
+    stylesSource.includes(".tunnel-progress-fill.is-step-5") &&
+      /is-step-5 \{\s*width: 100%;/.test(stylesSource),
+  );
+  ctx.assertTrue(
+    "css five-step widths 20/40/60/80",
+    stylesSource.includes(".tunnel-progress-fill.is-step-1 {\n  width: 20%;") &&
+      stylesSource.includes("width: 40%") &&
+      stylesSource.includes("width: 60%") &&
+      stylesSource.includes("width: 80%"),
+  );
+  ctx.assertFalse(
+    "client no longer activates is-step-6",
+    /tunnelProgressFill\.classList\.add\("is-step-6"\)/.test(clientSource),
+  );
+  ctx.assertTrue(
+    "initial label 5 steps",
+    renderSource.includes("Étape 1 sur 5"),
+  );
+  ctx.assertTrue(
+    "legacy #recap → email without showStep(recap)",
+    /hash === "recap"[\s\S]*?showStep\("email"/.test(clientSource) &&
+      !/showStep\(\s*"recap"/.test(clientSource),
+  );
+  ctx.assertTrue(
+    "showStep remaps legacy recap to email",
+    /if \(step === "recap"\) \{\s*step = "email";/.test(clientSource),
+  );
+  ctx.assertFalse(
+    "legacy hash does not auto-checkout",
+    /hash === "recap"[\s\S]{0,200}createBuilderCheckout/.test(clientSource) ||
+      /location\.hash === "#recap"[\s\S]{0,200}createBuilderCheckout/.test(
+        clientSource,
+      ),
+  );
+  ctx.assertTrue(
+    "back email → repas",
+    /currentStep === "email"[\s\S]*?showStep\("repas"/.test(clientSource),
   );
 
-  ctx.scenario("B. Email → lead → recap");
+  ctx.scenario("B. Email → lead → checkout (Lot B)");
   ctx.assertTrue(
-    "email CTA Continuer",
+    "email CTA Passer au paiement",
+    clientSource.includes('emailContinue.textContent = "Passer au paiement"'),
+  );
+  ctx.assertFalse(
+    "email CTA no longer Continuer",
     clientSource.includes('emailContinue.textContent = "Continuer"'),
   );
   ctx.assertFalse(
@@ -189,16 +240,52 @@ const runSuite = () => {
   );
   ctx.assertTrue("email submit captured", Boolean(emailSubmit));
   ctx.assertTrue(
-    "email captures lead then recap",
+    "email captures lead then checkout",
     emailSubmit.includes("captureCheckoutLead") &&
-      emailSubmit.includes('capturedLeadKey = currentLeadKey()') &&
-      emailSubmit.includes('showStep("recap")'),
+      emailSubmit.includes("capturedLeadKey = currentLeadKey()") &&
+      emailSubmit.includes("beginCheckoutFromEmail()") &&
+      !emailSubmit.includes('showStep("recap")'),
+  );
+  ctx.assertTrue(
+    "fresh lead skips captureCheckoutLead before checkout",
+    /if \(isCapturedLeadFresh\(\)\) \{[\s\S]*?beginCheckoutFromEmail\(\)/.test(
+      emailSubmit,
+    ),
+  );
+  ctx.assertTrue(
+    "email double-submit guard",
+    emailSubmit.includes("isSubmittingLead || isSubmittingCheckout"),
+  );
+  const beginCheckout = extractFunction(clientSource, "beginCheckoutFromEmail");
+  ctx.assertTrue(
+    "beginCheckoutFromEmail uses createBuilderCheckout",
+    beginCheckout.includes("createBuilderCheckout"),
+  );
+  ctx.assertTrue(
+    "checkout failure resets submitting flag",
+    beginCheckout.includes("isSubmittingCheckout = false") &&
+      beginCheckout.includes("updateEmailCta()"),
+  );
+  ctx.assertTrue(
+    "lead failure does not call checkout",
+    /captureCheckoutLead\(\)[\s\S]*?\.catch\(function \(\) \{[\s\S]*?\}/.test(
+      emailSubmit,
+    ) &&
+      !(
+        emailSubmit.match(
+          /captureCheckoutLead\(\)[\s\S]*?\.catch\(function \(\) \{[\s\S]*?\}/,
+        )?.[0] ?? ""
+      ).includes("createBuilderCheckout"),
   );
   ctx.assertFalse(
     "email submit does not add to cart",
     emailSubmit.includes("addSelectedBoxToCart") ||
       emailSubmit.includes("/cart/add.js") ||
-      emailSubmit.includes("/checkout"),
+      emailSubmit.includes('fetch("/checkout"'),
+  );
+  ctx.assertTrue(
+    "email mini-recap still present",
+    renderSource.includes('id="email-mini-recap"'),
   );
 
   ctx.scenario("C. Lead freshness key");
@@ -263,7 +350,7 @@ const runSuite = () => {
       clientSource.includes('.join("|")'),
   );
   ctx.assertTrue(
-    "recap requires fresh lead",
+    "checkout requires fresh lead path",
     clientSource.includes("isCapturedLeadFresh") &&
       clientSource.includes("capturedLeadKey === key"),
   );
@@ -273,13 +360,10 @@ const runSuite = () => {
       /console\.(log|error|info|warn)\([^)]*currentLeadKey/.test(recapSource),
   );
 
-  ctx.scenario("D. Recap content");
-  ctx.assertTrue("title Votre box", renderSource.includes("Votre box"));
+  ctx.scenario("D. Email mini-recap content + shared helpers");
   ctx.assertTrue(
-    "verify copy",
-    renderSource.includes(
-      "Vérifiez votre sélection avant de passer au paiement.",
-    ),
+    "mini-recap title Votre sélection",
+    renderSource.includes("Votre sélection"),
   );
   ctx.assertEqual(
     "balanced label FR",
@@ -290,23 +374,35 @@ const runSuite = () => {
     "Équilibré",
   );
   ctx.assertFalse(
-    "recap does not show balanced key",
+    "builder does not show balanced key in markup",
     renderSource.includes(">balanced<"),
   );
-  ctx.assertTrue("recap box field", renderSource.includes('id="recap-box"'));
   ctx.assertTrue(
-    "recap shows launch + recurring pricing",
-    clientSource.includes("getBuilderLaunchPricing(selectedBox.price, selectedBox.mealCount)") &&
-      clientSource.includes('"Puis "') &&
-      clientSource.includes('formatEurosFromCents(launchPricing.regularPriceCents) + " / semaine"'),
+    "mini-recap formule field",
+    renderSource.includes('id="email-mini-recap-box"'),
   );
   ctx.assertTrue(
-    "recap delivery uses rangeLabel",
-    clientSource.includes("selectedWindow.rangeLabel"),
+    "mini-recap uses launch pricing first box only",
+    clientSource.includes("getBuilderLaunchPricing(selectedBox.price, selectedBox.mealCount)") &&
+      /function renderEmailMiniRecap[\s\S]*?la première box\*/.test(clientSource),
+  );
+  const miniRecapFn =
+    clientSource.match(
+      /function renderEmailMiniRecap\(\) \{[\s\S]*?\n  function /,
+    )?.[0] ?? "";
+  ctx.assertFalse(
+    "mini-recap does not show Puis weekly",
+    miniRecapFn.includes('"Puis "'),
+  );
+  ctx.assertTrue(
+    "mini-recap delivery uses rangeLabel",
+    /function renderEmailMiniRecap[\s\S]*?selectedWindow\.rangeLabel/.test(
+      clientSource,
+    ),
   );
   ctx.assertFalse(
-    "recap delivery does not show Thursday canonical as promise",
-    /recapDelivery\.textContent = selectedScheduledDeliveryDate/.test(
+    "mini-recap delivery does not show Thursday canonical as promise",
+    /emailMiniRecapDelivery\.textContent = selectedScheduledDeliveryDate/.test(
       clientSource,
     ),
   );
@@ -340,10 +436,8 @@ const runSuite = () => {
   ctx.assertEqual("two visible meals", mealLines.length, 2);
   ctx.assertEqual("first meal qty", mealLines[0]?.quantity, 1);
   ctx.assertEqual("second meal qty", mealLines[1]?.quantity, 2);
-  ctx.assertTrue("email complete field", renderSource.includes('id="recap-email"'));
-  ctx.assertTrue("back to email", renderSource.includes(">← Email<"));
   ctx.assertTrue(
-    "offer kicker on recap",
+    "offer kicker on email step",
     renderSource.includes("Offre de lancement"),
   );
   ctx.assertTrue(
@@ -357,8 +451,7 @@ const runSuite = () => {
   );
   ctx.assertTrue(
     "CTA Passer au paiement",
-    renderSource.includes("Passer au paiement") &&
-      clientSource.includes('"Passer au paiement"'),
+    clientSource.includes('"Passer au paiement"'),
   );
 
   ctx.scenario("E. Launch pricing display — qualified, not guaranteed");
@@ -376,28 +469,22 @@ const runSuite = () => {
     );
   }
   ctx.assertTrue(
-    "recap shows launch price element",
-    renderSource.includes('id="recap-launch-price"'),
+    "email mini-recap shows launch price element",
+    renderSource.includes('id="email-mini-recap-price"'),
+  );
+  ctx.assertFalse(
+    "dedicated recap launch/per-meal/weekly elements removed",
+    renderSource.includes('id="recap-launch-price"') ||
+      renderSource.includes('id="recap-per-meal"') ||
+      renderSource.includes('id="recap-weekly-price"'),
   );
   ctx.assertTrue(
-    "recap shows per-meal element",
-    renderSource.includes('id="recap-per-meal"'),
+    "email mini-recap renders première box launch copy",
+    clientSource.includes("la première box*"),
   );
   ctx.assertTrue(
-    "recap shows weekly recurring element",
-    renderSource.includes('id="recap-weekly-price"'),
-  );
-  ctx.assertTrue(
-    "recap renders launch + per meal + Puis weekly",
-    clientSource.includes("la première box*") &&
-      clientSource.includes("launchPricePerMealCents") &&
-      clientSource.includes('"Puis "'),
-  );
-  ctx.assertTrue(
-    "recap eligibility asterisk note",
-    renderSource.includes(
-      "*Pour les nouveaux clients éligibles. Remise automatique appliquée au paiement par Shopify.",
-    ),
+    "email offer card eligibility note present",
+    renderSource.includes("si vous êtes éligible"),
   );
   ctx.assertFalse(
     "no universal guaranteed pay today wording",
@@ -441,26 +528,31 @@ const runSuite = () => {
     /var properties = \{/.test(clientSource),
   );
 
-  ctx.scenario("F. Recap guard + derived state");
-  ctx.assertTrue(
-    "canEnterRecapStep requires fresh lead",
-    clientSource.includes("function canEnterRecapStep") &&
-      clientSource.includes("isCapturedLeadFresh()"),
+  ctx.scenario("F. Dead recap removed + legacy hash");
+  ctx.assertFalse(
+    "canEnterRecapStep removed",
+    clientSource.includes("function canEnterRecapStep"),
+  );
+  ctx.assertFalse(
+    "renderRecap removed",
+    clientSource.includes("function renderRecap"),
+  );
+  ctx.assertFalse(
+    "handleRecapSubmit removed",
+    clientSource.includes("function handleRecapSubmit"),
   );
   ctx.assertTrue(
-    "hash recap uses canEnterRecapStep",
-    clientSource.includes('hash === "recap" && canEnterRecapStep()'),
+    "hash recap redirects via showStep email",
+    /hash === "recap"[\s\S]*?showStep\("email"/.test(clientSource),
   );
   ctx.assertFalse(
     "no recapState copy",
     clientSource.includes("recapState") || renderSource.includes("recapState"),
   );
   ctx.assertTrue(
-    "renderRecap reads live selected* state",
-    clientSource.includes("function renderRecap") &&
-      clientSource.includes("selectedObjective") &&
-      clientSource.includes("selectedBox") &&
-      clientSource.includes("selectedEmail"),
+    "builder-recap helpers kept for lead key / tests",
+    recapSource.includes("buildCheckoutLeadKey") &&
+      recapSource.includes("formatRecapMealLabel"),
   );
 
   ctx.scenario("G. Storefront Cart checkout — buyerIdentity email");
@@ -569,8 +661,8 @@ const runSuite = () => {
       checkoutErrorsSource.includes("privateAccessToken"),
   );
   ctx.assertTrue(
-    "recap submit uses createBuilderCheckout",
-    recapSubmit.includes("createBuilderCheckout"),
+    "email checkout path uses createBuilderCheckout",
+    beginCheckoutFromEmail.includes("createBuilderCheckout"),
   );
   ctx.assertFalse(
     "no ajax cart/add in client",
@@ -729,9 +821,9 @@ const runSuite = () => {
     clientSource.includes('"checkout_create_failed"'),
   );
   ctx.assertTrue(
-    "recap catch shows prepare error on create fail",
-    recapSubmit.includes("checkout_create_failed") &&
-      recapSubmit.includes("CART_PREPARE_ERROR"),
+    "email checkout catch shows prepare error on create fail",
+    beginCheckoutFromEmail.includes("checkout_create_failed") &&
+      beginCheckoutFromEmail.includes("CART_PREPARE_ERROR"),
   );
   ctx.assertFalse(
     "no ajax inspect/remove fail path",
@@ -792,7 +884,8 @@ const runSuite = () => {
   );
   ctx.assertTrue(
     "double submit guard",
-    recapSubmit.includes("isSubmittingCheckout"),
+    emailSubmit.includes("isSubmittingCheckout") ||
+      beginCheckoutFromEmail.includes("isSubmittingCheckout"),
   );
 
   ctx.scenario("N. Future extras architecture");
@@ -809,9 +902,10 @@ const runSuite = () => {
       ).length === 0,
   );
   ctx.assertTrue(
-    "recap sections ready for extras later",
-    renderSource.includes('aria-label="Vos repas"') &&
-      renderSource.includes('aria-label="Livraison"'),
+    "email mini-recap sections ready for selection summary",
+    renderSource.includes('id="email-mini-recap"') &&
+      renderSource.includes(">Livraison<") &&
+      renderSource.includes(">Plats<"),
   );
 
   ctx.scenario("O. Prisma / selling plans / draft untouched");
