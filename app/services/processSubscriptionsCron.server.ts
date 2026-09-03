@@ -1,13 +1,25 @@
+import { CRON_NAME } from "../constants/cronRun";
 import { processDueMealSelectionReminders } from "./email/meal-selection-reminder-runner.server";
 import { processDueUpcomingDeliveryEmails } from "./email/upcoming-delivery-runner.server";
+import {
+  completeCronRunFailure,
+  completeCronRunSuccess,
+  safeCronRunErrorMessage,
+  startCronRun,
+  type CronRunDb,
+} from "./monitoring/cron-run.server";
 import { captureTechnicalError } from "./observability/captureTechnicalError.server";
 import { processDueSubscriptionBillings } from "./subscriptionBillingWorker.server";
 import { resolveCronShop } from "../utils/cronShop.server";
 
 export type ProcessSubscriptionsCronDeps = {
+  completeCronRunFailure?: typeof completeCronRunFailure;
+  completeCronRunSuccess?: typeof completeCronRunSuccess;
+  cronRunClient?: CronRunDb;
   processDueMealSelectionReminders?: typeof processDueMealSelectionReminders;
   processDueSubscriptionBillings?: typeof processDueSubscriptionBillings;
   processDueUpcomingDeliveryEmails?: typeof processDueUpcomingDeliveryEmails;
+  startCronRun?: typeof startCronRun;
 };
 
 const validateCronSecret = (request: Request): Response | null => {
@@ -51,6 +63,7 @@ const validateCronShop = (): { shop: string } | Response => {
 
 /**
  * Billing + meal reminder + upcoming delivery cron.
+ * MONITORING-1: persists CronRun heartbeat fail-open (never blocks billing).
  * @internal deps injectable for business regression tests only.
  */
 export const runProcessSubscriptionsCron = async (
@@ -63,6 +76,11 @@ export const runProcessSubscriptionsCron = async (
     deps.processDueMealSelectionReminders ?? processDueMealSelectionReminders;
   const processUpcoming =
     deps.processDueUpcomingDeliveryEmails ?? processDueUpcomingDeliveryEmails;
+  const startRun = deps.startCronRun ?? startCronRun;
+  const completeSuccess =
+    deps.completeCronRunSuccess ?? completeCronRunSuccess;
+  const completeFailure =
+    deps.completeCronRunFailure ?? completeCronRunFailure;
 
   const authError = validateCronSecret(request);
 
@@ -77,6 +95,14 @@ export const runProcessSubscriptionsCron = async (
   }
 
   const shop = shopConfig.shop;
+  const startedAt = new Date();
+  const cronRun = await startRun({
+    client: deps.cronRunClient,
+    cronName: CRON_NAME.PROCESS_SUBSCRIPTIONS,
+    now: startedAt,
+    shop,
+  });
+  const runId = cronRun?.id ?? null;
 
   try {
     const billingSummary = await processBillings(shop);
@@ -129,25 +155,54 @@ export const runProcessSubscriptionsCron = async (
       });
     }
 
+    const completedAt = new Date();
+
+    if (runId) {
+      await completeSuccess({
+        client: deps.cronRunClient,
+        now: completedAt,
+        runId,
+        startedAt,
+        summary: {
+          errorCount: billingSummary.errors,
+          processedCount: billingSummary.processed,
+          skippedCount: billingSummary.skipped,
+        },
+      });
+    }
+
     return Response.json({
       ...billingSummary,
       mealSelectionReminderError,
       mealSelectionReminders,
+      runId,
       upcomingDeliveryEmails,
       upcomingDeliveryError,
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Cron job failed unexpectedly.";
+    const message = safeCronRunErrorMessage(error);
+    const completedAt = new Date();
+
+    if (runId) {
+      await completeFailure({
+        client: deps.cronRunClient,
+        errorCode: "cron_exception",
+        errorMessage: message,
+        now: completedAt,
+        runId,
+        startedAt,
+      });
+    }
 
     console.error("[cron/process-subscriptions]", message, error);
 
     captureTechnicalError(error, {
       cronName: "process-subscriptions",
+      runId,
       shop,
       source: "cron",
     });
 
-    return Response.json({ error: message }, { status: 500 });
+    return Response.json({ error: message, runId }, { status: 500 });
   }
 };

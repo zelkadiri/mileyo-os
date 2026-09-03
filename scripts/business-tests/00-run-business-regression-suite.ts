@@ -118,6 +118,7 @@ const BUSINESS_SUITES = [
   "95-admin-cancel-subscription.test.ts",
   "96-sentry-observability.test.ts",
   "97-orders-create-replay-idempotency.test.ts",
+  "98-monitoring-system-health.test.ts",
 ];
 
 const LEGACY_SUITES = [

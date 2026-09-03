@@ -272,3 +272,23 @@ model EmailCronRun {
   @@index([shop, startedAt])
   @@index([shop, status, startedAt])
 }
+
+// MONITORING-1 — generic cron heartbeat (billing first). No PII.
+model CronRun {
+  id             String    @id @default(cuid())
+  shop           String
+  cronName       String
+  status         String
+  startedAt      DateTime
+  completedAt    DateTime?
+  durationMs     Int?
+  processedCount Int?
+  skippedCount   Int?
+  errorCount     Int?
+  errorCode      String?
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+
+  @@index([shop, cronName, startedAt])
+  @@index([shop, cronName, status, startedAt])
+}

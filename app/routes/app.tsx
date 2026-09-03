@@ -23,6 +23,7 @@ export default function App() {
         <s-link href="/app/subscriptions">Abonnements</s-link>
         <s-link href="/app/settings">Réglages</s-link>
         <s-link href="/app/emails">Emails</s-link>
+        <s-link href="/app/monitoring">Santé système</s-link>
         <s-link href="/app/shopify-notifications">Notifications Shopify</s-link>
       </s-app-nav>
       <Outlet />
