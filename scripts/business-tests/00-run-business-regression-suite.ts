@@ -119,6 +119,7 @@ const BUSINESS_SUITES = [
   "96-sentry-observability.test.ts",
   "97-orders-create-replay-idempotency.test.ts",
   "98-monitoring-system-health.test.ts",
+  "99-sentry-cron-checkins.test.ts",
 ];
 
 const LEGACY_SUITES = [

@@ -1,3 +1,4 @@
+import { SENTRY_CRON_MONITOR_SLUG } from "../../constants/sentryCron";
 import {
   completeEmailCronRunFailure,
   completeEmailCronRunSuccess,
@@ -7,6 +8,11 @@ import {
 } from "./email-cron-run.server";
 import { processDueEmailEvents } from "./email-event-worker.server";
 import { captureTechnicalError } from "../observability/captureTechnicalError.server";
+import {
+  completeCronCheckInFailure,
+  completeCronCheckInSuccess,
+  startCronCheckIn,
+} from "../observability/sentry-cron.server";
 import { resolveCronShop } from "../../utils/cronShop.server";
 
 const validateCronSecret = (request: Request): Response | null => {
@@ -49,10 +55,13 @@ const validateCronShop = (): { shop: string } | Response => {
 };
 
 export type ProcessEmailRetriesDeps = {
+  completeCronCheckInFailure?: typeof completeCronCheckInFailure;
+  completeCronCheckInSuccess?: typeof completeCronCheckInSuccess;
   completeEmailCronRunFailure?: typeof completeEmailCronRunFailure;
   completeEmailCronRunSuccess?: typeof completeEmailCronRunSuccess;
   cronRunClient?: EmailCronRunDb;
   processDueEmailEvents?: typeof processDueEmailEvents;
+  startCronCheckIn?: typeof startCronCheckIn;
   startEmailCronRun?: typeof startEmailCronRun;
 };
 
@@ -62,6 +71,8 @@ export type ProcessEmailRetriesDeps = {
  *
  * EMAIL-6G-C: persists EmailCronRun for admin health. Monitoring is fail-open —
  * persistence failures never block processDueEmailEvents.
+ *
+ * MONITORING-1B: Sentry cron check-ins fail-open (alerting only).
  *
  * @internal deps injectable for business regression tests only.
  */
@@ -75,6 +86,11 @@ export const runProcessEmailRetriesCron = async (
     deps.completeEmailCronRunSuccess ?? completeEmailCronRunSuccess;
   const completeFailure =
     deps.completeEmailCronRunFailure ?? completeEmailCronRunFailure;
+  const startCheckIn = deps.startCronCheckIn ?? startCronCheckIn;
+  const completeCheckInSuccess =
+    deps.completeCronCheckInSuccess ?? completeCronCheckInSuccess;
+  const completeCheckInFailure =
+    deps.completeCronCheckInFailure ?? completeCronCheckInFailure;
 
   const authError = validateCronSecret(request);
 
@@ -90,12 +106,16 @@ export const runProcessEmailRetriesCron = async (
 
   const shop = shopConfig.shop;
   const startedAt = new Date();
+  const startedAtMs = startedAt.getTime();
   const cronRun = await startRun({
     client: deps.cronRunClient,
     now: startedAt,
     shop,
   });
   const runId = cronRun?.id ?? null;
+  const checkInId = startCheckIn(
+    SENTRY_CRON_MONITOR_SLUG.PROCESS_EMAIL_RETRIES,
+  );
 
   try {
     const summary = await processFn({
@@ -114,6 +134,12 @@ export const runProcessEmailRetriesCron = async (
         summary,
       });
     }
+
+    completeCheckInSuccess(
+      SENTRY_CRON_MONITOR_SLUG.PROCESS_EMAIL_RETRIES,
+      checkInId,
+      startedAtMs,
+    );
 
     console.log("[cron/process-email-retries] completed", {
       durationMs,
@@ -156,6 +182,8 @@ export const runProcessEmailRetriesCron = async (
       status: "failed",
     });
 
+    // Exception issue + monitor error is intentional dual signal —
+    // check-in does not re-capture the exception.
     captureTechnicalError(error, {
       cronName: "process-email-retries",
       errorCode: "cron_exception",
@@ -163,6 +191,12 @@ export const runProcessEmailRetriesCron = async (
       shop,
       source: "cron",
     });
+
+    completeCheckInFailure(
+      SENTRY_CRON_MONITOR_SLUG.PROCESS_EMAIL_RETRIES,
+      checkInId,
+      startedAtMs,
+    );
 
     return Response.json({ error: message, runId }, { status: 500 });
   }

@@ -639,15 +639,30 @@ const run = async () => {
     );
   }
 
-  ctx.scenario("I. Pas de Sentry check-ins dans MONITORING-1");
+  ctx.scenario("I. Sentry check-ins via wrapper isolé (pas d’appel direct)");
   {
     const cron = readRepoFile("app/services/processSubscriptionsCron.server.ts");
     const sentry = readRepoFile("app/services/observability/sentry.server.ts");
-    ctx.assertFalse("pas captureCheckIn", cron.includes("captureCheckIn"));
-    ctx.assertFalse("pas withMonitor", cron.includes("withMonitor"));
+    const wrapper = readRepoFile(
+      "app/services/observability/sentry-cron.server.ts",
+    );
     ctx.assertFalse(
-      "sentry.server inchangé check-in",
+      "cron n’appelle pas captureCheckIn directement",
+      cron.includes("captureCheckIn"),
+    );
+    ctx.assertFalse("pas withMonitor dans cron", cron.includes("withMonitor"));
+    ctx.assertTrue(
+      "cron délègue au wrapper check-in",
+      cron.includes("startCronCheckIn") &&
+        cron.includes("completeCronCheckInSuccess"),
+    );
+    ctx.assertFalse(
+      "sentry.server sans check-in (init seule)",
       sentry.includes("captureCheckIn") || sentry.includes("withMonitor"),
+    );
+    ctx.assertTrue(
+      "wrapper captureCheckIn fail-open",
+      wrapper.includes("captureCheckIn") && wrapper.includes("fail-open"),
     );
   }
 

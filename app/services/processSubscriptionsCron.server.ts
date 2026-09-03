@@ -1,4 +1,5 @@
 import { CRON_NAME } from "../constants/cronRun";
+import { SENTRY_CRON_MONITOR_SLUG } from "../constants/sentryCron";
 import { processDueMealSelectionReminders } from "./email/meal-selection-reminder-runner.server";
 import { processDueUpcomingDeliveryEmails } from "./email/upcoming-delivery-runner.server";
 import {
@@ -9,16 +10,24 @@ import {
   type CronRunDb,
 } from "./monitoring/cron-run.server";
 import { captureTechnicalError } from "./observability/captureTechnicalError.server";
+import {
+  completeCronCheckInFailure,
+  completeCronCheckInSuccess,
+  startCronCheckIn,
+} from "./observability/sentry-cron.server";
 import { processDueSubscriptionBillings } from "./subscriptionBillingWorker.server";
 import { resolveCronShop } from "../utils/cronShop.server";
 
 export type ProcessSubscriptionsCronDeps = {
+  completeCronCheckInFailure?: typeof completeCronCheckInFailure;
+  completeCronCheckInSuccess?: typeof completeCronCheckInSuccess;
   completeCronRunFailure?: typeof completeCronRunFailure;
   completeCronRunSuccess?: typeof completeCronRunSuccess;
   cronRunClient?: CronRunDb;
   processDueMealSelectionReminders?: typeof processDueMealSelectionReminders;
   processDueSubscriptionBillings?: typeof processDueSubscriptionBillings;
   processDueUpcomingDeliveryEmails?: typeof processDueUpcomingDeliveryEmails;
+  startCronCheckIn?: typeof startCronCheckIn;
   startCronRun?: typeof startCronRun;
 };
 
@@ -64,6 +73,7 @@ const validateCronShop = (): { shop: string } | Response => {
 /**
  * Billing + meal reminder + upcoming delivery cron.
  * MONITORING-1: persists CronRun heartbeat fail-open (never blocks billing).
+ * MONITORING-1B: Sentry cron check-ins fail-open (alerting only; never blocks billing).
  * @internal deps injectable for business regression tests only.
  */
 export const runProcessSubscriptionsCron = async (
@@ -81,6 +91,11 @@ export const runProcessSubscriptionsCron = async (
     deps.completeCronRunSuccess ?? completeCronRunSuccess;
   const completeFailure =
     deps.completeCronRunFailure ?? completeCronRunFailure;
+  const startCheckIn = deps.startCronCheckIn ?? startCronCheckIn;
+  const completeCheckInSuccess =
+    deps.completeCronCheckInSuccess ?? completeCronCheckInSuccess;
+  const completeCheckInFailure =
+    deps.completeCronCheckInFailure ?? completeCronCheckInFailure;
 
   const authError = validateCronSecret(request);
 
@@ -96,6 +111,7 @@ export const runProcessSubscriptionsCron = async (
 
   const shop = shopConfig.shop;
   const startedAt = new Date();
+  const startedAtMs = startedAt.getTime();
   const cronRun = await startRun({
     client: deps.cronRunClient,
     cronName: CRON_NAME.PROCESS_SUBSCRIPTIONS,
@@ -103,6 +119,9 @@ export const runProcessSubscriptionsCron = async (
     shop,
   });
   const runId = cronRun?.id ?? null;
+  const checkInId = startCheckIn(
+    SENTRY_CRON_MONITOR_SLUG.PROCESS_SUBSCRIPTIONS,
+  );
 
   try {
     const billingSummary = await processBillings(shop);
@@ -171,6 +190,12 @@ export const runProcessSubscriptionsCron = async (
       });
     }
 
+    completeCheckInSuccess(
+      SENTRY_CRON_MONITOR_SLUG.PROCESS_SUBSCRIPTIONS,
+      checkInId,
+      startedAtMs,
+    );
+
     return Response.json({
       ...billingSummary,
       mealSelectionReminderError,
@@ -196,12 +221,20 @@ export const runProcessSubscriptionsCron = async (
 
     console.error("[cron/process-subscriptions]", message, error);
 
+    // Exception issue (captureTechnicalError) + monitor error (check-in) is
+    // intentional dual signal — check-in does not re-capture the exception.
     captureTechnicalError(error, {
       cronName: "process-subscriptions",
       runId,
       shop,
       source: "cron",
     });
+
+    completeCheckInFailure(
+      SENTRY_CRON_MONITOR_SLUG.PROCESS_SUBSCRIPTIONS,
+      checkInId,
+      startedAtMs,
+    );
 
     return Response.json({ error: message, runId }, { status: 500 });
   }
