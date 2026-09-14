@@ -24,6 +24,9 @@ export const SENTRY_CRON_CHECKIN_MARGIN_MINUTES = 15;
 /** Minutes `in_progress` may last before Sentry marks a timeout failure. */
 export const SENTRY_CRON_MAX_RUNTIME_MINUTES = 30;
 
+/** Max wait for Sentry transport drain after a finished cron check-in (ms). */
+export const SENTRY_CRON_FLUSH_TIMEOUT_MS = 2000;
+
 export const SENTRY_CRON_TIMEZONE = "UTC";
 
 export type SentryCronMonitorConfig = {

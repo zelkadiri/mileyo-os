@@ -135,7 +135,7 @@ export const runProcessEmailRetriesCron = async (
       });
     }
 
-    completeCheckInSuccess(
+    await completeCheckInSuccess(
       SENTRY_CRON_MONITOR_SLUG.PROCESS_EMAIL_RETRIES,
       checkInId,
       startedAtMs,
@@ -192,7 +192,7 @@ export const runProcessEmailRetriesCron = async (
       source: "cron",
     });
 
-    completeCheckInFailure(
+    await completeCheckInFailure(
       SENTRY_CRON_MONITOR_SLUG.PROCESS_EMAIL_RETRIES,
       checkInId,
       startedAtMs,

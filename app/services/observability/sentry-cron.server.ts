@@ -11,6 +11,7 @@ import * as Sentry from "@sentry/node";
 import type { CheckIn, MonitorConfig } from "@sentry/node";
 
 import {
+  SENTRY_CRON_FLUSH_TIMEOUT_MS,
   SENTRY_CRON_MONITOR_CONFIG,
   type SentryCronMonitorSlug,
 } from "../../constants/sentryCron";
@@ -21,8 +22,12 @@ type CaptureCheckInFn = (
   upsertMonitorConfig?: MonitorConfig,
 ) => string;
 
+type FlushFn = (timeout?: number) => Promise<boolean>;
+
 let captureCheckInImpl: CaptureCheckInFn = (checkIn, upsertMonitorConfig) =>
   Sentry.captureCheckIn(checkIn, upsertMonitorConfig);
+
+let flushImpl: FlushFn = (timeout) => Sentry.flush(timeout);
 
 const resolveMonitorConfig = (
   monitorSlug: SentryCronMonitorSlug,
@@ -43,6 +48,25 @@ const durationSecondsFrom = (startedAtMs: number | null | undefined): number | u
   }
 
   return Math.max(0, (Date.now() - startedAtMs) / 1000);
+};
+
+const flushAfterFinishedCheckIn = async (
+  monitorSlug: SentryCronMonitorSlug,
+): Promise<void> => {
+  try {
+    const flushed = await flushImpl(SENTRY_CRON_FLUSH_TIMEOUT_MS);
+
+    if (!flushed) {
+      console.error("[sentry-cron] flush returned false (fail-open)", {
+        monitorSlug,
+      });
+    }
+  } catch (error) {
+    console.error("[sentry-cron] flush failed (fail-open)", {
+      monitorSlug,
+      reason: error instanceof Error ? error.message : "unknown",
+    });
+  }
 };
 
 /**
@@ -80,11 +104,11 @@ export const startCronCheckIn = (
  * Complete a started check-in with `ok`. No-op when checkInId is absent.
  * Never throws into business cron callers.
  */
-export const completeCronCheckInSuccess = (
+export const completeCronCheckInSuccess = async (
   monitorSlug: SentryCronMonitorSlug,
   checkInId: string | null | undefined,
   startedAtMs?: number | null,
-): void => {
+): Promise<void> => {
   if (!checkInId) {
     return;
   }
@@ -104,6 +128,8 @@ export const completeCronCheckInSuccess = (
       status: "ok",
       ...(duration !== undefined ? { duration } : {}),
     });
+
+    await flushAfterFinishedCheckIn(monitorSlug);
   } catch (error) {
     console.error("[sentry-cron] completeCronCheckInSuccess failed (fail-open)", {
       monitorSlug,
@@ -116,11 +142,11 @@ export const completeCronCheckInSuccess = (
  * Complete a started check-in with `error` (monitor signal only — no exception).
  * Never throws into business cron callers.
  */
-export const completeCronCheckInFailure = (
+export const completeCronCheckInFailure = async (
   monitorSlug: SentryCronMonitorSlug,
   checkInId: string | null | undefined,
   startedAtMs?: number | null,
-): void => {
+): Promise<void> => {
   if (!checkInId) {
     return;
   }
@@ -140,6 +166,8 @@ export const completeCronCheckInFailure = (
       status: "error",
       ...(duration !== undefined ? { duration } : {}),
     });
+
+    await flushAfterFinishedCheckIn(monitorSlug);
   } catch (error) {
     console.error("[sentry-cron] completeCronCheckInFailure failed (fail-open)", {
       monitorSlug,
@@ -159,7 +187,13 @@ export const __setCaptureCheckInForTests = (
 };
 
 /** @internal Mileyo business regression tests only. */
+export const __setFlushForTests = (fn: FlushFn | null): void => {
+  flushImpl = fn ?? ((timeout) => Sentry.flush(timeout));
+};
+
+/** @internal Mileyo business regression tests only. */
 export const __resetSentryCronForTests = (): void => {
   captureCheckInImpl = (checkIn, upsertMonitorConfig) =>
     Sentry.captureCheckIn(checkIn, upsertMonitorConfig);
+  flushImpl = (timeout) => Sentry.flush(timeout);
 };

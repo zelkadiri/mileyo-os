@@ -190,7 +190,7 @@ export const runProcessSubscriptionsCron = async (
       });
     }
 
-    completeCheckInSuccess(
+    await completeCheckInSuccess(
       SENTRY_CRON_MONITOR_SLUG.PROCESS_SUBSCRIPTIONS,
       checkInId,
       startedAtMs,
@@ -230,7 +230,7 @@ export const runProcessSubscriptionsCron = async (
       source: "cron",
     });
 
-    completeCheckInFailure(
+    await completeCheckInFailure(
       SENTRY_CRON_MONITOR_SLUG.PROCESS_SUBSCRIPTIONS,
       checkInId,
       startedAtMs,

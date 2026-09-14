@@ -12,6 +12,7 @@ import type { CheckIn, MonitorConfig } from "@sentry/node";
 
 import {
   SENTRY_CRON_CHECKIN_MARGIN_MINUTES,
+  SENTRY_CRON_FLUSH_TIMEOUT_MS,
   SENTRY_CRON_MAX_RUNTIME_MINUTES,
   SENTRY_CRON_MONITOR_CONFIG,
   SENTRY_CRON_MONITOR_SLUG,
@@ -36,10 +37,15 @@ import {
 import {
   __resetSentryCronForTests,
   __setCaptureCheckInForTests,
+  __setFlushForTests,
   completeCronCheckInFailure,
   completeCronCheckInSuccess,
   startCronCheckIn,
 } from "../../app/services/observability/sentry-cron.server";
+import {
+  __resetCaptureTechnicalErrorForTests,
+  __setCaptureExceptionForTests,
+} from "../../app/services/observability/captureTechnicalError.server";
 import {
   __resetSentryForTests,
   __setSentryEnabledForTests,
@@ -235,6 +241,15 @@ const installCheckInMock = () => {
   return calls;
 };
 
+const installFlushMock = () => {
+  const timeouts: Array<number | undefined> = [];
+  __setFlushForTests(async (timeout) => {
+    timeouts.push(timeout);
+    return true;
+  });
+  return timeouts;
+};
+
 const assertNoPiiInCheckIns = (
   ctx: ReturnType<typeof createBusinessTestContext>,
   label: string,
@@ -306,6 +321,7 @@ const runSuite = async () => {
   const restore = () => {
     __resetSentryCronForTests();
     __resetSentryForTests();
+    __resetCaptureTechnicalErrorForTests();
     if (previousSecret === undefined) {
       delete process.env.CRON_SECRET;
     } else {
@@ -324,7 +340,7 @@ const runSuite = async () => {
   };
 
   try {
-    ctx.scenario("A. Wrapper — in_progress / ok / error + fail-open");
+    ctx.scenario("A. Wrapper — in_progress / ok / error + flush + fail-open");
     {
       __resetSentryCronForTests();
       __resetSentryForTests();
@@ -332,12 +348,14 @@ const runSuite = async () => {
       __setSentryEnabledForTests(true);
 
       const calls = installCheckInMock();
+      const flushCalls = installFlushMock();
       const slug = SENTRY_CRON_MONITOR_SLUG.PROCESS_SUBSCRIPTIONS;
       const startedAtMs = Date.now() - 1500;
 
       const checkInId = startCronCheckIn(slug);
       ctx.assertTrue("start returns checkInId", typeof checkInId === "string");
       ctx.assertEqual("in_progress once", calls.length, 1);
+      ctx.assertEqual("no flush on in_progress", flushCalls.length, 0);
       ctx.assertEqual("in_progress status", calls[0]?.checkIn.status, "in_progress");
       ctx.assertEqual(
         "in_progress slug",
@@ -373,7 +391,7 @@ const runSuite = async () => {
         "UTC",
       );
 
-      completeCronCheckInSuccess(slug, checkInId, startedAtMs);
+      await completeCronCheckInSuccess(slug, checkInId, startedAtMs);
       ctx.assertEqual("ok after success", calls.length, 2);
       ctx.assertEqual("ok status", calls[1]?.checkIn.status, "ok");
       ctx.assertEqual(
@@ -383,10 +401,25 @@ const runSuite = async () => {
           : null,
         checkInId,
       );
+      ctx.assertEqual("flush once after ok", flushCalls.length, 1);
+      ctx.assertEqual(
+        "flush timeout 2000ms",
+        flushCalls[0],
+        SENTRY_CRON_FLUSH_TIMEOUT_MS,
+      );
+      const okDuration =
+        "duration" in (calls[1]?.checkIn ?? {})
+          ? (calls[1]?.checkIn as { duration: number }).duration
+          : null;
+      ctx.assertTrue(
+        "ok duration in seconds",
+        typeof okDuration === "number" && okDuration >= 1 && okDuration < 10,
+      );
 
       const failCalls = installCheckInMock();
+      const failFlushCalls = installFlushMock();
       const failId = startCronCheckIn(slug);
-      completeCronCheckInFailure(slug, failId, startedAtMs);
+      await completeCronCheckInFailure(slug, failId, startedAtMs);
       ctx.assertEqual("error path two calls", failCalls.length, 2);
       ctx.assertEqual("error status", failCalls[1]?.checkIn.status, "error");
       ctx.assertEqual(
@@ -396,27 +429,37 @@ const runSuite = async () => {
           : null,
         failId,
       );
+      ctx.assertEqual("flush once after error", failFlushCalls.length, 1);
+      ctx.assertEqual(
+        "error flush timeout 2000ms",
+        failFlushCalls[0],
+        SENTRY_CRON_FLUSH_TIMEOUT_MS,
+      );
 
       assertNoPiiInCheckIns(ctx, "wrapper", [...calls, ...failCalls]);
 
-      // DSN / disabled → fail-open
+      // DSN / disabled → fail-open, no check-in, no flush
       __resetSentryCronForTests();
       __resetSentryForTests();
       delete process.env.SENTRY_DSN;
       const disabledCalls = installCheckInMock();
+      const disabledFlushCalls = installFlushMock();
       const disabledId = startCronCheckIn(slug);
       ctx.assertEqual("disabled → null id", disabledId, null);
       ctx.assertEqual("disabled → no SDK call", disabledCalls.length, 0);
+      await completeCronCheckInSuccess(slug, "orphan-id", startedAtMs);
+      ctx.assertEqual("disabled complete → no flush", disabledFlushCalls.length, 0);
 
-      // SDK throw → fail-open
+      // SDK throw on start → fail-open
       __setSentryEnabledForTests(true);
       __setCaptureCheckInForTests(() => {
         throw new Error("sdk down");
       });
+      __setFlushForTests(async () => true);
       const thrownId = startCronCheckIn(slug);
       ctx.assertEqual("SDK throw → null id", thrownId, null);
-      completeCronCheckInSuccess(slug, "orphan-id", startedAtMs);
-      completeCronCheckInFailure(slug, "orphan-id", startedAtMs);
+      await completeCronCheckInSuccess(slug, "orphan-id", startedAtMs);
+      await completeCronCheckInFailure(slug, "orphan-id", startedAtMs);
       ctx.assertTrue("complete after SDK throw did not rethrow", true);
     }
 
@@ -452,6 +495,11 @@ const runSuite = async () => {
         "maxRuntime 30",
         SENTRY_CRON_MAX_RUNTIME_MINUTES,
         30,
+      );
+      ctx.assertEqual(
+        "flush timeout 2000",
+        SENTRY_CRON_FLUSH_TIMEOUT_MS,
+        2000,
       );
 
       const billing =
@@ -704,6 +752,16 @@ const runSuite = async () => {
         wrapper.includes("fail-open"),
       );
       ctx.assertTrue(
+        "wrapper flushes after finished check-in",
+        wrapper.includes("flushAfterFinishedCheckIn") &&
+          wrapper.includes("SENTRY_CRON_FLUSH_TIMEOUT_MS"),
+      );
+      ctx.assertTrue(
+        "billing awaits complete check-in",
+        billing.includes("await completeCheckInSuccess") &&
+          billing.includes("await completeCheckInFailure"),
+      );
+      ctx.assertTrue(
         "billing uses captureCheckIn path via wrapper",
         billing.includes("startCronCheckIn") &&
           billing.includes("completeCronCheckInSuccess") &&
@@ -713,6 +771,11 @@ const runSuite = async () => {
         "email uses wrapper",
         email.includes("startCronCheckIn") &&
           email.includes("completeCronCheckInSuccess"),
+      );
+      ctx.assertTrue(
+        "email awaits complete check-in",
+        email.includes("await completeCheckInSuccess") &&
+          email.includes("await completeCheckInFailure"),
       );
       ctx.assertTrue(
         "billing documents dual signal",
@@ -746,6 +809,109 @@ const runSuite = async () => {
         email.includes("startEmailCronRun") &&
           email.includes("completeEmailCronRunSuccess"),
       );
+    }
+
+    ctx.scenario("F. Flush fail-open + cron awaits real wrapper flush");
+    {
+      __resetSentryCronForTests();
+      __resetSentryForTests();
+      delete process.env.SENTRY_DSN;
+      __setSentryEnabledForTests(true);
+
+      const slug = SENTRY_CRON_MONITOR_SLUG.PROCESS_EMAIL_RETRIES;
+      const startedAtMs = Date.now() - 500;
+
+      // flush returns false → fail-open, no throw
+      installCheckInMock();
+      __setFlushForTests(async () => false);
+      await completeCronCheckInSuccess(slug, "checkin_ok", startedAtMs);
+      ctx.assertTrue("flush false did not throw on success", true);
+
+      installCheckInMock();
+      __setFlushForTests(async () => false);
+      await completeCronCheckInFailure(slug, "checkin_err", startedAtMs);
+      ctx.assertTrue("flush false did not throw on failure", true);
+
+      // flush throws → fail-open
+      installCheckInMock();
+      __setFlushForTests(async () => {
+        throw new Error("flush exploded");
+      });
+      await completeCronCheckInSuccess(slug, "checkin_ok2", startedAtMs);
+      ctx.assertTrue("flush throw did not propagate on success", true);
+
+      // Cron awaits wrapper flush before returning
+      process.env.CRON_SECRET = "test-secret";
+      process.env.CRON_SHOP = SHOP;
+
+      let flushCompleted = false;
+      installCheckInMock();
+      __setFlushForTests(async (timeout) => {
+        ctx.assertEqual(
+          "cron flush timeout",
+          timeout,
+          SENTRY_CRON_FLUSH_TIMEOUT_MS,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        flushCompleted = true;
+        return true;
+      });
+
+      const db = createMemoryEmailCronRunDb();
+      const response = await runProcessEmailRetriesCron(
+        new Request(
+          "https://example.com/api/cron/process-email-retries?secret=test-secret",
+        ),
+        {
+          cronRunClient: db,
+          startEmailCronRun,
+          completeEmailCronRunSuccess,
+          completeEmailCronRunFailure,
+          processDueEmailEvents: async () => emptyEmailSummary(),
+        },
+      );
+      ctx.assertEqual("cron success after flush", response.status, 200);
+      ctx.assertTrue("flush completed before cron return", flushCompleted);
+
+      // Failure path: captureTechnicalError not duplicated by check-in wrapper
+      let captureCount = 0;
+      __setCaptureExceptionForTests(() => {
+        captureCount += 1;
+        return "event-id";
+      });
+
+      flushCompleted = false;
+      installCheckInMock();
+      __setFlushForTests(async () => {
+        flushCompleted = true;
+        return true;
+      });
+
+      const failDb = createMemoryEmailCronRunDb();
+      const failed = await runProcessEmailRetriesCron(
+        new Request(
+          "https://example.com/api/cron/process-email-retries?secret=test-secret",
+        ),
+        {
+          cronRunClient: failDb,
+          startEmailCronRun,
+          completeEmailCronRunSuccess,
+          completeEmailCronRunFailure,
+          processDueEmailEvents: async () => {
+            throw new Error("email worker exploded");
+          },
+        },
+      );
+      ctx.assertEqual("failure cron HTTP 500", failed.status, 500);
+      ctx.assertTrue("failure flush completed before return", flushCompleted);
+      ctx.assertEqual(
+        "captureTechnicalError once on failure",
+        captureCount,
+        1,
+      );
+      __resetCaptureTechnicalErrorForTests();
+      const failRun = [...failDb.rows.values()][0];
+      ctx.assertEqual("EmailCronRun failed despite flush", failRun?.status, "failed");
     }
   } finally {
     restore();
