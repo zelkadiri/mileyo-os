@@ -73,6 +73,11 @@ export const builderClientScript = `
   var tunnelProgressFill = document.getElementById("tunnel-progress-fill");
   var objectiveContinue = document.getElementById("objective-continue");
   var objectiveFooter = document.getElementById("objective-footer");
+  var objectiveDetail = document.getElementById("objective-detail");
+  var objectiveDetailBadge = document.getElementById("objective-detail-badge");
+  var objectiveDetailTitle = document.getElementById("objective-detail-title");
+  var objectiveDetailBody = document.getElementById("objective-detail-body");
+  var objectiveDetailImage = document.getElementById("objective-detail-image");
   var formulaContinue = document.getElementById("formula-continue");
   var formulaFooter = document.getElementById("formula-footer");
   var deliveryContinue = document.getElementById("delivery-continue");
@@ -296,6 +301,36 @@ export const builderClientScript = `
     });
   }
 
+  /** Parse #objectif | #objectif-<id> | #formule | … without trusting the suffix. */
+  function parseBuilderHash() {
+    var raw = (location.hash || "#objectif").replace(/^#/, "");
+    if (raw.indexOf("objectif-") === 0) {
+      return {
+        step: "objectif",
+        objective: raw.slice("objectif-".length) || null,
+      };
+    }
+    return {
+      step: raw || "objectif",
+      objective: null,
+    };
+  }
+
+  function hashForStep(step) {
+    if (step === "objectif" && isValidObjective(selectedObjective)) {
+      return "#objectif-" + selectedObjective;
+    }
+    return "#" + step;
+  }
+
+  /** UX-only: seed selectedObjective from URL. Never validates the step. */
+  function applyPreselectedObjectiveFromHash() {
+    var parsed = parseBuilderHash();
+    if (parsed.step !== "objectif" || !parsed.objective) return;
+    if (!isValidObjective(parsed.objective)) return;
+    setSelectedObjective(parsed.objective);
+  }
+
   function updateObjectiveCta() {
     if (!objectiveContinue) return;
     if (!isValidObjective(selectedObjective)) {
@@ -305,6 +340,70 @@ export const builderClientScript = `
     }
     objectiveContinue.disabled = false;
     objectiveContinue.textContent = "Continuer →";
+  }
+
+  function findObjectiveOption(value) {
+    if (!value || !data.objectives) return null;
+    return (
+      data.objectives.find(function (option) {
+        return option.value === value;
+      }) || null
+    );
+  }
+
+  function updateObjectiveDetail(options) {
+    var shouldScroll = !!(options && options.scroll);
+    if (
+      !objectiveDetail ||
+      !objectiveDetailBadge ||
+      !objectiveDetailTitle ||
+      !objectiveDetailBody ||
+      !objectiveDetailImage
+    ) {
+      return;
+    }
+
+    var option = findObjectiveOption(selectedObjective);
+    if (
+      !option ||
+      !option.detailTitle ||
+      !option.detailParagraphs ||
+      !option.detailParagraphs.length
+    ) {
+      objectiveDetail.classList.add("hidden");
+      objectiveDetailBadge.textContent = "";
+      objectiveDetailTitle.textContent = "";
+      objectiveDetailBody.innerHTML = "";
+      objectiveDetailImage.removeAttribute("src");
+      objectiveDetailImage.alt = "";
+      return;
+    }
+
+    objectiveDetailBadge.textContent = option.label || "";
+    objectiveDetailTitle.textContent = option.detailTitle;
+    objectiveDetailBody.innerHTML = "";
+    option.detailParagraphs.forEach(function (paragraphText) {
+      var paragraph = document.createElement("p");
+      paragraph.textContent = paragraphText;
+      objectiveDetailBody.appendChild(paragraph);
+    });
+    if (option.detailImageUrl) {
+      objectiveDetailImage.src = option.detailImageUrl;
+      objectiveDetailImage.alt = "Plat Mileyo — " + (option.label || "");
+    } else {
+      objectiveDetailImage.removeAttribute("src");
+      objectiveDetailImage.alt = "";
+    }
+    objectiveDetail.classList.remove("hidden");
+
+    if (!shouldScroll) return;
+
+    window.requestAnimationFrame(function () {
+      objectiveDetail.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
   }
 
   function renderObjectives() {
@@ -363,8 +462,16 @@ export const builderClientScript = `
 
       button.addEventListener("click", function () {
         setSelectedObjective(option.value);
+        if (currentStep === "objectif") {
+          history.replaceState(
+            { step: "objectif" },
+            "",
+            "#objectif-" + option.value,
+          );
+        }
         renderObjectives();
         updateObjectiveCta();
+        updateObjectiveDetail({ scroll: true });
         setError("");
       });
 
@@ -845,6 +952,7 @@ export const builderClientScript = `
     if (step === "objectif") {
       renderObjectives();
       updateObjectiveCta();
+      updateObjectiveDetail({ scroll: false });
     } else if (step === "formule") {
       renderBoxes();
       window.requestAnimationFrame(function () {
@@ -876,12 +984,12 @@ export const builderClientScript = `
 
     if (pushHistory || replaceHistory) {
       var method = replaceHistory ? "replaceState" : "pushState";
-      history[method]({ step: step }, "", "#" + step);
+      history[method]({ step: step }, "", hashForStep(step));
     }
   }
 
   function goToPreviousStep() {
-    if (location.hash === "#" + currentStep) {
+    if (parseBuilderHash().step === currentStep) {
       history.back();
       return;
     }
@@ -911,7 +1019,15 @@ export const builderClientScript = `
   }
 
   function handleHistoryNavigation() {
-    var hash = (location.hash || "#objectif").replace("#", "");
+    var parsed = parseBuilderHash();
+    var hash = parsed.step;
+    if (
+      hash === "objectif" &&
+      parsed.objective &&
+      isValidObjective(parsed.objective)
+    ) {
+      setSelectedObjective(parsed.objective);
+    }
     if (!isValidObjective(selectedObjective)) {
       showStep("objectif", { pushHistory: false });
       return;
@@ -1741,24 +1857,28 @@ export const builderClientScript = `
     });
   })();
 
+  applyPreselectedObjectiveFromHash();
+
   renderObjectives();
   updateObjectiveCta();
+  updateObjectiveDetail({ scroll: false });
   updateFormulaCta();
   updateDeliveryCta();
   updateSummary();
 
+  var initialHash = parseBuilderHash().step;
   if (!isValidObjective(selectedObjective)) {
     showStep("objectif", { replaceHistory: true });
-  } else if (location.hash === "#recap") {
+  } else if (initialHash === "recap") {
     // Legacy hash → email (or earlier step via showStep guards). Never auto-checkout.
     showStep("email", { replaceHistory: true });
-  } else if (location.hash === "#email" && canEnterEmailStep()) {
+  } else if (initialHash === "email" && canEnterEmailStep()) {
     showStep("email", { replaceHistory: true });
-  } else if (location.hash === "#repas" && selectedBox && isSelectedDeliveryWindowValid()) {
+  } else if (initialHash === "repas" && selectedBox && isSelectedDeliveryWindowValid()) {
     showStep("repas", { replaceHistory: true });
-  } else if (location.hash === "#livraison" && selectedBox) {
+  } else if (initialHash === "livraison" && selectedBox) {
     showStep("livraison", { replaceHistory: true });
-  } else if (location.hash === "#formule") {
+  } else if (initialHash === "formule") {
     showStep("formule", { replaceHistory: true });
   } else {
     showStep("objectif", { replaceHistory: true });

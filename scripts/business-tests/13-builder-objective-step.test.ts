@@ -523,6 +523,48 @@ const runSuite = () => {
     ),
   );
 
+  ctx.scenario("I. Homepage objective preselection via hash — UX only");
+  ctx.assertTrue(
+    "parseBuilderHash helper present",
+    clientSource.includes("function parseBuilderHash()"),
+  );
+  ctx.assertTrue(
+    "applyPreselectedObjectiveFromHash helper present",
+    clientSource.includes("function applyPreselectedObjectiveFromHash()"),
+  );
+  ctx.assertTrue(
+    "hashForStep preserves objectif-<id>",
+    clientSource.includes('return "#objectif-" + selectedObjective'),
+  );
+  ctx.assertTrue(
+    "preselection applied before first render",
+    /applyPreselectedObjectiveFromHash\(\);\s*\n\s*renderObjectives\(\)/.test(
+      clientSource,
+    ),
+  );
+  ctx.assertTrue(
+    "init detail update stays without scroll",
+    /applyPreselectedObjectiveFromHash\(\);[\s\S]*?updateObjectiveDetail\(\{ scroll: false \}\)/.test(
+      clientSource,
+    ),
+  );
+  ctx.assertTrue(
+    "manual click still scrolls detail",
+    /setSelectedObjective\(option\.value\);[\s\S]*?updateObjectiveDetail\(\{ scroll: true \}\)/.test(
+      clientSource,
+    ),
+  );
+  ctx.assertFalse(
+    "preselection does not auto-continue",
+    /applyPreselectedObjectiveFromHash[\s\S]{0,400}showStep\("formule"/.test(
+      clientSource,
+    ),
+  );
+  ctx.assertTrue(
+    "legacy hash === \"recap\" still matched after parse",
+    clientSource.includes('hash === "recap"'),
+  );
+
   return finishSuite("13-builder-objective-step", ctx);
 };
 

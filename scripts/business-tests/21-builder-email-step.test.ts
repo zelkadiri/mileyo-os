@@ -110,20 +110,35 @@ const runSuite = () => {
     "recap not in BUILDER_STEPS",
     (BUILDER_STEPS as readonly string[]).includes("recap"),
   );
-  ctx.assertTrue("hash #email in client", clientSource.includes('"#email"'));
+  ctx.assertTrue(
+    "hash #email in client",
+    clientSource.includes('hash === "email"') ||
+      clientSource.includes('initialHash === "email"') ||
+      clientSource.includes('"#email"'),
+  );
   ctx.assertTrue(
     "legacy hash #recap still handled",
     clientSource.includes('hash === "recap"') ||
+      clientSource.includes('initialHash === "recap"') ||
       clientSource.includes('location.hash === "#recap"'),
   );
-  ctx.assertTrue("hash #repas preserved", clientSource.includes('"#repas"'));
+  ctx.assertTrue(
+    "hash #repas preserved",
+    clientSource.includes('hash === "repas"') ||
+      clientSource.includes('initialHash === "repas"') ||
+      clientSource.includes('"#repas"'),
+  );
   ctx.assertTrue(
     "hash #livraison preserved",
-    clientSource.includes('"#livraison"'),
+    clientSource.includes('hash === "livraison"') ||
+      clientSource.includes('initialHash === "livraison"') ||
+      clientSource.includes('"#livraison"'),
   );
   ctx.assertTrue(
     "hash #formule preserved",
-    clientSource.includes('"#formule"'),
+    clientSource.includes('hash === "formule"') ||
+      clientSource.includes('initialHash === "formule"') ||
+      clientSource.includes('"#formule"'),
   );
   ctx.assertTrue(
     "formule id preserved",

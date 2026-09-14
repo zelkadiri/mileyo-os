@@ -7,6 +7,9 @@ export const builderStyles = `
   --mileyo-purple-dark-black: #2A0B33;
   --mileyo-pink: #EFC4D6;
   --mileyo-peach: #F3CBB8;
+  --mileyo-plum: #2D0F35;
+  --mileyo-yellow: #F4CC4D;
+  --mileyo-yellow-hover: #E8BD34;
   --mileyo-white: #FFFFFF;
   --mileyo-cream: #FCF8F6;
   --mileyo-gold: #E6C08A;
@@ -1093,6 +1096,84 @@ body {
   margin-top: 2px;
 }
 
+.objective-detail {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.96) 0%,
+    rgba(252, 248, 246, 0.98) 100%
+  );
+  border: 1px solid rgba(185, 138, 215, 0.2);
+  border-radius: 20px;
+  box-shadow: var(--mileyo-shadow-soft);
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  padding: 18px;
+  scroll-margin-bottom: calc(var(--tunnel-footer-height) + 16px);
+  scroll-margin-top: 88px;
+}
+
+.objective-detail-copy {
+  align-content: start;
+  align-items: start;
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.objective-detail-badge {
+  align-items: center;
+  align-self: start;
+  background: rgba(185, 138, 215, 0.18);
+  border: 1px solid rgba(185, 138, 215, 0.34);
+  border-radius: 999px;
+  color: var(--mileyo-purple-black);
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 700;
+  justify-self: start;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  margin: 0 0 10px;
+  padding: 5px 10px;
+  width: fit-content;
+}
+
+.objective-detail-title {
+  color: var(--mileyo-purple-black);
+  font-size: clamp(1.05rem, 2.8vw, 1.28rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin: 0 0 12px;
+}
+
+.objective-detail-body {
+  display: grid;
+  gap: 12px;
+}
+
+.objective-detail-body p {
+  color: var(--mileyo-text);
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.objective-detail-media {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.objective-detail-image {
+  background: rgba(185, 138, 215, 0.08);
+  border-radius: 16px;
+  display: block;
+  height: 180px;
+  object-fit: cover;
+  width: 100%;
+}
+
 .objective-launch-eligibility-note {
   color: var(--mileyo-muted);
   font-size: 0.78rem;
@@ -2041,11 +2122,11 @@ body {
 }
 
 .tunnel-footer.meals-gauge-footer .meals-gauge-cta {
-  background: var(--mileyo-purple-black);
+  background: var(--mileyo-yellow);
   border: 0;
   border-radius: 999px;
-  box-shadow: 0 6px 18px rgba(42, 11, 51, 0.22);
-  color: var(--mileyo-white);
+  box-shadow: none;
+  color: var(--mileyo-plum);
   font-size: 0.84rem;
   font-weight: 800;
   letter-spacing: 0.01em;
@@ -2057,23 +2138,23 @@ body {
 }
 
 .tunnel-footer.meals-gauge-footer .meals-gauge-cta:disabled {
-  background: var(--mileyo-purple-black);
-  border: 0;
-  box-shadow: 0 6px 18px rgba(42, 11, 51, 0.22);
-  color: var(--mileyo-white);
+  background: rgba(244, 204, 77, 0.4);
+  border: 1px solid rgba(45, 15, 53, 0.1);
+  box-shadow: none;
+  color: rgba(45, 15, 53, 0.45);
   cursor: not-allowed;
-  opacity: 0.88;
+  opacity: 1;
 }
 
 .tunnel-footer.meals-gauge-footer.is-complete .meals-gauge-cta:not(:disabled) {
-  background: var(--mileyo-purple-black);
-  box-shadow: 0 8px 20px rgba(90, 27, 105, 0.3);
-  color: var(--mileyo-white);
+  background: var(--mileyo-yellow);
+  box-shadow: none;
+  color: var(--mileyo-plum);
   opacity: 1;
 }
 
 .tunnel-footer.meals-gauge-footer .meals-gauge-cta:not(:disabled):hover {
-  background: var(--mileyo-purple-dark-black);
+  background: var(--mileyo-yellow-hover);
 }
 
 .product-title { font-weight: 700; }
@@ -2209,9 +2290,9 @@ body {
 }
 
 .tunnel-cta {
-  background: var(--mileyo-purple-black);
-  box-shadow: 0 4px 18px rgba(90, 27, 105, 0.28);
-  color: var(--mileyo-white);
+  background: var(--mileyo-yellow);
+  box-shadow: none;
+  color: var(--mileyo-plum);
   font-size: 0.98rem;
   letter-spacing: 0.01em;
   padding: 14px 20px;
@@ -2219,14 +2300,14 @@ body {
 }
 
 .tunnel-cta:not(:disabled):hover {
-  background: var(--mileyo-purple-dark-black);
+  background: var(--mileyo-yellow-hover);
 }
 
 .tunnel-cta:disabled {
-  background: #e6d9ef;
-  border: 1px solid rgba(90, 27, 105, 0.14);
+  background: rgba(244, 204, 77, 0.4);
+  border: 1px solid rgba(45, 15, 53, 0.1);
   box-shadow: none;
-  color: #6f5a7d;
+  color: rgba(45, 15, 53, 0.45);
   cursor: not-allowed;
   font-weight: 600;
   opacity: 1;
@@ -2576,14 +2657,31 @@ button:disabled {
     max-width: none;
   }
 
+  .objective-detail {
+    align-items: stretch;
+    gap: 20px;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    padding: 20px;
+  }
+
+  .objective-detail-media {
+    min-height: 220px;
+    position: relative;
+  }
+
+  .objective-detail-image {
+    height: 100%;
+    left: 0;
+    max-height: none;
+    min-height: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+  }
+
   .objective-card {
     min-height: 132px;
     padding: 18px 16px 16px;
-  }
-
-  .objective-card .selected-badge {
-    position: static;
-    width: fit-content;
   }
 
   .meal-filter-row {

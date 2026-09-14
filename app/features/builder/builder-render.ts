@@ -5,7 +5,7 @@ import { escapeHtml, scriptJson } from "./builder-formatters";
 import { BUILDER_OBJECTIVE_OPTIONS } from "./builder-objective-options";
 import { builderStyles } from "./builder-styles";
 import type { BuilderBoxOption, BuilderDeliveryConfig, BuilderMealOption } from "./builder-types";
-import { renderMileyoLogoImg } from "../../utils/mileyoLogo";
+import { getMileyoPublicAssetUrl, renderMileyoLogoImg } from "../../utils/mileyoLogo";
 
 const htmlResponse = (html: string) =>
   new Response(html, {
@@ -114,6 +114,26 @@ export const renderBuilder = ({
           </span>
         </div>
         <div class="objective-grid" id="objective-grid" role="group" aria-label="Objectifs disponibles"></div>
+        <aside
+          aria-labelledby="objective-detail-title"
+          aria-live="polite"
+          class="objective-detail hidden"
+          id="objective-detail"
+        >
+          <div class="objective-detail-copy">
+            <span class="objective-detail-badge" id="objective-detail-badge"></span>
+            <h2 class="objective-detail-title" id="objective-detail-title"></h2>
+            <div class="objective-detail-body" id="objective-detail-body"></div>
+          </div>
+          <div class="objective-detail-media">
+            <img
+              alt=""
+              class="objective-detail-image"
+              decoding="async"
+              id="objective-detail-image"
+            />
+          </div>
+        </aside>
         <p class="objective-launch-eligibility-note">
           *Offre de lancement pour les nouveaux clients éligibles.
         </p>
@@ -381,7 +401,10 @@ export const renderBuilder = ({
     deliveryConfig,
     meals,
     objectiveStartingPriceLabels: getObjectiveStartingPriceLabels(boxes),
-    objectives: BUILDER_OBJECTIVE_OPTIONS,
+    objectives: BUILDER_OBJECTIVE_OPTIONS.map((option) => ({
+      ...option,
+      detailImageUrl: getMileyoPublicAssetUrl(option.detailImagePath),
+    })),
   })};</script>
   <script>${builderClientScript}</script>
 </body>
