@@ -263,7 +263,9 @@ const runSuite = () => {
   ctx.given("nextBillingDate future");
   const tooEarly = getSelectionSkipReason({
     ...dueSelectionBase(),
-    nextBillingDate: new Date("2026-09-04T22:05:00.000Z"),
+    nextBillingDate: new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000
+    ),
   });
   ctx.assertEqual(
     "future nextBillingDate skips",
