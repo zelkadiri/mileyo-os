@@ -1,7 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import prisma from "../db.server";
-import { unauthenticated } from "../shopify.server";
 import {
   fetchBuilderBoxOptions,
   fetchBuilderMealOptions,
@@ -29,30 +28,94 @@ const jsonResponse = (body: unknown, status = 200) =>
     status,
   });
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { shop } = await authenticateMileyoAppProxy(request);
+/** Stable Server-Timing duration (ms), never NaN/negative. */
+const timingDur = (ms: number) => {
+  if (!Number.isFinite(ms) || ms < 0) return 0;
+  return Math.round(ms * 10) / 10;
+};
 
-  const settings = await prisma.appSettings.findUnique({ where: { shop } });
+const withServerTiming = (
+  response: Response,
+  timings: Record<string, number>,
+) => {
+  const value = Object.entries(timings)
+    .map(([name, dur]) => `${name};dur=${timingDur(dur)}`)
+    .join(", ");
+  // Mutate headers on the existing Response — keeps body/status/Content-Type intact.
+  response.headers.set("Server-Timing", value);
+  return response;
+};
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const totalStart = performance.now();
+  const timings: Record<string, number> = {};
+
+  const authStart = performance.now();
+  const { admin, shop } = await authenticateMileyoAppProxy(request);
+  timings.appProxyAuth = performance.now() - authStart;
+
+  if (!admin) {
+    // No offline session after App Proxy auth (refresh already attempted in SDK).
+    // Equivalent failure class to the former SessionNotFoundError path.
+    throw new Response(undefined, {
+      status: 503,
+      statusText: "Service Unavailable",
+    });
+  }
+
+  // Box catalog does not depend on AppSettings — overlap DB + GraphQL.
+  const settingsStart = performance.now();
+  const boxesStart = performance.now();
+  const settingsPromise = prisma.appSettings
+    .findUnique({ where: { shop } })
+    .then((settings) => {
+      timings.settings = performance.now() - settingsStart;
+      return settings;
+    });
+  const boxesPromise = fetchBuilderBoxOptions(admin).then((boxes) => {
+    timings.boxes = performance.now() - boxesStart;
+    return boxes;
+  });
+  // Attach immediately so a GraphQL failure during await settings never becomes
+  // an unhandled rejection on the early-return path. Happy path still awaits
+  // boxesPromise and surfaces the rejection normally.
+  boxesPromise.catch(() => undefined);
+
+  const settings = await settingsPromise;
 
   if (!settings) {
-    return renderMessage(
-      "Configuration manquante. Sélectionnez la collection de plats dans l’administration Mileyo.",
-      shop,
+    timings.total = performance.now() - totalStart;
+    return withServerTiming(
+      renderMessage(
+        "Configuration manquante. Sélectionnez la collection de plats dans l’administration Mileyo.",
+        shop,
+      ),
+      timings,
     );
   }
 
   if (!settings.mealCollectionId) {
-    return renderMessage(
-      "Configuration incomplète. Sélectionnez une collection de plats dans les réglages.",
-      shop,
+    timings.total = performance.now() - totalStart;
+    return withServerTiming(
+      renderMessage(
+        "Configuration incomplète. Sélectionnez une collection de plats dans les réglages.",
+        shop,
+      ),
+      timings,
     );
   }
 
-  const { admin } = await unauthenticated.admin(shop);
-  const [boxes, meals] = await Promise.all([
-    fetchBuilderBoxOptions(admin),
-    fetchBuilderMealOptions(admin, settings.mealCollectionId),
-  ]);
+  // Meals need mealCollectionId; keep overlapping with in-flight box fetch.
+  const mealsStart = performance.now();
+  const mealsPromise = fetchBuilderMealOptions(
+    admin,
+    settings.mealCollectionId,
+  ).then((meals) => {
+    timings.meals = performance.now() - mealsStart;
+    return meals;
+  });
+
+  const [boxes, meals] = await Promise.all([boxesPromise, mealsPromise]);
 
   const deliveryWindowOptions = buildBuilderDeliveryWindowOptions();
   const deliveryConfig = {
@@ -60,11 +123,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     timezone: DELIVERY_TIMEZONE,
   };
 
-  return renderBuilder({
+  const renderStart = performance.now();
+  const response = renderBuilder({
     boxes,
     deliveryConfig,
     meals,
   });
+  timings.render = performance.now() - renderStart;
+  timings.total = performance.now() - totalStart;
+
+  return withServerTiming(response, timings);
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {

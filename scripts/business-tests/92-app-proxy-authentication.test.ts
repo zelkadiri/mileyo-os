@@ -60,6 +60,11 @@ const runSuite = () => {
     /shop:/.test(helperSource) && helperSource.includes("session?.shop"),
   );
   ctx.assertTrue(
+    "helper surfaces admin from appProxy context",
+    helperSource.includes("admin: context.admin") ||
+      /admin:\s*context\.admin/.test(helperSource),
+  );
+  ctx.assertTrue(
     "helper reads logged_in_customer_id only after appProxy",
     helperSource.indexOf("authenticate.public.appProxy") <
       helperSource.indexOf('searchParams.get("logged_in_customer_id")'),
@@ -91,12 +96,36 @@ const runSuite = () => {
     "builder does not gate on loggedInCustomerId",
     /loggedInCustomerId/.test(builderRoute),
   );
+  const builderLoaderBody = (() => {
+    const start = builderRoute.indexOf("export const loader");
+    const end = builderRoute.indexOf("export const action");
+    if (start < 0 || end < 0 || end <= start) {
+      return "";
+    }
+    return builderRoute.slice(start, end);
+  })();
   ctx.assertTrue(
-    "builder loader auth before prisma/admin",
-    builderRoute.indexOf("authenticateMileyoAppProxy") <
-      builderRoute.indexOf("prisma.appSettings") &&
-      builderRoute.indexOf("authenticateMileyoAppProxy") <
-        builderRoute.indexOf("unauthenticated.admin"),
+    "builder loader auth before prisma/catalog",
+    builderLoaderBody.indexOf("authenticateMileyoAppProxy") >= 0 &&
+      builderLoaderBody.indexOf("authenticateMileyoAppProxy") <
+        builderLoaderBody.indexOf("prisma.appSettings") &&
+      builderLoaderBody.indexOf("authenticateMileyoAppProxy") <
+        builderLoaderBody.indexOf("fetchBuilderBoxOptions"),
+  );
+  ctx.assertFalse(
+    "builder loader does not re-load admin via unauthenticated.admin",
+    /unauthenticated\.admin\s*\(/.test(builderLoaderBody),
+  );
+  ctx.assertTrue(
+    "builder loader reuses admin from authenticateMileyoAppProxy",
+    /const\s*\{\s*admin,\s*shop\s*\}/.test(builderLoaderBody) ||
+      /const\s*\{\s*shop,\s*admin\s*\}/.test(builderLoaderBody),
+  );
+  ctx.assertTrue(
+    "boxesPromise rejection handled before early return (no unhandled rejection)",
+    /boxesPromise\.catch\s*\(/.test(builderLoaderBody) &&
+      builderLoaderBody.indexOf("boxesPromise.catch") <
+        builderLoaderBody.indexOf("await settingsPromise"),
   );
 
   ctx.scenario("D. Builder — unsigned / forged shop blocked before business");
