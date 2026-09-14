@@ -12,9 +12,15 @@ export type BuilderPerfTimings = {
   sessionLoadCount: number;
   sessionStore: number;
   sessionStoreCount: number;
-  /** Prisma engine duration (ms) for Session queries during auth phase. */
+  /**
+   * Wall-clock of Prisma `Session.findUnique` during auth phase
+   * (via client extension; ALS-safe). Not engine `$on("query")` duration.
+   */
   sessionQuery: number;
-  /** Prisma engine duration (ms) for AppSettings queries during settings phase. */
+  /**
+   * Wall-clock of Prisma `AppSettings.findUnique` during settings phase
+   * (via client extension; ALS-safe).
+   */
   settingsQuery: number;
 };
 
@@ -56,33 +62,33 @@ export const recordSessionStoreMs = (ms: number): void => {
   current.sessionStoreCount += 1;
 };
 
-/** True for Prisma engine SELECT text (load path). Excludes upsert/insert writes. */
-const isSelectQuery = (query: string): boolean => /^\s*SELECT\b/i.test(query);
-
 /**
- * Attribute Prisma engine query duration to the active builder phase.
- * Uses only table-name markers from the SQL text — never logs query/params.
- *
- * Auth phase counts only SELECT on "Session" so a refresh `storeSession`
- * upsert cannot inflate `sessionQuery`. Settings phase counts SELECT on
- * "AppSettings" only.
+ * Attribute Prisma client-extension wall time by model/operation.
+ * Only findUnique reads are counted so refresh upserts / counts do not pollute.
  */
-export const recordPrismaEngineQueryMs = (
-  query: string,
+export const recordPrismaModelOpMs = (
+  model: string | undefined,
+  operation: string,
   durationMs: number,
 ): void => {
   const current = store.getStore();
   if (!current || current.phase === "idle") return;
-  if (typeof query !== "string" || query.length === 0) return;
   if (!Number.isFinite(durationMs) || durationMs < 0) return;
-  if (!isSelectQuery(query)) return;
 
-  if (current.phase === "auth" && query.includes('"Session"')) {
+  if (
+    current.phase === "auth" &&
+    model === "Session" &&
+    operation === "findUnique"
+  ) {
     current.sessionQuery += durationMs;
     return;
   }
 
-  if (current.phase === "settings" && query.includes('"AppSettings"')) {
+  if (
+    current.phase === "settings" &&
+    model === "AppSettings" &&
+    operation === "findUnique"
+  ) {
     current.settingsQuery += durationMs;
   }
 };

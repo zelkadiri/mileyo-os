@@ -1,34 +1,36 @@
 import { PrismaClient } from "@prisma/client";
 
-import { recordPrismaEngineQueryMs } from "./utils/perfTimings.server";
+import { recordPrismaModelOpMs } from "./utils/perfTimings.server";
 
 declare global {
   // eslint-disable-next-line no-var
   var prismaGlobal: PrismaClient;
 }
 
-type QueryEventClient = PrismaClient & {
-  $on(
-    event: "query",
-    callback: (event: { query: string; duration: number }) => void,
-  ): void;
-};
-
 /**
- * Create a PrismaClient with query-engine duration events for temporary
- * builder Server-Timing instrumentation. Events are attributed only when a
- * builder perf ALS context is active — no query/params are logged.
+ * PrismaClient with a request-scoped timing extension.
+ *
+ * NOTE: Prisma `$on("query")` does NOT see AsyncLocalStorage in this runtime
+ * (engine emits outside the ALS context). Client extensions DO retain ALS, so
+ * we attribute wall-clock model ops here instead of engine query events.
+ *
+ * Cast back to PrismaClient so call sites keep the existing type surface.
  */
 const createPrismaClient = (): PrismaClient => {
-  const client = new PrismaClient({
-    log: [{ emit: "event", level: "query" }],
-  }) as QueryEventClient;
-
-  client.$on("query", (event) => {
-    recordPrismaEngineQueryMs(event.query, event.duration);
+  const client = new PrismaClient().$extends({
+    query: {
+      async $allOperations({ model, operation, args, query }) {
+        const start = performance.now();
+        try {
+          return await query(args);
+        } finally {
+          recordPrismaModelOpMs(model, operation, performance.now() - start);
+        }
+      },
+    },
   });
 
-  return client;
+  return client as unknown as PrismaClient;
 };
 
 if (process.env.NODE_ENV !== "production") {

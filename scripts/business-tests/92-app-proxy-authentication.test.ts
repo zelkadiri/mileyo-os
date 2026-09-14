@@ -259,9 +259,10 @@ const runSuite = () => {
       !/console\.(log|info|debug)/.test(perfTimings),
   );
   ctx.assertTrue(
-    "Prisma query events attribute duration without logging SQL",
-    dbServer.includes('emit: "event"') &&
-      dbServer.includes("recordPrismaEngineQueryMs") &&
+    "Prisma model-op extension attribution without query-event logging",
+    dbServer.includes("recordPrismaModelOpMs") &&
+      dbServer.includes("$extends") &&
+      !dbServer.includes('emit: "event"') &&
       !/console\.(log|info|debug)/.test(dbServer),
   );
   ctx.assertFalse(
@@ -282,10 +283,10 @@ const runSuite = () => {
       actionBody.includes("runWithBuilderPerfTimings"),
   );
   ctx.assertTrue(
-    "sessionQuery attribution ignores non-SELECT Session SQL",
-    perfTimings.includes("isSelectQuery") &&
-      /auth.*Session|Session.*auth/.test(perfTimings) &&
-      perfTimings.includes('query.includes(\'"Session"\')'),
+    "sessionQuery attribution uses Session.findUnique only",
+    perfTimings.includes("recordPrismaModelOpMs") &&
+      perfTimings.includes('model === "Session"') &&
+      perfTimings.includes('operation === "findUnique"'),
   );
   ctx.assertTrue(
     "authOther omitted unless sessionLoadCount > 0",

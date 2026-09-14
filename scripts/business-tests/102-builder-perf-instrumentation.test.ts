@@ -6,7 +6,7 @@ import { createBusinessTestContext, finishSuite } from "./_framework";
 import { instrumentSessionStorage } from "../../app/utils/instrumentedSessionStorage.server";
 import {
   getBuilderPerfTimings,
-  recordPrismaEngineQueryMs,
+  recordPrismaModelOpMs,
   recordSessionLoadMs,
   runWithBuilderPerfTimings,
   setBuilderPerfPhase,
@@ -165,30 +165,21 @@ const runSuite = async () => {
     ctx.assertEqual("context B total sessionLoad", results[1], 100);
   }
 
-  ctx.scenario("E. Prisma SELECT attribution only; no write pollution");
+  ctx.scenario("E. Prisma model-op attribution; no write pollution");
   {
     await runWithBuilderPerfTimings(async () => {
       setBuilderPerfPhase("auth");
-      recordPrismaEngineQueryMs(
-        'SELECT "id" FROM "Session" WHERE "id" = $1',
-        12.5,
-      );
-      recordPrismaEngineQueryMs(
-        'INSERT INTO "Session" ("id") VALUES ($1) ON CONFLICT ("id") DO UPDATE SET "accessToken" = $2',
-        99,
-      );
-      recordPrismaEngineQueryMs(
-        'SELECT "id" FROM "AppSettings" WHERE "shop" = $1',
-        40,
-      );
+      recordPrismaModelOpMs("Session", "findUnique", 12.5);
+      recordPrismaModelOpMs("Session", "upsert", 99);
+      recordPrismaModelOpMs("AppSettings", "findUnique", 40);
       const authPerf = getBuilderPerfTimings();
       ctx.assertEqual(
-        "auth SELECT Session counted",
+        "auth Session.findUnique counted",
         authPerf?.sessionQuery,
         12.5,
       );
       ctx.assertEqual(
-        "auth upsert Session ignored (sessionQuery unchanged)",
+        "auth Session.upsert ignored",
         authPerf?.sessionQuery,
         12.5,
       );
@@ -199,33 +190,24 @@ const runSuite = async () => {
       );
 
       setBuilderPerfPhase("settings");
-      recordPrismaEngineQueryMs(
-        'SELECT "id","shop" FROM "AppSettings" WHERE "shop" = $1 LIMIT 1',
-        33,
-      );
-      recordPrismaEngineQueryMs(
-        'SELECT COUNT(*) FROM "Session"',
-        8,
-      );
+      recordPrismaModelOpMs("AppSettings", "findUnique", 33);
+      recordPrismaModelOpMs("Session", "count", 8);
       const settingsPerf = getBuilderPerfTimings();
       ctx.assertEqual(
-        "settings AppSettings SELECT counted",
+        "settings AppSettings.findUnique counted",
         settingsPerf?.settingsQuery,
         33,
       );
       ctx.assertEqual(
-        "Session SELECT ignored outside auth phase",
+        "Session ops ignored outside auth phase",
         settingsPerf?.sessionQuery,
         12.5,
       );
 
       setBuilderPerfPhase("idle");
-      recordPrismaEngineQueryMs(
-        'SELECT COUNT(*) FROM "Session"',
-        50,
-      );
+      recordPrismaModelOpMs("Session", "findUnique", 50);
       ctx.assertEqual(
-        "idle Session poll not attributed",
+        "idle Session.findUnique not attributed",
         getBuilderPerfTimings()?.sessionQuery,
         12.5,
       );
