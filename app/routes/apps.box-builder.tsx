@@ -2,8 +2,8 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 import prisma from "../db.server";
 import {
-  fetchBuilderBoxOptions,
-  fetchBuilderMealOptions,
+  fetchCachedBuilderBoxOptions,
+  fetchCachedBuilderMealOptions,
 } from "../features/builder/builder-catalog.server";
 import {
   CREATE_BUILDER_CHECKOUT_INTENT,
@@ -70,6 +70,12 @@ const mergeAuthAndSettingsPerf = (
   if (perf.settingsQuery > 0) {
     timings.settingsQuery = perf.settingsQuery;
   }
+  if (perf.boxesCacheHit) {
+    timings.boxesCacheHit = 1;
+  }
+  if (perf.mealsCacheHit) {
+    timings.mealsCacheHit = 1;
+  }
 
   // Derived residual — only meaningful when we timed at least one loadSession.
   if (
@@ -114,10 +120,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) =>
         timings.settings = performance.now() - settingsStart;
         return settings;
       });
-    const boxesPromise = fetchBuilderBoxOptions(admin).then((boxes) => {
-      timings.boxes = performance.now() - boxesStart;
-      return boxes;
-    });
+    const boxesPromise = fetchCachedBuilderBoxOptions(admin, shop).then(
+      (boxes) => {
+        timings.boxes = performance.now() - boxesStart;
+        return boxes;
+      },
+    );
     // Attach immediately so a GraphQL failure during await settings never becomes
     // an unhandled rejection on the early-return path. Happy path still awaits
     // boxesPromise and surfaces the rejection normally.
@@ -151,9 +159,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) =>
 
     // Meals need mealCollectionId; keep overlapping with in-flight box fetch.
     const mealsStart = performance.now();
-    const mealsPromise = fetchBuilderMealOptions(
+    const mealsPromise = fetchCachedBuilderMealOptions(
       admin,
       settings.mealCollectionId,
+      shop,
     ).then((meals) => {
       timings.meals = performance.now() - mealsStart;
       return meals;

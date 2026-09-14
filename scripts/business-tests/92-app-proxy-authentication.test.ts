@@ -110,7 +110,7 @@ const runSuite = () => {
       builderLoaderBody.indexOf("authenticateMileyoAppProxy") <
         builderLoaderBody.indexOf("prisma.appSettings") &&
       builderLoaderBody.indexOf("authenticateMileyoAppProxy") <
-        builderLoaderBody.indexOf("fetchBuilderBoxOptions"),
+        builderLoaderBody.indexOf("fetchCachedBuilderBoxOptions"),
   );
   ctx.assertFalse(
     "builder loader does not re-load admin via unauthenticated.admin",

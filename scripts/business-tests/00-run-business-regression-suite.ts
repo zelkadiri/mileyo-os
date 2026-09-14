@@ -123,6 +123,7 @@ const BUSINESS_SUITES = [
   "100-shopify-admin-session-retry.test.ts",
   "101-billing-missed-run-recovery.test.ts",
   "102-builder-perf-instrumentation.test.ts",
+  "103-builder-catalog-cache.test.ts",
 ];
 
 const LEGACY_SUITES = [

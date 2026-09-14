@@ -584,8 +584,8 @@ const runSuite = () => {
   const nutritionFormat = readRepoFile("app/utils/mealNutritionFormat.ts");
 
   ctx.assertTrue(
-    "loader uses fetchBuilderMealOptions",
-    loader.includes("fetchBuilderMealOptions"),
+    "loader uses fetchCachedBuilderMealOptions",
+    loader.includes("fetchCachedBuilderMealOptions"),
   );
   ctx.assertFalse(
     "loader no longer uses toBuilderMeals",
@@ -781,8 +781,8 @@ const runSuite = () => {
       loader.includes("buildBuilderDeliveryWindowOptions"),
   );
   ctx.assertTrue(
-    "box path still fetchBuilderBoxOptions",
-    loader.includes("fetchBuilderBoxOptions"),
+    "box path still fetchCachedBuilderBoxOptions",
+    loader.includes("fetchCachedBuilderBoxOptions"),
   );
   ctx.assertTrue(
     "requiredMeals still from box.mealCount",

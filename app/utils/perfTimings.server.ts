@@ -22,6 +22,10 @@ export type BuilderPerfTimings = {
    * (via client extension; ALS-safe).
    */
   settingsQuery: number;
+  /** True when boxes catalog served from process-local TTL cache. */
+  boxesCacheHit: boolean;
+  /** True when meals catalog served from process-local TTL cache. */
+  mealsCacheHit: boolean;
 };
 
 const store = new AsyncLocalStorage<BuilderPerfTimings>();
@@ -34,6 +38,8 @@ export const createBuilderPerfTimings = (): BuilderPerfTimings => ({
   sessionStoreCount: 0,
   sessionQuery: 0,
   settingsQuery: 0,
+  boxesCacheHit: false,
+  mealsCacheHit: false,
 });
 
 export const runWithBuilderPerfTimings = <T>(
@@ -91,4 +97,17 @@ export const recordPrismaModelOpMs = (
   ) {
     current.settingsQuery += durationMs;
   }
+};
+
+/** Mark a builder catalog cache hit for Server-Timing (durations only, no IDs). */
+export const recordBuilderCatalogCacheHit = (
+  kind: "boxes" | "meals",
+): void => {
+  const current = store.getStore();
+  if (!current) return;
+  if (kind === "boxes") {
+    current.boxesCacheHit = true;
+    return;
+  }
+  current.mealsCacheHit = true;
 };

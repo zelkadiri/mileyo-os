@@ -816,8 +816,8 @@ const runSuite = () => {
       clientSource.includes('"formule"'),
   );
   ctx.assertTrue(
-    "loader uses fetchBuilderBoxOptions",
-    loaderSource.includes("fetchBuilderBoxOptions"),
+    "loader uses fetchCachedBuilderBoxOptions",
+    loaderSource.includes("fetchCachedBuilderBoxOptions"),
   );
   ctx.assertFalse(
     "loader no longer requires boxCollectionId for boxes",
@@ -836,7 +836,7 @@ const runSuite = () => {
   ctx.assertTrue(
     "meals V2 path present",
     clientSource.includes("renderMeals") &&
-      loaderSource.includes("fetchBuilderMealOptions"),
+      loaderSource.includes("fetchCachedBuilderMealOptions"),
   );
   ctx.assertTrue(
     "18 variants not truncated by first:10 in handle query",

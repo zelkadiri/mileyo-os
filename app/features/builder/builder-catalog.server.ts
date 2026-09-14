@@ -15,6 +15,12 @@ import {
   parseMealCountMetafield,
   warnMissingMealCountMetafield,
 } from "../../utils/mealCountMetafield";
+import { recordBuilderCatalogCacheHit } from "../../utils/perfTimings.server";
+import {
+  builderBoxesCacheKey,
+  builderMealsCacheKey,
+  getOrFetchBuilderCatalog,
+} from "./builder-catalog-cache.server";
 import { toBuilderMealOptions } from "./builder-meal-selection";
 import type {
   BuilderBoxOption,
@@ -174,6 +180,10 @@ export const toBuilderBoxOptions = (
   });
 };
 
+/**
+ * Live Admin GraphQL fetch — no process cache.
+ * Shared by portal / subscription box-change / other non-builder callers.
+ */
 export const fetchBuilderBoxOptions = async (admin: {
   graphql: (
     query: string,
@@ -182,6 +192,30 @@ export const fetchBuilderBoxOptions = async (admin: {
 }): Promise<BuilderBoxOption[]> => {
   const trusted = await fetchTrustedBoxCatalogOptionsByHandleV2(admin);
   return toBuilderBoxOptions(trusted);
+};
+
+/**
+ * GET /apps/box-builder only — short process-local TTL cache keyed by shop.
+ * Do not use from portal, billing, cron, or checkout paths.
+ */
+export const fetchCachedBuilderBoxOptions = async (
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: Record<string, string> },
+    ) => Promise<Response>;
+  },
+  shop: string,
+): Promise<BuilderBoxOption[]> => {
+  const { cacheHit, value } = await getOrFetchBuilderCatalog({
+    fetch: () => fetchBuilderBoxOptions(admin),
+    key: builderBoxesCacheKey(shop),
+    kind: "boxes",
+  });
+  if (cacheHit) {
+    recordBuilderCatalogCacheHit("boxes");
+  }
+  return value;
 };
 
 /** Meal collection products — no mileyo.meal_count validation or warnings. */
@@ -208,6 +242,10 @@ export const toBuilderMeals = (products: ShopifyProduct[]): BuilderMeal[] =>
     };
   });
 
+/**
+ * Live Admin GraphQL fetch — no process cache.
+ * Shared by portal / other non-builder callers.
+ */
 export const fetchBuilderMealOptions = async (
   admin: {
     graphql: (
@@ -219,4 +257,29 @@ export const fetchBuilderMealOptions = async (
 ): Promise<BuilderMealOption[]> => {
   const catalog = await fetchMealCatalogProducts(admin, mealCollectionId);
   return toBuilderMealOptions(catalog);
+};
+
+/**
+ * GET /apps/box-builder only — short process-local TTL cache keyed by shop + collection.
+ * Do not use from portal, billing, cron, or checkout paths.
+ */
+export const fetchCachedBuilderMealOptions = async (
+  admin: {
+    graphql: (
+      query: string,
+      options?: { variables?: { id: string } },
+    ) => Promise<Response>;
+  },
+  mealCollectionId: string,
+  shop: string,
+): Promise<BuilderMealOption[]> => {
+  const { cacheHit, value } = await getOrFetchBuilderCatalog({
+    fetch: () => fetchBuilderMealOptions(admin, mealCollectionId),
+    key: builderMealsCacheKey(shop, mealCollectionId),
+    kind: "meals",
+  });
+  if (cacheHit) {
+    recordBuilderCatalogCacheHit("meals");
+  }
+  return value;
 };

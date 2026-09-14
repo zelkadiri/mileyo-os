@@ -1036,8 +1036,8 @@ const runSuite = async () => {
       builderTypes.includes("title: string"),
   );
   ctx.assertTrue(
-    "loader uses fetchBuilderMealOptions",
-    loader.includes("fetchBuilderMealOptions"),
+    "loader uses fetchCachedBuilderMealOptions",
+    loader.includes("fetchCachedBuilderMealOptions"),
   );
   ctx.assertTrue(
     "loader still uses mealCollectionId",
