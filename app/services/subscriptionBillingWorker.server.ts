@@ -3,7 +3,7 @@ import type { SubscriptionMealSelection } from "@prisma/client";
 import { isTerminalSubscriptionSelectionStatus } from "../constants/subscriptionMealSelection";
 import db from "../db.server";
 import { syncSubscriptionContractState } from "./subscriptionContractSync.server";
-import { unauthenticated } from "../shopify.server";
+import { getAdminWithTransientDbRetry } from "./shopify/retry-admin-session.server";
 import {
   reconcilePendingContractForSelection,
 } from "./subscriptionMealSelection.server";
@@ -2094,7 +2094,9 @@ export const realignLegacyNextBillingDateFromDeliverySchedule = async ({
 export const processDueSubscriptionBillings = async (
   shop: string,
 ): Promise<BillingWorkerSummary> => {
-  const { admin } = await unauthenticated.admin(shop);
+  // Session/admin only — retry transient Prisma pool/reachability blips before
+  // any billing mutation (attempts, nextBillingDate, recovery).
+  const { admin } = await getAdminWithTransientDbRetry(shop);
 
   const recoverySummary = await processDueRecoveryRetries(shop, admin);
 

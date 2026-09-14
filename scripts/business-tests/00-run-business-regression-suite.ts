@@ -120,6 +120,8 @@ const BUSINESS_SUITES = [
   "97-orders-create-replay-idempotency.test.ts",
   "98-monitoring-system-health.test.ts",
   "99-sentry-cron-checkins.test.ts",
+  "100-shopify-admin-session-retry.test.ts",
+  "101-billing-missed-run-recovery.test.ts",
 ];
 
 const LEGACY_SUITES = [
