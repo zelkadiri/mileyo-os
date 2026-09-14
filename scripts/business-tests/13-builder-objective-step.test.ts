@@ -565,6 +565,48 @@ const runSuite = () => {
     clientSource.includes('hash === "recap"'),
   );
 
+  ctx.scenario("J. Mobile inline objective detail — single DOM section");
+  ctx.assertTrue(
+    "mobile layout uses existing 768px card breakpoint",
+    clientSource.includes('OBJECTIVE_MOBILE_MQ = "(max-width: 767px)"'),
+  );
+  ctx.assertTrue(
+    "placeObjectiveDetail helper present",
+    clientSource.includes("function placeObjectiveDetail()"),
+  );
+  ctx.assertTrue(
+    "ensureObjectiveDetailAtHome before grid wipe",
+    /function renderObjectives\(\) \{[\s\S]*?ensureObjectiveDetailAtHome\(\);[\s\S]*?objectiveGrid\.innerHTML = ""/.test(
+      clientSource,
+    ),
+  );
+  ctx.assertTrue(
+    "mobile skips auto-scroll",
+    clientSource.includes(
+      "if (!shouldScroll || isObjectiveMobileLayout()) return;",
+    ),
+  );
+  ctx.assertTrue(
+    "detail relocated under selected card on mobile",
+    clientSource.includes("objectiveGrid.insertBefore(objectiveDetail") ||
+      clientSource.includes("objectiveGrid.appendChild(objectiveDetail)"),
+  );
+  ctx.assertEqual(
+    "single objective-detail id in markup",
+    (objectiveStepSource.match(/id="objective-detail"/g) ?? []).length,
+    1,
+  );
+  ctx.assertTrue(
+    "desktop home detail still after objective-grid",
+    /id="objective-grid"[\s\S]*?id="objective-detail"/.test(objectiveStepSource),
+  );
+  ctx.assertFalse(
+    "no deferred 400ms objective scroll",
+    /setTimeout\([\s\S]{0,120}scrollIntoView[\s\S]{0,80}400|setTimeout\([^,]*,\s*400\)/.test(
+      clientSource,
+    ),
+  );
+
   return finishSuite("13-builder-objective-step", ctx);
 };
 

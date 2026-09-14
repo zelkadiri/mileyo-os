@@ -78,6 +78,16 @@ export const builderClientScript = `
   var objectiveDetailTitle = document.getElementById("objective-detail-title");
   var objectiveDetailBody = document.getElementById("objective-detail-body");
   var objectiveDetailImage = document.getElementById("objective-detail-image");
+  /** Matches CSS: objective cards stack below 768px, sit side-by-side from 768px. */
+  var OBJECTIVE_MOBILE_MQ = "(max-width: 767px)";
+  var objectiveDetailHomeParent =
+    objectiveDetail && objectiveDetail.parentNode
+      ? objectiveDetail.parentNode
+      : null;
+  var objectiveDetailHomeNextSibling =
+    objectiveDetail && objectiveDetail.nextSibling
+      ? objectiveDetail.nextSibling
+      : null;
   var formulaContinue = document.getElementById("formula-continue");
   var formulaFooter = document.getElementById("formula-footer");
   var deliveryContinue = document.getElementById("delivery-continue");
@@ -351,6 +361,59 @@ export const builderClientScript = `
     );
   }
 
+  function isObjectiveMobileLayout() {
+    return (
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(OBJECTIVE_MOBILE_MQ).matches
+    );
+  }
+
+  function ensureObjectiveDetailAtHome() {
+    if (!objectiveDetail || !objectiveDetailHomeParent) return;
+    if (objectiveDetail.parentNode === objectiveDetailHomeParent) {
+      if (objectiveDetail.nextSibling !== objectiveDetailHomeNextSibling) {
+        objectiveDetailHomeParent.insertBefore(
+          objectiveDetail,
+          objectiveDetailHomeNextSibling,
+        );
+      }
+      return;
+    }
+    objectiveDetailHomeParent.insertBefore(
+      objectiveDetail,
+      objectiveDetailHomeNextSibling,
+    );
+  }
+
+  function placeObjectiveDetail() {
+    if (!objectiveDetail || !objectiveGrid) return;
+
+    var option = findObjectiveOption(selectedObjective);
+    var hasDetail =
+      option &&
+      option.detailTitle &&
+      option.detailParagraphs &&
+      option.detailParagraphs.length;
+
+    if (!hasDetail || !isObjectiveMobileLayout()) {
+      ensureObjectiveDetailAtHome();
+      return;
+    }
+
+    var selectedCard = objectiveGrid.querySelector(".objective-card.selected");
+    if (!selectedCard) {
+      ensureObjectiveDetailAtHome();
+      return;
+    }
+
+    if (selectedCard.nextSibling === objectiveDetail) return;
+    if (selectedCard.nextSibling) {
+      objectiveGrid.insertBefore(objectiveDetail, selectedCard.nextSibling);
+    } else {
+      objectiveGrid.appendChild(objectiveDetail);
+    }
+  }
+
   function updateObjectiveDetail(options) {
     var shouldScroll = !!(options && options.scroll);
     if (
@@ -376,6 +439,7 @@ export const builderClientScript = `
       objectiveDetailBody.innerHTML = "";
       objectiveDetailImage.removeAttribute("src");
       objectiveDetailImage.alt = "";
+      ensureObjectiveDetailAtHome();
       return;
     }
 
@@ -395,8 +459,11 @@ export const builderClientScript = `
       objectiveDetailImage.alt = "";
     }
     objectiveDetail.classList.remove("hidden");
+    placeObjectiveDetail();
 
-    if (!shouldScroll) return;
+    // Mobile: detail sits under the selected card — no auto-scroll.
+    // Desktop: keep existing smooth scroll to the shared detail panel.
+    if (!shouldScroll || isObjectiveMobileLayout()) return;
 
     window.requestAnimationFrame(function () {
       objectiveDetail.scrollIntoView({
@@ -408,6 +475,8 @@ export const builderClientScript = `
 
   function renderObjectives() {
     if (!objectiveGrid || !data.objectives) return;
+    // Detail may live inside the grid on mobile; move it home before wipe.
+    ensureObjectiveDetailAtHome();
     objectiveGrid.innerHTML = "";
     data.objectives.forEach(function (option) {
       var button = document.createElement("button");
@@ -1865,6 +1934,18 @@ export const builderClientScript = `
   updateFormulaCta();
   updateDeliveryCta();
   updateSummary();
+
+  if (typeof window.matchMedia === "function") {
+    var objectiveLayoutMq = window.matchMedia(OBJECTIVE_MOBILE_MQ);
+    var onObjectiveLayoutChange = function () {
+      placeObjectiveDetail();
+    };
+    if (typeof objectiveLayoutMq.addEventListener === "function") {
+      objectiveLayoutMq.addEventListener("change", onObjectiveLayoutChange);
+    } else if (typeof objectiveLayoutMq.addListener === "function") {
+      objectiveLayoutMq.addListener(onObjectiveLayoutChange);
+    }
+  }
 
   var initialHash = parseBuilderHash().step;
   if (!isValidObjective(selectedObjective)) {

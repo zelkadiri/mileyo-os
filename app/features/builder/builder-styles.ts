@@ -1113,6 +1113,12 @@ body {
   scroll-margin-top: 88px;
 }
 
+/* Mobile inline slot: detail lives inside the stacked grid under the selected card. */
+.objective-grid > .objective-detail {
+  margin-top: 0;
+  width: 100%;
+}
+
 .objective-detail-copy {
   align-content: start;
   align-items: start;
@@ -2655,6 +2661,11 @@ button:disabled {
     gap: 14px;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     max-width: none;
+  }
+
+  /* Safety: if detail were still inside the grid, span full row (JS keeps it outside). */
+  .objective-grid > .objective-detail {
+    grid-column: 1 / -1;
   }
 
   .objective-detail {
