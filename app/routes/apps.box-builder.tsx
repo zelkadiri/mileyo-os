@@ -21,6 +21,11 @@ import { renderBuilder, renderMessage } from "../features/builder/builder-render
 import { DELIVERY_TIMEZONE } from "../constants/deliverySchedule";
 import { buildBuilderDeliveryWindowOptions } from "../utils/deliveryDate";
 import { authenticateMileyoAppProxy } from "../utils/appProxyAuth.server";
+import {
+  getBuilderPerfTimings,
+  runWithBuilderPerfTimings,
+  setBuilderPerfPhase,
+} from "../utils/perfTimings.server";
 
 const jsonResponse = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -46,94 +51,135 @@ const withServerTiming = (
   return response;
 };
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const totalStart = performance.now();
-  const timings: Record<string, number> = {};
+/** Merge request-scoped auth/DB sub-timings into Server-Timing (durations only). */
+const mergeAuthAndSettingsPerf = (
+  timings: Record<string, number>,
+): void => {
+  const perf = getBuilderPerfTimings();
+  if (!perf) return;
 
-  const authStart = performance.now();
-  const { admin, shop } = await authenticateMileyoAppProxy(request);
-  timings.appProxyAuth = performance.now() - authStart;
-
-  if (!admin) {
-    // No offline session after App Proxy auth (refresh already attempted in SDK).
-    // Equivalent failure class to the former SessionNotFoundError path.
-    throw new Response(undefined, {
-      status: 503,
-      statusText: "Service Unavailable",
-    });
+  if (perf.sessionLoadCount > 0) {
+    timings.sessionLoad = perf.sessionLoad;
+  }
+  if (perf.sessionQuery > 0) {
+    timings.sessionQuery = perf.sessionQuery;
+  }
+  if (perf.sessionStoreCount > 0) {
+    timings.sessionStore = perf.sessionStore;
+  }
+  if (perf.settingsQuery > 0) {
+    timings.settingsQuery = perf.settingsQuery;
   }
 
-  // Box catalog does not depend on AppSettings — overlap DB + GraphQL.
-  const settingsStart = performance.now();
-  const boxesStart = performance.now();
-  const settingsPromise = prisma.appSettings
-    .findUnique({ where: { shop } })
-    .then((settings) => {
-      timings.settings = performance.now() - settingsStart;
-      return settings;
-    });
-  const boxesPromise = fetchBuilderBoxOptions(admin).then((boxes) => {
-    timings.boxes = performance.now() - boxesStart;
-    return boxes;
-  });
-  // Attach immediately so a GraphQL failure during await settings never becomes
-  // an unhandled rejection on the early-return path. Happy path still awaits
-  // boxesPromise and surfaces the rejection normally.
-  boxesPromise.catch(() => undefined);
-
-  const settings = await settingsPromise;
-
-  if (!settings) {
-    timings.total = performance.now() - totalStart;
-    return withServerTiming(
-      renderMessage(
-        "Configuration manquante. Sélectionnez la collection de plats dans l’administration Mileyo.",
-        shop,
-      ),
-      timings,
-    );
+  // Derived residual — only meaningful when we timed at least one loadSession.
+  if (
+    typeof timings.appProxyAuth === "number" &&
+    perf.sessionLoadCount > 0
+  ) {
+    const accounted =
+      (timings.sessionLoad ?? 0) + (timings.sessionStore ?? 0);
+    const authOther = timings.appProxyAuth - accounted;
+    if (Number.isFinite(authOther) && authOther >= 0) {
+      timings.authOther = authOther;
+    }
   }
-
-  if (!settings.mealCollectionId) {
-    timings.total = performance.now() - totalStart;
-    return withServerTiming(
-      renderMessage(
-        "Configuration incomplète. Sélectionnez une collection de plats dans les réglages.",
-        shop,
-      ),
-      timings,
-    );
-  }
-
-  // Meals need mealCollectionId; keep overlapping with in-flight box fetch.
-  const mealsStart = performance.now();
-  const mealsPromise = fetchBuilderMealOptions(
-    admin,
-    settings.mealCollectionId,
-  ).then((meals) => {
-    timings.meals = performance.now() - mealsStart;
-    return meals;
-  });
-
-  const [boxes, meals] = await Promise.all([boxesPromise, mealsPromise]);
-
-  const deliveryWindowOptions = buildBuilderDeliveryWindowOptions();
-  const deliveryConfig = {
-    deliveryWindowOptions,
-    timezone: DELIVERY_TIMEZONE,
-  };
-
-  const renderStart = performance.now();
-  const response = renderBuilder({
-    boxes,
-    deliveryConfig,
-    meals,
-  });
-  timings.render = performance.now() - renderStart;
-  timings.total = performance.now() - totalStart;
-
-  return withServerTiming(response, timings);
 };
+
+export const loader = async ({ request }: LoaderFunctionArgs) =>
+  runWithBuilderPerfTimings(async () => {
+    const totalStart = performance.now();
+    const timings: Record<string, number> = {};
+
+    setBuilderPerfPhase("auth");
+    const authStart = performance.now();
+    const { admin, shop } = await authenticateMileyoAppProxy(request);
+    timings.appProxyAuth = performance.now() - authStart;
+
+    if (!admin) {
+      // No offline session after App Proxy auth (refresh already attempted in SDK).
+      // Equivalent failure class to the former SessionNotFoundError path.
+      throw new Response(undefined, {
+        status: 503,
+        statusText: "Service Unavailable",
+      });
+    }
+
+    // Box catalog does not depend on AppSettings — overlap DB + GraphQL.
+    setBuilderPerfPhase("settings");
+    const settingsStart = performance.now();
+    const boxesStart = performance.now();
+    const settingsPromise = prisma.appSettings
+      .findUnique({ where: { shop } })
+      .then((settings) => {
+        timings.settings = performance.now() - settingsStart;
+        return settings;
+      });
+    const boxesPromise = fetchBuilderBoxOptions(admin).then((boxes) => {
+      timings.boxes = performance.now() - boxesStart;
+      return boxes;
+    });
+    // Attach immediately so a GraphQL failure during await settings never becomes
+    // an unhandled rejection on the early-return path. Happy path still awaits
+    // boxesPromise and surfaces the rejection normally.
+    boxesPromise.catch(() => undefined);
+
+    const settings = await settingsPromise;
+    setBuilderPerfPhase("idle");
+    mergeAuthAndSettingsPerf(timings);
+
+    if (!settings) {
+      timings.total = performance.now() - totalStart;
+      return withServerTiming(
+        renderMessage(
+          "Configuration manquante. Sélectionnez la collection de plats dans l’administration Mileyo.",
+          shop,
+        ),
+        timings,
+      );
+    }
+
+    if (!settings.mealCollectionId) {
+      timings.total = performance.now() - totalStart;
+      return withServerTiming(
+        renderMessage(
+          "Configuration incomplète. Sélectionnez une collection de plats dans les réglages.",
+          shop,
+        ),
+        timings,
+      );
+    }
+
+    // Meals need mealCollectionId; keep overlapping with in-flight box fetch.
+    const mealsStart = performance.now();
+    const mealsPromise = fetchBuilderMealOptions(
+      admin,
+      settings.mealCollectionId,
+    ).then((meals) => {
+      timings.meals = performance.now() - mealsStart;
+      return meals;
+    });
+
+    const [boxes, meals] = await Promise.all([boxesPromise, mealsPromise]);
+
+    const deliveryWindowOptions = buildBuilderDeliveryWindowOptions();
+    const deliveryConfig = {
+      deliveryWindowOptions,
+      timezone: DELIVERY_TIMEZONE,
+    };
+
+    const renderStart = performance.now();
+    const response = renderBuilder({
+      boxes,
+      deliveryConfig,
+      meals,
+    });
+    timings.render = performance.now() - renderStart;
+    timings.total = performance.now() - totalStart;
+    // Re-merge in case Prisma query events arrived just after settings await.
+    mergeAuthAndSettingsPerf(timings);
+
+    return withServerTiming(response, timings);
+  });
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method !== "POST") {

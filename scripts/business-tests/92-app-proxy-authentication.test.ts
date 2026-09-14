@@ -219,6 +219,79 @@ const runSuite = () => {
     portalClient.includes("window.location.pathname"),
   );
 
+  ctx.scenario("J. Builder loader Server-Timing — auth/session sub-metrics");
+  const shopifyServer = readSource("app/shopify.server.ts");
+  const sessionWrap = readSource(
+    "app/utils/instrumentedSessionStorage.server.ts",
+  );
+  const perfTimings = readSource("app/utils/perfTimings.server.ts");
+  const dbServer = readSource("app/db.server.ts");
+  ctx.assertTrue(
+    "loader wraps with builder perf ALS",
+    builderRoute.includes("runWithBuilderPerfTimings"),
+  );
+  ctx.assertTrue(
+    "loader emits sessionLoad / authOther / settingsQuery metrics helpers",
+    builderRoute.includes("sessionLoad") &&
+      builderRoute.includes("authOther") &&
+      builderRoute.includes("settingsQuery") &&
+      builderRoute.includes("mergeAuthAndSettingsPerf"),
+  );
+  ctx.assertTrue(
+    "Server-Timing still set via withServerTiming",
+    builderRoute.includes('response.headers.set("Server-Timing"'),
+  );
+  ctx.assertTrue(
+    "shopify session storage is instrumented wrapper",
+    shopifyServer.includes("instrumentSessionStorage") &&
+      shopifyServer.includes("PrismaSessionStorage"),
+  );
+  ctx.assertTrue(
+    "session wrapper times loadSession/storeSession only",
+    sessionWrap.includes("recordSessionLoadMs") &&
+      sessionWrap.includes("recordSessionStoreMs") &&
+      !/console\.(log|info|debug)/.test(sessionWrap),
+  );
+  ctx.assertTrue(
+    "perf timings ALS never stores tokens",
+    !perfTimings.includes("accessToken") &&
+      !perfTimings.includes("refreshToken") &&
+      !/console\.(log|info|debug)/.test(perfTimings),
+  );
+  ctx.assertTrue(
+    "Prisma query events attribute duration without logging SQL",
+    dbServer.includes('emit: "event"') &&
+      dbServer.includes("recordPrismaEngineQueryMs") &&
+      !/console\.(log|info|debug)/.test(dbServer),
+  );
+  ctx.assertFalse(
+    "Server-Timing path does not embed accessToken",
+    /Server-Timing[\s\S]{0,400}accessToken/.test(builderRoute),
+  );
+  ctx.assertFalse(
+    "Server-Timing path does not embed refreshToken",
+    /Server-Timing[\s\S]{0,400}refreshToken/.test(builderRoute),
+  );
+  const actionBody = (() => {
+    const start = builderRoute.indexOf("export const action");
+    return start >= 0 ? builderRoute.slice(start) : "";
+  })();
+  ctx.assertFalse(
+    "builder action has no Server-Timing instrumentation change",
+    actionBody.includes("Server-Timing") ||
+      actionBody.includes("runWithBuilderPerfTimings"),
+  );
+  ctx.assertTrue(
+    "sessionQuery attribution ignores non-SELECT Session SQL",
+    perfTimings.includes("isSelectQuery") &&
+      /auth.*Session|Session.*auth/.test(perfTimings) &&
+      perfTimings.includes('query.includes(\'"Session"\')'),
+  );
+  ctx.assertTrue(
+    "authOther omitted unless sessionLoadCount > 0",
+    /sessionLoadCount\s*>\s*0/.test(builderRoute),
+  );
+
   return finishSuite("92-app-proxy-authentication", ctx);
 };
 
