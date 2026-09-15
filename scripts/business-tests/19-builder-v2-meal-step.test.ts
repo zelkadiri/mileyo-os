@@ -22,6 +22,7 @@ import {
   shouldResetBoxOnObjectiveChange,
 } from "../../app/features/builder/builder-box-selection";
 import type { MealCatalogProduct } from "../../app/services/subscriptionMealCatalog.server";
+import { formatMealNutrition } from "../../app/utils/mealNutritionFormat";
 import {
   createBusinessTestContext,
   finishSuite,
@@ -655,6 +656,170 @@ const runSuite = () => {
       !client.includes("function openMealNutritionModal") &&
       !render.includes('id="meal-nutrition-modal"'),
   );
+
+  ctx.scenario("N. Bulk proteins badge top-right — kcal badge historique");
+  const badgeFnMatch = client.match(
+    /function appendMealNutritionBadge\(parent, meal\) \{[\s\S]*?\n  \}/,
+  );
+  const badgeFn = badgeFnMatch?.[0] ?? "";
+  const proteinsBadgeFnMatch = client.match(
+    /function appendMealBulkProteinsBadge\(parent, meal\) \{[\s\S]*?\n  \}/,
+  );
+  const proteinsBadgeFn = proteinsBadgeFnMatch?.[0] ?? "";
+
+  ctx.assertTrue(
+    "kcal badge helper still present",
+    badgeFn.includes("function appendMealNutritionBadge"),
+  );
+  ctx.assertTrue(
+    "kcal badge stays calories-only for all objectives",
+    badgeFn.includes("calories.textContent = nutrition.calories") &&
+      !badgeFn.includes(" · ") &&
+      !badgeFn.includes("selectedObjective") &&
+      !badgeFn.includes("g prot."),
+  );
+  ctx.assertTrue(
+    "kcal caption remains par portion",
+    badgeFn.includes('caption.textContent = "par portion"'),
+  );
+  ctx.assertTrue(
+    "flame icon kept on kcal badge",
+    badgeFn.includes("M92 3L103 13L110 28"),
+  );
+
+  ctx.assertTrue(
+    "bulk proteins badge helper present",
+    proteinsBadgeFn.includes("function appendMealBulkProteinsBadge"),
+  );
+  ctx.assertTrue(
+    "proteins badge gated on selectedObjective === bulk",
+    proteinsBadgeFn.includes('selectedObjective !== "bulk"') ||
+      proteinsBadgeFn.includes('selectedObjective === "bulk"'),
+  );
+  ctx.assertTrue(
+    "proteins badge uses shared positive amount guard",
+    proteinsBadgeFn.includes("isPositiveMealNutritionAmount(meal.proteins)"),
+  );
+  ctx.assertTrue(
+    "proteins badge text is compact g prot.",
+    proteinsBadgeFn.includes('formatMealNutritionAmount(meal.proteins) + " g prot."'),
+  );
+  ctx.assertTrue(
+    "proteins badge uses meal-proteins-badge class",
+    proteinsBadgeFn.includes('className = "meal-proteins-badge"'),
+  );
+  ctx.assertTrue(
+    "proteins badge appended on photo media with kcal badge",
+    /appendMealNutritionBadge\(media, meal\);\s*appendMealBulkProteinsBadge\(media, meal\);/.test(
+      client,
+    ),
+  );
+  ctx.assertFalse(
+    "old under-title proteins line removed",
+    client.includes("appendMealBulkProteinsLine") ||
+      client.includes("meal-proteins-line") ||
+      client.includes("de protéines / portion") ||
+      styles.includes(".meal-proteins-line") ||
+      styles.includes(".meal-proteins-amount"),
+  );
+  ctx.assertTrue(
+    "neutral cream proteins badge styles (no purple)",
+    (() => {
+      const block =
+        styles.match(/\.meal-proteins-badge \{[^}]*\}/)?.[0] ?? "";
+      return (
+        block.includes("rgba(252, 248, 246") &&
+        block.includes("color: var(--mileyo-text)") &&
+        block.includes("right:") &&
+        block.includes("top:") &&
+        block.includes("position: absolute") &&
+        !block.includes("purple")
+      );
+    })(),
+  );
+  ctx.assertTrue(
+    "proteins badge mobile tweaks present",
+    /\.meal-proteins-badge \{[\s\S]*?font-size: 0\.64rem/.test(styles),
+  );
+  ctx.assertFalse(
+    "no emoji in proteins badge",
+    proteinsBadgeFn.includes("💪") || proteinsBadgeFn.includes("🔥"),
+  );
+
+  const knownNutrition = formatMealNutrition({
+    calories: 436,
+    proteins: 45,
+    carbs: null,
+    fat: null,
+    portionGrams: null,
+  });
+  ctx.assertEqual("known calories label", knownNutrition.calories, "436 kcal");
+  ctx.assertEqual(
+    "shared proteins label still full word",
+    knownNutrition.proteins,
+    "45 g protéines",
+  );
+  ctx.assertTrue(
+    "compact badge uses prot. abbreviation not full word",
+    proteinsBadgeFn.includes('" g prot."') &&
+      !proteinsBadgeFn.includes("protéines"),
+  );
+
+  const missingProteins = formatMealNutrition({
+    calories: 436,
+    proteins: null,
+    carbs: null,
+    fat: null,
+    portionGrams: null,
+  });
+  ctx.assertEqual(
+    "kcal still available when proteins null",
+    missingProteins.calories,
+    "436 kcal",
+  );
+  ctx.assertNull("proteins label null when absent", missingProteins.proteins);
+
+  const zeroProteins = formatMealNutrition({
+    calories: 436,
+    proteins: 0,
+    carbs: null,
+    fat: null,
+    portionGrams: null,
+  });
+  ctx.assertNull(
+    "proteins label null when zero (no invented 0 g)",
+    zeroProteins.proteins,
+  );
+
+  ctx.assertTrue(
+    "objective change still resets mealsRendered for fresh render",
+    client.includes("function setSelectedObjective") &&
+      client.includes("mealsRendered = false") &&
+      client.includes("resetBoxSelectionState"),
+  );
+  ctx.assertTrue(
+    "proteins badge uses live selectedObjective (not meal.objective)",
+    proteinsBadgeFn.includes("selectedObjective") &&
+      !proteinsBadgeFn.includes("meal.objective"),
+  );
+  ctx.assertTrue(
+    "+/- quantity handlers unchanged",
+    client.includes('minus.textContent = "-"') &&
+      client.includes('plus.textContent = "+"') &&
+      client.includes("selectedMeals[meal.variantId]") &&
+      client.includes("selectedTotal() >= requiredMeals"),
+  );
+  ctx.assertTrue(
+    "meal selection / checkout paths unchanged by proteins UX",
+    client.includes("sellingPlanId: selectedBox.sellingPlanId") &&
+      client.includes("title: meal.title") &&
+      checkoutServer.includes("sellingPlanId: input.sellingPlanId") &&
+      !proteinsBadgeFn.includes("sellingPlanId") &&
+      !proteinsBadgeFn.includes("cartCreate") &&
+      !proteinsBadgeFn.includes("checkout") &&
+      !badgeFn.includes("sellingPlanId"),
+  );
+
   ctx.assertTrue(
     "full nutrition details live only in meal drawer table",
     client.includes("function openMealDetailDrawer") &&

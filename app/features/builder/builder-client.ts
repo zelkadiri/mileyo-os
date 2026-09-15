@@ -1447,6 +1447,19 @@ export const builderClientScript = `
     parent.appendChild(badge);
   }
 
+  /** Bulk-only proteins chip on photo (top-right) — null-safe via shared formatters. */
+  function appendMealBulkProteinsBadge(parent, meal) {
+    if (selectedObjective !== "bulk") return;
+    if (!isPositiveMealNutritionAmount(meal.proteins)) return;
+
+    var badge = document.createElement("span");
+    badge.className = "meal-proteins-badge";
+    badge.setAttribute("aria-hidden", "true");
+    badge.textContent =
+      formatMealNutritionAmount(meal.proteins) + " g prot.";
+    parent.appendChild(badge);
+  }
+
   function appendMealCardMedia(card, meal) {
     var media = document.createElement("div");
     media.className = "meal-card-media meal-card-media--interactive";
@@ -1462,6 +1475,7 @@ export const builderClientScript = `
       media.classList.add("meal-card-media--empty");
     }
     appendMealNutritionBadge(media, meal);
+    appendMealBulkProteinsBadge(media, meal);
     media.addEventListener("click", function () {
       openMealDetailDrawer(meal);
     });

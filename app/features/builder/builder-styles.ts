@@ -1688,6 +1688,29 @@ body {
   white-space: nowrap;
 }
 
+/* Bulk only: compact proteins chip, top-right — cream / anthracite, no purple. */
+.meal-proteins-badge {
+  background: rgba(252, 248, 246, 0.92);
+  border: 1px solid rgba(58, 44, 69, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(42, 11, 51, 0.12);
+  color: var(--mileyo-text);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  max-width: calc(100% - 18px);
+  overflow: hidden;
+  padding: 4px 8px;
+  pointer-events: none;
+  position: absolute;
+  right: 9px;
+  text-overflow: ellipsis;
+  top: 9px;
+  white-space: nowrap;
+  z-index: 2;
+}
+
 .meal-card-media--interactive {
   cursor: pointer;
 }
@@ -2535,6 +2558,15 @@ button:disabled {
 
   .meal-nutrition-badge-caption {
     font-size: 0.58rem;
+  }
+
+  .meal-proteins-badge {
+    border-radius: 9px;
+    font-size: 0.64rem;
+    padding: 3px 7px;
+    right: 7px;
+    top: 7px;
+    max-width: calc(100% - 14px);
   }
 
   .meal-card .quantity-row button {
