@@ -72,6 +72,10 @@ const assertWindowPair = (
     options[0]?.deliveryWindowEndDate,
     expectedSaturday,
   );
+  ctx.assertTrue(
+    `${referenceDate} first window shortRangeLabel`,
+    Boolean(options[0]?.shortRangeLabel?.startsWith("entre le ")),
+  );
   ctx.assertEqual(
     `${referenceDate} second window thursday`,
     options[1]?.thursdayDate,
@@ -382,9 +386,19 @@ const runSuite = () => {
     renderSource.includes("entre jeudi et vendredi"),
   );
   ctx.assertTrue(
-    "weekly card labels defined server-side",
-    readRepoFile("app/utils/deliveryDate.ts").includes("Prochaine livraison") &&
-      readRepoFile("app/utils/deliveryDate.ts").includes("Livraison suivante"),
+    "weekly card shows rangeLabel only (no Prochaine/suivante titles)",
+    !readRepoFile("app/utils/deliveryDate.ts").includes("Prochaine livraison") &&
+      !readRepoFile("app/utils/deliveryDate.ts").includes("Livraison suivante"),
+  );
+  ctx.assertTrue(
+    "delivery flexibility note under windows",
+    renderSource.includes(
+      "Vous pourrez ensuite décaler, suspendre ou modifier vos prochaines livraisons depuis votre espace client.",
+    ),
+  );
+  ctx.assertFalse(
+    "client no longer renders cardLabel title",
+    /function renderDeliveryWindows[\s\S]*?option\.cardLabel/.test(clientSource),
   );
   ctx.assertFalse(
     "no legacy date picker grid in render",

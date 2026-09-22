@@ -626,26 +626,34 @@ const runSuite = () => {
     clientSource.includes("function getBuilderLaunchPricing"),
   );
   ctx.assertTrue(
-    "box cards show première box*",
-    clientSource.includes(" la première box*"),
+    "box cards show première box au lieu de",
+    clientSource.includes(" la première box au lieu de "),
   );
   ctx.assertTrue(
-    "box cards show Puis weekly",
+    "box cards show Puis weekly with livraison incluse",
     clientSource.includes('"Puis "') &&
-      clientSource.includes('" / semaine"'),
+      clientSource.includes(" par semaine, livraison incluse"),
   );
   ctx.assertTrue(
-    "box cards show launch per-meal",
-    clientSource.includes("launchPricePerMealCents") &&
+    "box cards show per-meal from regular weekly price",
+    clientSource.includes("regularPriceCents / box.mealCount") &&
+      clientSource.includes('"Soit "') &&
+      clientSource.includes(" par repas"),
+  );
+  ctx.assertFalse(
+    "box cards do not show launch per-meal cents",
+    clientSource.includes("launchPricePerMealCents) + ") &&
       clientSource.includes('" / repas"'),
   );
-  ctx.assertTrue(
-    "eligibility note under box list",
-    renderSource.includes("box-launch-eligibility-note") &&
-      renderSource.includes("nouveaux clients éligibles"),
+  ctx.assertFalse(
+    "eligibility note under box list removed",
+    renderSource.includes("box-launch-eligibility-note") ||
+      renderSource.includes(
+        "Offre de lancement réservée aux nouveaux clients éligibles",
+      ),
   );
   ctx.assertTrue(
-    "eligibility note uses FIRST_BOX_LAUNCH_DISCOUNT_EUR",
+    "FIRST_BOX_LAUNCH_DISCOUNT_EUR still used in builder render",
     renderSource.includes("${FIRST_BOX_LAUNCH_DISCOUNT_EUR} €") ||
       renderSource.includes(`${FIRST_BOX_LAUNCH_DISCOUNT_EUR} €`),
   );
@@ -801,6 +809,20 @@ const runSuite = () => {
   ctx.assertTrue(
     "render copy Choisissez votre box",
     renderSource.includes("Choisissez votre box"),
+  );
+  ctx.assertTrue(
+    "formula intro explains weekly delivery",
+    renderSource.includes("Recevez automatiquement votre box chaque semaine."),
+  );
+  ctx.assertTrue(
+    "formula intro explains flexible subscription",
+    renderSource.includes(
+      "Livraison incluse, sans engagement : vous pouvez modifier, mettre en pause ou résilier votre abonnement avant chaque renouvellement.",
+    ),
+  );
+  ctx.assertFalse(
+    "old formula benefits badges removed",
+    renderSource.includes('class="formula-benefits"'),
   );
   ctx.assertTrue(
     "back from delivery is ← Box",
@@ -1052,23 +1074,25 @@ const runSuite = () => {
     "render injects objectiveStartingPriceLabels",
     renderSource.includes("objectiveStartingPriceLabels"),
   );
-  ctx.assertTrue(
-    "client renders objective launch price",
+  ctx.assertFalse(
+    "client no longer renders objective launch price",
     clientSource.includes("objective-card-launch-price"),
   );
-  ctx.assertTrue(
-    "client renders objective recurring price",
+  ctx.assertFalse(
+    "client no longer renders objective recurring price",
     clientSource.includes("objective-card-recurring-price"),
   );
-  ctx.assertTrue(
-    "styles include launch/recurring objective classes",
-    stylesSource.includes("objective-card-launch-price") &&
+  ctx.assertFalse(
+    "styles no longer include unused objective price classes",
+    stylesSource.includes("objective-card-launch-price") ||
       stylesSource.includes("objective-card-recurring-price"),
   );
-  ctx.assertTrue(
-    "objective eligibility note present",
-    renderSource.includes("objective-launch-eligibility-note") &&
-      renderSource.includes("nouveaux clients éligibles"),
+  ctx.assertFalse(
+    "objective eligibility note removed",
+    renderSource.includes("objective-launch-eligibility-note") ||
+      renderSource.includes(
+        "*Offre de lancement pour les nouveaux clients éligibles.",
+      ),
   );
   ctx.assertFalse(
     "I. no hardcoded 76.11 in render",
@@ -1165,23 +1189,35 @@ const runSuite = () => {
     `${formatBoxMealCountDisplaySource}; return formatBoxMealCountDisplay;`,
   )() as (mealCount: number) => string;
 
-  ctx.assertEqual("8 repas without Duo", formatBoxMealCountDisplay(8), "8 repas");
-  ctx.assertEqual("10 repas without Duo", formatBoxMealCountDisplay(10), "10 repas");
-  ctx.assertEqual("12 repas without Duo", formatBoxMealCountDisplay(12), "12 repas");
+  ctx.assertEqual(
+    "8 repas without Duo",
+    formatBoxMealCountDisplay(8),
+    "8 repas par semaine",
+  );
+  ctx.assertEqual(
+    "10 repas without Duo",
+    formatBoxMealCountDisplay(10),
+    "10 repas par semaine",
+  );
+  ctx.assertEqual(
+    "12 repas without Duo",
+    formatBoxMealCountDisplay(12),
+    "12 repas par semaine",
+  );
   ctx.assertEqual(
     "16 repas with Duo",
     formatBoxMealCountDisplay(16),
-    "16 repas (Duo)",
+    "16 repas par semaine (Duo)",
   );
   ctx.assertEqual(
     "20 repas with Duo",
     formatBoxMealCountDisplay(20),
-    "20 repas (Duo)",
+    "20 repas par semaine (Duo)",
   );
   ctx.assertEqual(
     "24 repas with Duo",
     formatBoxMealCountDisplay(24),
-    "24 repas (Duo)",
+    "24 repas par semaine (Duo)",
   );
 
   return finishSuite("17-builder-v2-box-step", ctx);

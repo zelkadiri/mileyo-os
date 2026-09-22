@@ -114,6 +114,7 @@ export const builderClientScript = `
   var emailMiniRecapDelivery = document.getElementById("email-mini-recap-delivery");
   var emailMiniRecapMeals = document.getElementById("email-mini-recap-meals");
   var emailMiniRecapPrice = document.getElementById("email-mini-recap-price");
+  var emailMiniRecapRecurring = document.getElementById("email-mini-recap-recurring");
   var CAPTURE_LEAD_INTENT = ${JSON.stringify(CAPTURE_CHECKOUT_LEAD_INTENT)};
   var CREATE_CHECKOUT_INTENT = ${JSON.stringify(CREATE_BUILDER_CHECKOUT_INTENT)};
   var CART_PREPARE_ERROR = ${JSON.stringify(BUILDER_CART_PREPARE_ERROR)};
@@ -169,11 +170,6 @@ export const builderClientScript = `
       button.type = "button";
       button.setAttribute("aria-pressed", isSelected ? "true" : "false");
 
-      var title = document.createElement("span");
-      title.className = "delivery-window-card-title";
-      title.textContent = option.cardLabel;
-      button.appendChild(title);
-
       var range = document.createElement("span");
       range.className = "delivery-window-card-range";
       range.textContent = option.rangeLabel;
@@ -219,9 +215,9 @@ export const builderClientScript = `
   /** UI-only label for formula cards — mealCount numeric identity unchanged elsewhere. */
   function formatBoxMealCountDisplay(mealCount) {
     if (mealCount === 16 || mealCount === 20 || mealCount === 24) {
-      return mealCount + " repas (Duo)";
+      return mealCount + " repas par semaine (Duo)";
     }
-    return mealCount + " repas";
+    return mealCount + " repas par semaine";
   }
 
   function parsePriceToCents(price) {
@@ -494,33 +490,6 @@ export const builderClientScript = `
       description.className = "objective-card-description";
       description.textContent = option.description;
       button.appendChild(description);
-
-      var priceInfo =
-        data.objectiveStartingPriceLabels &&
-        data.objectiveStartingPriceLabels[option.value];
-      if (priceInfo) {
-        var pricingBlock = document.createElement("div");
-        pricingBlock.className = "objective-card-pricing";
-
-        if (priceInfo.launchLine) {
-          var launchPrice = document.createElement("span");
-          launchPrice.className = "objective-card-launch-price";
-          launchPrice.textContent = priceInfo.launchLine;
-          pricingBlock.appendChild(launchPrice);
-
-          var recurringPrice = document.createElement("span");
-          recurringPrice.className = "objective-card-recurring-price";
-          recurringPrice.textContent = priceInfo.recurringLine;
-          pricingBlock.appendChild(recurringPrice);
-        } else if (priceInfo.recurringLine) {
-          var startingPrice = document.createElement("span");
-          startingPrice.className = "objective-card-starting-price";
-          startingPrice.textContent = priceInfo.recurringLine;
-          pricingBlock.appendChild(startingPrice);
-        }
-
-        button.appendChild(pricingBlock);
-      }
 
       if (isSelected) {
         var badge = document.createElement("span");
@@ -945,23 +914,27 @@ export const builderClientScript = `
     }
     if (emailMiniRecapDelivery) {
       var selectedWindow = findDeliveryWindowOption(selectedDeliveryWindowKey);
-      emailMiniRecapDelivery.textContent = selectedWindow ? selectedWindow.rangeLabel : "";
+      emailMiniRecapDelivery.textContent = selectedWindow
+        ? selectedWindow.shortRangeLabel || selectedWindow.rangeLabel
+        : "";
     }
     if (emailMiniRecapMeals) {
       var total = selectedTotal();
-      var required = selectedBox && selectedBox.mealCount != null
-        ? selectedBox.mealCount
-        : requiredMeals;
       emailMiniRecapMeals.textContent =
-        total + " / " + required + " plats sélectionnés";
+        total + " repas sélectionnés";
     }
+    var launchPricing =
+      selectedBox && selectedBox.price
+        ? getBuilderLaunchPricing(selectedBox.price, selectedBox.mealCount)
+        : null;
     if (emailMiniRecapPrice) {
-      var launchPricing =
-        selectedBox && selectedBox.price
-          ? getBuilderLaunchPricing(selectedBox.price, selectedBox.mealCount)
-          : null;
       emailMiniRecapPrice.textContent = launchPricing
-        ? formatEurosFromCents(launchPricing.launchPriceCents) + " la première box*"
+        ? formatEurosFromCents(launchPricing.launchPriceCents)
+        : "";
+    }
+    if (emailMiniRecapRecurring) {
+      emailMiniRecapRecurring.textContent = launchPricing
+        ? formatEurosFromCents(launchPricing.regularPriceCents) + " par semaine"
         : "";
     }
   }
@@ -1181,26 +1154,34 @@ export const builderClientScript = `
       var promoStrong = document.createElement("strong");
       promoStrong.textContent = formatEurosFromCents(launch.launchPriceCents);
       promo.appendChild(promoStrong);
-      promo.appendChild(document.createTextNode(" la première box*"));
+      promo.appendChild(
+        document.createTextNode(
+          " la première box au lieu de " +
+            formatEurosFromCents(launch.regularPriceCents),
+        ),
+      );
       button.appendChild(promo);
-
-      var perMeal = document.createElement("p");
-      perMeal.className = "box-price-per-meal";
-      perMeal.textContent =
-        formatEurosFromCents(launch.launchPricePerMealCents) + " / repas";
-      button.appendChild(perMeal);
 
       var weekly = document.createElement("p");
       weekly.className = "box-weekly-price";
       weekly.textContent =
-        "Puis " + formatEurosFromCents(launch.regularPriceCents) + " / semaine";
+        "Puis " +
+        formatEurosFromCents(launch.regularPriceCents) +
+        " par semaine, livraison incluse";
       button.appendChild(weekly);
+
+      var perMealCents = Math.round(launch.regularPriceCents / box.mealCount);
+      var perMeal = document.createElement("p");
+      perMeal.className = "box-price-per-meal";
+      perMeal.textContent =
+        "Soit " + formatEurosFromCents(perMealCents) + " par repas";
+      button.appendChild(perMeal);
       return;
     }
 
     var weeklyOnly = document.createElement("p");
     weeklyOnly.className = "box-weekly-price";
-    weeklyOnly.textContent = formatEuros(box.price) + " / semaine";
+    weeklyOnly.textContent = formatEuros(box.price) + " par semaine, livraison incluse";
     button.appendChild(weeklyOnly);
   }
 

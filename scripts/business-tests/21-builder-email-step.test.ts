@@ -191,12 +191,22 @@ const runSuite = () => {
 
   ctx.scenario("D. Email UI copy");
   ctx.assertTrue(
-    "title Votre e-mail",
-    renderSource.includes("Votre e-mail"),
+    "title Votre box est prête.",
+    renderSource.includes("Votre box est prête."),
+  );
+  ctx.assertFalse(
+    "stale Votre e-mail title removed",
+    /<h1>Votre e-mail<\/h1>/.test(renderSource),
   );
   ctx.assertFalse(
     "stale plus qu une etape title removed",
     renderSource.includes("Plus qu’une étape"),
+  );
+  ctx.assertTrue(
+    "email lead copy",
+    renderSource.includes(
+      "Vérifiez votre sélection, puis renseignez votre e-mail pour accéder au paiement sécurisé.",
+    ),
   );
   ctx.assertTrue(
     "email field label",
@@ -214,7 +224,17 @@ const runSuite = () => {
   );
   ctx.assertTrue("première box", renderSource.includes("première box"));
   ctx.assertTrue(
-    "eligibility nuance",
+    "flexible subscription subtitle",
+    renderSource.includes("Abonnement flexible et sans engagement"),
+  );
+  ctx.assertTrue(
+    "flexible subscription note",
+    renderSource.includes(
+      "Votre box est renouvelée chaque semaine. Vous pouvez modifier vos repas, décaler une livraison, mettre en pause ou résilier avant le prochain renouvellement.",
+    ),
+  );
+  ctx.assertFalse(
+    "old eligibility note removed",
     renderSource.includes("si vous êtes éligible"),
   );
   ctx.assertFalse(
@@ -274,8 +294,8 @@ const runSuite = () => {
     emailStepMarkup.includes('id="email-mini-recap"'),
   );
   ctx.assertTrue(
-    "mini-recap title Votre sélection",
-    emailStepMarkup.includes("Votre sélection"),
+    "mini-recap title Récapitulatif",
+    emailStepMarkup.includes("Récapitulatif"),
   );
   ctx.assertTrue(
     "mini-recap formule field",
@@ -283,9 +303,9 @@ const runSuite = () => {
       emailStepMarkup.includes(">Formule<"),
   );
   ctx.assertTrue(
-    "mini-recap objectif field",
+    "mini-recap programme field",
     emailStepMarkup.includes('id="email-mini-recap-objective"') &&
-      emailStepMarkup.includes(">Objectif<"),
+      emailStepMarkup.includes(">Programme<"),
   );
   ctx.assertTrue(
     "mini-recap livraison field",
@@ -302,15 +322,25 @@ const runSuite = () => {
     emailStepMarkup.includes('id="email-mini-recap-price"') &&
       emailStepMarkup.includes(">Première box<"),
   );
-  ctx.assertFalse(
-    "mini-recap has no meal list ul",
-    /id="email-mini-recap"[\s\S]*?<ul[\s\S]*?<\/ul>/.test(emailStepMarkup) ||
-      emailStepMarkup.includes('id="email-mini-recap-meals-list"'),
+  ctx.assertTrue(
+    "mini-recap livraisons suivantes field",
+    emailStepMarkup.includes('id="email-mini-recap-recurring"') &&
+      emailStepMarkup.includes(">Livraisons suivantes<"),
+  );
+  ctx.assertTrue(
+    "mini-recap livraison offerte field",
+    emailStepMarkup.includes('id="email-mini-recap-shipping"') &&
+      emailStepMarkup.includes(">Livraison<") &&
+      emailStepMarkup.includes(">offerte<"),
   );
   ctx.assertFalse(
-    "email step has no Puis/semaine",
+    "mini-recap has no meal list nested ul",
+    emailStepMarkup.includes('id="email-mini-recap-meals-list"'),
+  );
+  ctx.assertFalse(
+    "email step has no static Puis/semaine in markup",
     /Puis .+ \/ semaine/.test(emailStepMarkup) ||
-      emailStepMarkup.includes("Puis ") && emailStepMarkup.includes("/semaine"),
+      (emailStepMarkup.includes("Puis ") && emailStepMarkup.includes("/semaine")),
   );
   ctx.assertEqual(
     "email step still has exactly one offer card",
@@ -319,7 +349,7 @@ const runSuite = () => {
   );
   const miniRecapBlock =
     emailStepMarkup.match(
-      /id="email-mini-recap"[\s\S]*?<\/dl>\s*<\/div>/,
+      /id="email-mini-recap"[\s\S]*?<\/ul>\s*<\/div>/,
     )?.[0] ?? "";
   ctx.assertTrue("mini-recap block extracted", miniRecapBlock.length > 0);
   ctx.assertFalse(
@@ -346,10 +376,8 @@ const runSuite = () => {
     ),
   );
   ctx.assertTrue(
-    "mini-recap uses delivery rangeLabel",
-    /function renderEmailMiniRecap[\s\S]*?selectedWindow\.rangeLabel/.test(
-      clientSource,
-    ),
+    "mini-recap uses delivery shortRangeLabel",
+    /function renderEmailMiniRecap[\s\S]*?shortRangeLabel/.test(clientSource),
   );
   ctx.assertTrue(
     "mini-recap uses selectedTotal counter",
@@ -361,18 +389,17 @@ const runSuite = () => {
       clientSource,
     ),
   );
-  ctx.assertFalse(
-    "mini-recap does not show Puis weekly",
-    /function renderEmailMiniRecap[\s\S]*?\n  function /.test(clientSource) &&
-      /function renderEmailMiniRecap[\s\S]*?"Puis "/.test(
-        clientSource.match(
-          /function renderEmailMiniRecap[\s\S]*?\n  function /,
-        )?.[0] ?? "",
-      ),
+  ctx.assertTrue(
+    "mini-recap shows recurring weekly line",
+    /function renderEmailMiniRecap[\s\S]*?par semaine/.test(
+      clientSource.match(
+        /function renderEmailMiniRecap[\s\S]*?\n {2}function /,
+      )?.[0] ?? "",
+    ),
   );
   const miniRecapFn =
     clientSource.match(
-      /function renderEmailMiniRecap\(\) \{[\s\S]*?\n  function /,
+      /function renderEmailMiniRecap\(\) \{[\s\S]*?\n {2}function /,
     )?.[0] ?? "";
   ctx.assertFalse(
     "mini-recap does not capture lead",

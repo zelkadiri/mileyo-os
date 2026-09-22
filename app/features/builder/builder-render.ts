@@ -134,9 +134,6 @@ export const renderBuilder = ({
             />
           </div>
         </aside>
-        <p class="objective-launch-eligibility-note">
-          *Offre de lancement pour les nouveaux clients éligibles.
-        </p>
       </div>
     </section>
 
@@ -144,15 +141,11 @@ export const renderBuilder = ({
       <div class="formula-decision">
         <div class="formula-intro">
           <h1>Choisissez votre box</h1>
-          <p class="formula-lead">Des repas halal, livrés chez vous et modifiables chaque semaine.</p>
+          <p class="formula-lead">
+            Recevez automatiquement votre box chaque semaine.
+            <span class="formula-lead-secondary">Livraison incluse, sans engagement : vous pouvez modifier, mettre en pause ou résilier votre abonnement avant chaque renouvellement.</span>
+          </p>
         </div>
-
-        <p class="formula-benefits" aria-label="Avantages Mileyo">
-          <span>Repas halal</span>
-          <span>Sans engagement</span>
-          <span>Modifiable chaque semaine</span>
-          <span>Livraison offerte</span>
-        </p>
 
         <p class="formula-hint">Vous choisissez votre date de livraison à l'étape suivante.</p>
         <p class="visually-hidden" id="box-helper">Choisissez votre box</p>
@@ -163,9 +156,6 @@ export const renderBuilder = ({
           </div>
           <button aria-label="Box suivante" class="box-rail-nav box-rail-nav-next" id="box-rail-next" type="button">›</button>
         </div>
-        <p class="box-launch-eligibility-note">
-          * Offre de lancement réservée aux nouveaux clients éligibles. Une réduction de ${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € est appliquée automatiquement au paiement.
-        </p>
       </div>
 
       <div class="formula-secondary">
@@ -215,6 +205,9 @@ export const renderBuilder = ({
           <p class="delivery-lead">Votre box sera livrée entre jeudi et samedi.</p>
         </div>
         <div class="delivery-window-grid" id="delivery-window-grid" role="group" aria-label="Fenêtres de livraison disponibles"></div>
+        <p class="delivery-flexibility-note">
+          Vous pourrez ensuite décaler, suspendre ou modifier vos prochaines livraisons depuis votre espace client.
+        </p>
       </div>
     </section>
 
@@ -261,8 +254,8 @@ export const renderBuilder = ({
     <section class="builder-step builder-step--email hidden" id="step-email">
       <div class="email-decision">
         <div class="email-intro">
-          <h1>Votre e-mail</h1>
-          <p class="email-lead">Renseignez votre e-mail pour continuer.</p>
+          <h1>Votre box est prête.</h1>
+          <p class="email-lead">Vérifiez votre sélection, puis renseignez votre e-mail pour accéder au paiement sécurisé.</p>
         </div>
 
         <label class="email-field" for="checkout-email">
@@ -283,35 +276,44 @@ export const renderBuilder = ({
           class="email-mini-recap"
           id="email-mini-recap"
         >
-          <h2 class="email-mini-recap-title" id="email-mini-recap-title">Votre sélection</h2>
-          <dl class="email-mini-recap-list">
-            <div class="email-mini-recap-row">
-              <dt>Formule</dt>
-              <dd id="email-mini-recap-box"></dd>
-            </div>
-            <div class="email-mini-recap-row">
-              <dt>Objectif</dt>
-              <dd id="email-mini-recap-objective"></dd>
-            </div>
-            <div class="email-mini-recap-row">
-              <dt>Livraison</dt>
-              <dd id="email-mini-recap-delivery"></dd>
-            </div>
-            <div class="email-mini-recap-row">
-              <dt>Plats</dt>
-              <dd id="email-mini-recap-meals"></dd>
-            </div>
-            <div class="email-mini-recap-row email-mini-recap-row--price">
-              <dt>Première box</dt>
-              <dd id="email-mini-recap-price"></dd>
-            </div>
-          </dl>
+          <h2 class="email-mini-recap-title" id="email-mini-recap-title">Récapitulatif</h2>
+          <ul class="email-mini-recap-list">
+            <li class="email-mini-recap-row">
+              <span class="email-mini-recap-label">Programme</span>
+              <span class="email-mini-recap-value" id="email-mini-recap-objective"></span>
+            </li>
+            <li class="email-mini-recap-row">
+              <span class="email-mini-recap-label">Formule</span>
+              <span class="email-mini-recap-value" id="email-mini-recap-box"></span>
+            </li>
+            <li class="email-mini-recap-row">
+              <span class="email-mini-recap-label">Livraison</span>
+              <span class="email-mini-recap-value" id="email-mini-recap-delivery"></span>
+            </li>
+            <li class="email-mini-recap-row">
+              <span class="email-mini-recap-label">Plats</span>
+              <span class="email-mini-recap-value" id="email-mini-recap-meals"></span>
+            </li>
+            <li class="email-mini-recap-row email-mini-recap-row--price">
+              <span class="email-mini-recap-label">Première box</span>
+              <span class="email-mini-recap-value" id="email-mini-recap-price"></span>
+            </li>
+            <li class="email-mini-recap-row">
+              <span class="email-mini-recap-label">Livraisons suivantes</span>
+              <span class="email-mini-recap-value" id="email-mini-recap-recurring"></span>
+            </li>
+            <li class="email-mini-recap-row">
+              <span class="email-mini-recap-label">Livraison</span>
+              <span class="email-mini-recap-value" id="email-mini-recap-shipping">offerte</span>
+            </li>
+          </ul>
         </div>
 
         <aside class="email-offer-card" aria-label="Offre de lancement">
           <p class="email-offer-kicker">Offre de lancement</p>
           <p class="email-offer-title">Nouveaux clients : ${FIRST_BOX_LAUNCH_DISCOUNT_EUR} € de réduction sur votre première box.</p>
-          <p class="email-offer-note">La remise est appliquée automatiquement au paiement si vous êtes éligible.</p>
+          <p class="email-offer-subtitle">Abonnement flexible et sans engagement</p>
+          <p class="email-offer-note">Votre box est renouvelée chaque semaine. Vous pouvez modifier vos repas, décaler une livraison, mettre en pause ou résilier avant le prochain renouvellement.</p>
         </aside>
 
         <p class="email-privacy">Nous utilisons votre e-mail pour vous accompagner dans votre commande et, si nécessaire, vous recontacter au sujet de celle-ci.</p>

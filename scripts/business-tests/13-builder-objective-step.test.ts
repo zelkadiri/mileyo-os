@@ -152,6 +152,13 @@ const runSuite = () => {
     "Perte de poids",
   );
   ctx.assertEqual(
+    "weight_loss description",
+    BUILDER_OBJECTIVE_OPTIONS.find(
+      (option) => option.value === SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS,
+    )?.description,
+    "Des repas légers et rassasiants pour progresser sans frustration.",
+  );
+  ctx.assertEqual(
     "balanced label",
     BUILDER_OBJECTIVE_OPTIONS.find(
       (option) => option.value === SUBSCRIPTION_OBJECTIVE.BALANCED,
@@ -159,11 +166,25 @@ const runSuite = () => {
     "Équilibré",
   );
   ctx.assertEqual(
+    "balanced description",
+    BUILDER_OBJECTIVE_OPTIONS.find(
+      (option) => option.value === SUBSCRIPTION_OBJECTIVE.BALANCED,
+    )?.description,
+    "Des repas complets et équilibrés pour mieux manger au quotidien.",
+  );
+  ctx.assertEqual(
     "bulk label",
     BUILDER_OBJECTIVE_OPTIONS.find(
       (option) => option.value === SUBSCRIPTION_OBJECTIVE.BULK,
     )?.label,
     "Prise de masse",
+  );
+  ctx.assertEqual(
+    "bulk description",
+    BUILDER_OBJECTIVE_OPTIONS.find(
+      (option) => option.value === SUBSCRIPTION_OBJECTIVE.BULK,
+    )?.description,
+    "Des repas riches en protéines pour accompagner votre progression.",
   );
 
   ctx.scenario("C. Step order — objectif first");
@@ -349,17 +370,17 @@ const runSuite = () => {
     selectionSource.includes("getBuilderLaunchPricing({") &&
       selectionSource.includes("getStartingBoxForObjective"),
   );
-  ctx.assertTrue(
-    "eligibility note under objective group",
-    renderSource.includes("objective-launch-eligibility-note") &&
+  ctx.assertFalse(
+    "eligibility note removed from objective step",
+    renderSource.includes("objective-launch-eligibility-note") ||
       renderSource.includes(
         "*Offre de lancement pour les nouveaux clients éligibles.",
       ),
   );
-  ctx.assertTrue(
-    "client renders launch + recurring objective lines",
-    clientSource.includes("objective-card-launch-price") &&
-      clientSource.includes("objective-card-recurring-price") &&
+  ctx.assertFalse(
+    "client no longer renders objective price lines",
+    clientSource.includes("objective-card-launch-price") ||
+      clientSource.includes("objective-card-recurring-price") ||
       clientSource.includes("priceInfo.launchLine"),
   );
   ctx.assertFalse(
@@ -374,7 +395,12 @@ const runSuite = () => {
     )?.[0] ?? "";
   ctx.assertTrue(
     "renderObjectives captured",
-    renderObjectivesFn.includes("objective-card-launch-price"),
+    renderObjectivesFn.includes("objective-card-label"),
+  );
+  ctx.assertFalse(
+    "client objective render has no pricing block",
+    renderObjectivesFn.includes("objective-card-pricing") ||
+      renderObjectivesFn.includes("objectiveStartingPriceLabels"),
   );
   ctx.assertFalse(
     "client objective render has no / repas",
@@ -467,10 +493,13 @@ const runSuite = () => {
     clientSource.includes("function renderObjectives"),
   );
   ctx.assertTrue(
-    "formula detailed benefits preserved",
-    renderSource.includes('class="formula-benefits"') &&
-      renderSource.includes("Repas halal") &&
-      renderSource.includes("Modifiable chaque semaine"),
+    "formula intro explains weekly box delivery",
+    renderSource.includes("Recevez automatiquement votre box chaque semaine.") &&
+      renderSource.includes("Livraison incluse, sans engagement"),
+  );
+  ctx.assertFalse(
+    "formula benefits badge row removed",
+    renderSource.includes('class="formula-benefits"'),
   );
   ctx.assertTrue(
     "formula trust section preserved",

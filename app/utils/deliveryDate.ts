@@ -32,11 +32,14 @@ const DELIVERY_WINDOW_DISPLAY_END_OFFSET_DAYS = 2;
 const DELIVERY_WINDOW_SKIP_WEEKDAYS = [2, 3] as const;
 
 export type BuilderDeliveryWindowOption = {
+  /** Legacy field kept for payload shape; builder UI shows `rangeLabel` only. */
   cardLabel: string;
   /** Visible window end (Saturday) — display only, not the business delivery date. */
   deliveryWindowEndDate: DeliveryDateString;
   key: DeliveryDateString;
   rangeLabel: string;
+  /** Compact email/recap form, e.g. "entre le 24 et le 26 septembre". */
+  shortRangeLabel: string;
   scheduledDeliveryDate: DeliveryDateString;
   thursdayDate: DeliveryDateString;
   weekStartDate: DeliveryDateString;
@@ -986,6 +989,19 @@ const formatDeliveryWindowWeekdayDayMonth = (
   return `${weekday} ${rest}`;
 };
 
+const formatDeliveryWindowDayMonth = (
+  date: DeliveryDateString,
+  locale: string,
+): string => {
+  const { day, month, year } = splitDeliveryDate(date);
+  const utcNoon = new Date(Date.UTC(year, month - 1, day, 12));
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  }).format(utcNoon);
+};
+
 export const formatDeliveryWindowRangeLabel = (
   thursdayDate: DeliveryDateString,
   deliveryWindowEndDate: DeliveryDateString,
@@ -1003,33 +1019,58 @@ export const formatDeliveryWindowRangeLabel = (
   return includeLivraisonPrefix ? `Livraison ${rangeCore}` : rangeCore;
 };
 
+/** Compact range without weekdays — for email/recap summaries. */
+export const formatDeliveryWindowShortRangeLabel = (
+  thursdayDate: DeliveryDateString,
+  deliveryWindowEndDate: DeliveryDateString,
+  options?: { locale?: string },
+): string => {
+  const locale = options?.locale ?? "fr-FR";
+  const start = splitDeliveryDate(thursdayDate);
+  const end = splitDeliveryDate(deliveryWindowEndDate);
+
+  if (start.month === end.month && start.year === end.year) {
+    const monthName = new Intl.DateTimeFormat(locale, {
+      month: "long",
+      timeZone: "UTC",
+    }).format(new Date(Date.UTC(start.year, start.month - 1, start.day, 12)));
+    return `entre le ${start.day} et le ${end.day} ${monthName}`;
+  }
+
+  return `entre le ${formatDeliveryWindowDayMonth(thursdayDate, locale)} et le ${formatDeliveryWindowDayMonth(deliveryWindowEndDate, locale)}`;
+};
+
 export const getDeliveryWindowEndDate = (
   thursdayDate: DeliveryDateString,
 ): DeliveryDateString =>
   addCalendarDays(thursdayDate, DELIVERY_WINDOW_DISPLAY_END_OFFSET_DAYS);
 
 export const buildWeeklyDeliveryWindow = ({
-  cardLabel,
   locale = "fr-FR",
   thursdayDate,
 }: {
-  cardLabel: string;
   locale?: string;
   thursdayDate: DeliveryDateString;
 }): BuilderDeliveryWindowOption => {
   const deliveryWindowEndDate = getDeliveryWindowEndDate(thursdayDate);
   const weekStartDate = getDeliveryWeekStartForDate(thursdayDate);
+  const rangeLabel = formatDeliveryWindowRangeLabel(
+    thursdayDate,
+    deliveryWindowEndDate,
+    {
+      locale,
+    },
+  );
 
   return {
-    cardLabel,
+    cardLabel: rangeLabel,
     deliveryWindowEndDate,
     key: weekStartDate,
-    rangeLabel: formatDeliveryWindowRangeLabel(
+    rangeLabel,
+    shortRangeLabel: formatDeliveryWindowShortRangeLabel(
       thursdayDate,
       deliveryWindowEndDate,
-      {
-        locale,
-      },
+      { locale },
     ),
     scheduledDeliveryDate: thursdayDate,
     thursdayDate,
@@ -1050,12 +1091,10 @@ export const buildBuilderDeliveryWindowOptionsFromReferenceDate = (
 
   return [
     buildWeeklyDeliveryWindow({
-      cardLabel: "Prochaine livraison",
       locale,
       thursdayDate: firstThursday,
     }),
     buildWeeklyDeliveryWindow({
-      cardLabel: "Livraison suivante",
       locale,
       thursdayDate: secondThursday,
     }),

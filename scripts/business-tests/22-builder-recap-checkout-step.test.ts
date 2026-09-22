@@ -362,8 +362,8 @@ const runSuite = () => {
 
   ctx.scenario("D. Email mini-recap content + shared helpers");
   ctx.assertTrue(
-    "mini-recap title Votre sélection",
-    renderSource.includes("Votre sélection"),
+    "mini-recap title Récapitulatif",
+    renderSource.includes("Récapitulatif"),
   );
   ctx.assertEqual(
     "balanced label FR",
@@ -382,23 +382,22 @@ const runSuite = () => {
     renderSource.includes('id="email-mini-recap-box"'),
   );
   ctx.assertTrue(
-    "mini-recap uses launch pricing first box only",
+    "mini-recap uses launch pricing for first box + recurring",
     clientSource.includes("getBuilderLaunchPricing(selectedBox.price, selectedBox.mealCount)") &&
-      /function renderEmailMiniRecap[\s\S]*?la première box\*/.test(clientSource),
+      /function renderEmailMiniRecap[\s\S]*?launchPriceCents/.test(clientSource) &&
+      /function renderEmailMiniRecap[\s\S]*?regularPriceCents/.test(clientSource),
   );
   const miniRecapFn =
     clientSource.match(
       /function renderEmailMiniRecap\(\) \{[\s\S]*?\n  function /,
     )?.[0] ?? "";
-  ctx.assertFalse(
-    "mini-recap does not show Puis weekly",
-    miniRecapFn.includes('"Puis "'),
+  ctx.assertTrue(
+    "mini-recap shows recurring weekly price",
+    miniRecapFn.includes("par semaine"),
   );
   ctx.assertTrue(
-    "mini-recap delivery uses rangeLabel",
-    /function renderEmailMiniRecap[\s\S]*?selectedWindow\.rangeLabel/.test(
-      clientSource,
-    ),
+    "mini-recap delivery uses shortRangeLabel",
+    /function renderEmailMiniRecap[\s\S]*?shortRangeLabel/.test(clientSource),
   );
   ctx.assertFalse(
     "mini-recap delivery does not show Thursday canonical as promise",
@@ -446,7 +445,11 @@ const runSuite = () => {
       renderSource.includes(`${FIRST_BOX_LAUNCH_DISCOUNT_EUR} €`),
   );
   ctx.assertTrue(
-    "eligibility note",
+    "flexible subscription copy",
+    renderSource.includes("Abonnement flexible et sans engagement"),
+  );
+  ctx.assertFalse(
+    "old eligibility note removed",
     renderSource.includes("si vous êtes éligible"),
   );
   ctx.assertTrue(
@@ -479,12 +482,12 @@ const runSuite = () => {
       renderSource.includes('id="recap-weekly-price"'),
   );
   ctx.assertTrue(
-    "email mini-recap renders première box launch copy",
-    clientSource.includes("la première box*"),
+    "email mini-recap renders première box launch cents",
+    /function renderEmailMiniRecap[\s\S]*?launchPriceCents/.test(clientSource),
   );
   ctx.assertTrue(
-    "email offer card eligibility note present",
-    renderSource.includes("si vous êtes éligible"),
+    "email offer card flexible subscription present",
+    renderSource.includes("Abonnement flexible et sans engagement"),
   );
   ctx.assertFalse(
     "no universal guaranteed pay today wording",

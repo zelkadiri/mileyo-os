@@ -28,7 +28,8 @@ const BUILDER_OBJECTIVE_UX: Record<
   }
 > = {
   [SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS]: {
-    description: "Moins de calories, plus de satiété",
+    description:
+      "Des repas légers et rassasiants pour progresser sans frustration.",
     detailImagePath: "/mileyo-objective-weight-loss.jpg",
     detailTitle: "Jusqu’à moins 10 kg en 6 mois*",
     detailParagraphs: [
@@ -39,7 +40,8 @@ const BUILDER_OBJECTIVE_UX: Record<
     label: "Perte de poids",
   },
   [SUBSCRIPTION_OBJECTIVE.BALANCED]: {
-    description: "Un rythme alimentaire équilibré",
+    description:
+      "Des repas complets et équilibrés pour mieux manger au quotidien.",
     detailImagePath: "/mileyo-objective-balanced.jpg",
     detailTitle: "Un repas équilibré prêt en 3 minutes",
     detailParagraphs: [
@@ -49,7 +51,8 @@ const BUILDER_OBJECTIVE_UX: Record<
     label: "Équilibré",
   },
   [SUBSCRIPTION_OBJECTIVE.BULK]: {
-    description: "Plus de protéines et d’énergie",
+    description:
+      "Des repas riches en protéines pour accompagner votre progression.",
     detailImagePath: "/mileyo-objective-bulk.jpg",
     detailTitle: "Jusqu’à 52 g de protéines par plat",
     detailParagraphs: [

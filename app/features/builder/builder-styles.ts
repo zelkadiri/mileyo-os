@@ -651,33 +651,15 @@ body {
 .formula-lead {
   color: var(--mileyo-muted);
   font-size: 0.92rem;
-  line-height: 1.4;
-  margin: 0 auto;
+  line-height: 1.45;
+  margin: 0 auto 12px;
   max-width: 34rem;
   text-align: center;
 }
 
-.formula-benefits {
-  color: var(--mileyo-text);
-  display: flex;
-  flex-wrap: wrap;
-  font-size: 0.82rem;
-  font-weight: 600;
-  gap: 0;
-  justify-content: center;
-  margin: 0 0 12px;
-  text-align: center;
-}
-
-.formula-benefits span {
-  display: inline-flex;
-  align-items: center;
-}
-
-.formula-benefits span + span::before {
-  color: var(--mileyo-muted);
-  content: "·";
-  margin: 0 7px;
+.formula-lead-secondary {
+  display: block;
+  margin-top: 6px;
 }
 
 .formula-hint {
@@ -741,10 +723,11 @@ body {
   flex-direction: column;
   font: inherit;
   gap: 8px;
+  justify-content: center;
   line-height: 1.35;
   min-height: 120px;
   padding: 16px 14px;
-  text-align: left;
+  text-align: center;
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 
@@ -761,17 +744,23 @@ body {
   box-shadow: 0 4px 18px rgba(185, 138, 215, 0.18);
 }
 
-.delivery-window-card-title {
-  font-size: 0.98rem;
-  font-weight: 700;
-}
-
 .delivery-window-card-range {
-  color: rgba(45, 27, 54, 0.82);
-  font-size: 0.88rem;
-  font-weight: 500;
+  color: var(--mileyo-purple-black);
+  font-size: 0.95rem;
+  font-weight: 700;
   line-height: 1.4;
   overflow-wrap: anywhere;
+  text-align: center;
+  width: 100%;
+}
+
+.delivery-flexibility-note {
+  color: var(--mileyo-muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 16px auto 0;
+  max-width: 640px;
+  text-align: center;
 }
 
 .delivery-date-grid {
@@ -881,49 +870,59 @@ body {
 
 .email-mini-recap-title {
   color: var(--mileyo-purple-black);
-  font-size: 0.82rem;
+  font-size: 0.92rem;
   font-weight: 800;
-  letter-spacing: 0.02em;
-  margin: 0 0 10px;
+  letter-spacing: 0.01em;
+  margin: 0 0 12px;
 }
 
 .email-mini-recap-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  list-style: none;
   margin: 0;
+  padding: 0;
 }
 
 .email-mini-recap-row {
-  align-items: flex-start;
+  align-items: baseline;
+  color: var(--mileyo-purple-black);
   display: flex;
-  gap: 12px;
-  justify-content: space-between;
+  flex-wrap: nowrap;
+  font-size: 0.88rem;
+  gap: 4px 6px;
+  line-height: 1.45;
+  padding-left: 0;
 }
 
-.email-mini-recap-row dt {
+.email-mini-recap-row::before {
+  color: var(--mileyo-purple-dark);
+  content: "•";
+  flex: 0 0 auto;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.email-mini-recap-label {
   color: var(--mileyo-muted);
   flex: 0 0 auto;
-  font-size: 0.82rem;
   font-weight: 600;
-  line-height: 1.4;
-  margin: 0;
-  max-width: 42%;
 }
 
-.email-mini-recap-row dd {
+.email-mini-recap-label::after {
+  content: " :";
+}
+
+.email-mini-recap-value {
   color: var(--mileyo-purple-black);
   flex: 1 1 auto;
-  font-size: 0.88rem;
   font-weight: 700;
-  line-height: 1.4;
-  margin: 0;
   min-width: 0;
   overflow-wrap: anywhere;
-  text-align: right;
 }
 
-.email-mini-recap-row--price dd {
+.email-mini-recap-row--price .email-mini-recap-value {
   color: var(--mileyo-purple-dark);
 }
 
@@ -949,7 +948,15 @@ body {
   font-size: 0.98rem;
   font-weight: 700;
   line-height: 1.4;
-  margin: 0 0 6px;
+  margin: 0 0 10px;
+}
+
+.email-offer-subtitle {
+  color: var(--mileyo-purple-black);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0 0 4px;
 }
 
 .email-offer-note,
@@ -1068,34 +1075,6 @@ body {
   line-height: 1.4;
 }
 
-.objective-card-pricing {
-  display: grid;
-  gap: 2px;
-  margin-top: 2px;
-}
-
-.objective-card-launch-price {
-  color: var(--mileyo-purple-black);
-  font-size: 0.88rem;
-  font-weight: 800;
-  line-height: 1.35;
-}
-
-.objective-card-recurring-price {
-  color: var(--mileyo-muted);
-  font-size: 0.78rem;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.objective-card-starting-price {
-  color: var(--mileyo-muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-  line-height: 1.35;
-  margin-top: 2px;
-}
-
 .objective-detail {
   background: linear-gradient(
     180deg,
@@ -1180,14 +1159,6 @@ body {
   width: 100%;
 }
 
-.objective-launch-eligibility-note {
-  color: var(--mileyo-muted);
-  font-size: 0.78rem;
-  line-height: 1.4;
-  margin: 12px 0 0;
-  max-width: 36rem;
-}
-
 .objective-card .selected-badge {
   position: absolute;
   right: 12px;
@@ -1244,6 +1215,10 @@ body {
 .delivery-lead {
   margin: 0 auto;
   text-align: center;
+}
+
+.formula-intro .formula-lead {
+  margin-bottom: 12px;
 }
 
 .setup-card {
@@ -1510,8 +1485,8 @@ body {
 }
 
 .box-price-per-meal {
-  color: var(--mileyo-text);
-  font-size: 0.92rem;
+  color: var(--mileyo-muted);
+  font-size: 0.86rem;
   font-weight: 600;
   margin: 0;
 }
@@ -1522,21 +1497,21 @@ body {
 }
 
 #box-grid .formula-card .box-price-per-meal {
-  font-size: 0.88rem;
+  font-size: 0.82rem;
 }
 
 #box-grid .formula-card .box-promo-price {
   font-size: 0.9rem;
-  line-height: 1.25;
+  line-height: 1.35;
   margin: 0;
 }
 
 #box-grid .formula-card .box-promo-price strong {
-  font-size: 1.18rem;
+  font-size: 1.12rem;
 }
 
 #box-grid .formula-card .box-weekly-price {
-  font-size: 0.8rem;
+  font-size: 0.84rem;
 }
 
 #box-grid .formula-card .box-price-total {
@@ -1560,14 +1535,6 @@ body {
   font-size: 0.86rem;
   font-weight: 600;
   margin: 0;
-}
-
-.box-launch-eligibility-note {
-  color: var(--mileyo-muted);
-  font-size: 0.78rem;
-  line-height: 1.4;
-  margin: 12px 0 0;
-  max-width: 36rem;
 }
 
 .box-promo-note {
@@ -2852,11 +2819,6 @@ button:disabled {
     margin-right: auto;
     max-width: 36rem;
     text-align: center;
-  }
-
-  .formula-benefits {
-    font-size: 0.88rem;
-    margin-bottom: 22px;
   }
 
   .toggle-row {
