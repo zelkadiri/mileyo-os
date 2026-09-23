@@ -45,11 +45,52 @@ import {
   formatV2SellingPlanSetupMessage,
   setupV2WeeklySellingPlans,
 } from "./settings-selling-plans-v2.server";
+import {
+  CONFIRM_UNPUBLISH_MEALS_ONLINE_STORE_FIELD,
+  MEAL_PUBLICATION_OPTIONAL_SCOPE,
+  PUBLICATION_SCOPES_MISSING_MESSAGE,
+  REQUEST_MEAL_PUBLICATION_SCOPES_INTENT,
+  UNPUBLISH_MEALS_ONLINE_STORE_INTENT,
+  hasWritePublicationsScope,
+  mergeMealCatalogSetupWithOnlineStoreProtection,
+  unpublishMealsFromOnlineStore,
+} from "../../services/mealOnlineStoreUnpublish.server";
 import type { SettingsActionData } from "./settings-types";
+
+type SettingsScopesApi = {
+  query: () => Promise<{ granted: string[] }>;
+  request: (scopes: string[]) => Promise<void>;
+};
+
+const ensureWritePublicationsOrExplain = async (
+  scopes: SettingsScopesApi | undefined,
+): Promise<SettingsActionData | null> => {
+  if (!scopes) {
+    return {
+      errors: [PUBLICATION_SCOPES_MISSING_MESSAGE],
+      message: "Protection Online Store indisponible.",
+      needsPublicationScopes: true,
+      ok: false,
+    };
+  }
+
+  const detail = await scopes.query();
+  if (hasWritePublicationsScope(detail.granted)) {
+    return null;
+  }
+
+  return {
+    errors: [PUBLICATION_SCOPES_MISSING_MESSAGE],
+    message: "Protection Online Store indisponible.",
+    needsPublicationScopes: true,
+    ok: false,
+  };
+};
 
 export const handleSettingsAction = async ({
   admin,
   request,
+  scopes,
   shop,
 }: {
   admin: {
@@ -59,10 +100,29 @@ export const handleSettingsAction = async ({
     ) => Promise<Response>;
   };
   request: Request;
+  scopes?: SettingsScopesApi;
   shop: string;
 }): Promise<SettingsActionData> => {
   const formData = await request.formData();
   const intent = getFormString(formData, "intent");
+
+  if (intent === REQUEST_MEAL_PUBLICATION_SCOPES_INTENT) {
+    if (!scopes) {
+      return {
+        errors: [PUBLICATION_SCOPES_MISSING_MESSAGE],
+        message: "Impossible de demander le scope publications.",
+        needsPublicationScopes: true,
+        ok: false,
+      };
+    }
+
+    // Server-side redirect when consent is still required (Shopify Scopes API).
+    await scopes.request([MEAL_PUBLICATION_OPTIONAL_SCOPE]);
+    return {
+      message: "Accès publications déjà accordé.",
+      ok: true,
+    };
+  }
 
   if (intent === "createSubscriptionPriceMetafieldDefinition") {
     const errors = await createSubscriptionPriceMetafieldDefinition(admin);
@@ -220,12 +280,52 @@ export const handleSettingsAction = async ({
   if (intent === SETUP_V2_MEAL_CATALOG_INTENT) {
     try {
       const settings = await prisma.appSettings.findUnique({ where: { shop } });
-      const result = await setupV2MealCatalog(admin, settings?.mealCollectionId);
+      const mealCollectionId = settings?.mealCollectionId;
+
+      const scopeGate = await ensureWritePublicationsOrExplain(scopes);
+      if (scopeGate) {
+        return {
+          ...scopeGate,
+          message:
+            "Protection Online Store requise avant le provisioning Repas V2 — " +
+            "aucune conversion effectuée.",
+        };
+      }
+
+      // Real fail-closed: protect Online Store BEFORE any productSet conversion.
+      const unpublishResult = await unpublishMealsFromOnlineStore(
+        admin,
+        mealCollectionId,
+      );
+      if (!unpublishResult.ok) {
+        return {
+          errors: unpublishResult.errors,
+          mealOnlineStoreUnpublish: {
+            alreadyUnpublished: unpublishResult.alreadyUnpublished,
+            failed: unpublishResult.failed,
+            totalMeals: unpublishResult.totalMeals,
+            unpublished: unpublishResult.unpublished,
+          },
+          message:
+            `${unpublishResult.message} Provisioning Repas V2 annulé — ` +
+            "aucune conversion effectuée tant que la protection Online Store échoue.",
+          ok: false,
+        };
+      }
+
+      const catalogResult = await setupV2MealCatalog(admin, mealCollectionId);
+      const merged = mergeMealCatalogSetupWithOnlineStoreProtection({
+        catalogErrors: catalogResult.errors,
+        catalogMessage: formatV2MealCatalogSetupMessage(catalogResult),
+        catalogOk: catalogResult.ok,
+        unpublish: unpublishResult,
+      });
 
       return {
-        errors: result.errors,
-        message: formatV2MealCatalogSetupMessage(result),
-        ok: result.ok,
+        errors: merged.errors,
+        mealOnlineStoreUnpublish: merged.mealOnlineStoreUnpublish,
+        message: merged.message,
+        ok: merged.ok,
       };
     } catch (error) {
       const message =
@@ -234,6 +334,56 @@ export const handleSettingsAction = async ({
       return {
         errors: [message],
         message: "Impossible de préparer le catalogue Repas V2.",
+        ok: false,
+      };
+    }
+  }
+
+  if (intent === UNPUBLISH_MEALS_ONLINE_STORE_INTENT) {
+    const confirmed =
+      getFormString(formData, CONFIRM_UNPUBLISH_MEALS_ONLINE_STORE_FIELD) ===
+      "1";
+
+    if (!confirmed) {
+      return {
+        errors: [
+          "Confirmation requise : cochez la case avant de dépublier les repas.",
+        ],
+        message: "Protection Online Store non lancée.",
+        ok: false,
+      };
+    }
+
+    const scopeGate = await ensureWritePublicationsOrExplain(scopes);
+    if (scopeGate) {
+      return scopeGate;
+    }
+
+    try {
+      const settings = await prisma.appSettings.findUnique({ where: { shop } });
+      const result = await unpublishMealsFromOnlineStore(
+        admin,
+        settings?.mealCollectionId,
+      );
+
+      return {
+        errors: result.errors,
+        mealOnlineStoreUnpublish: {
+          alreadyUnpublished: result.alreadyUnpublished,
+          failed: result.failed,
+          totalMeals: result.totalMeals,
+          unpublished: result.unpublished,
+        },
+        message: result.message,
+        ok: result.ok,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Erreur inattendue Shopify.";
+
+      return {
+        errors: [message],
+        message: "Impossible de dépublier les repas de la boutique en ligne.",
         ok: false,
       };
     }

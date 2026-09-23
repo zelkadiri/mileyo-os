@@ -55,7 +55,8 @@ function ActionErrors({ errors }: { errors: string[] }) {
 
 export default function Settings() {
   const actionData = useActionData<SettingsActionData>();
-  const { collections, settings } = useLoaderData<SettingsPageData>();
+  const { collections, hasWritePublications, settings } =
+    useLoaderData<SettingsPageData>();
   const lastNutritionDownloadTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -113,6 +114,97 @@ export default function Settings() {
           ) : (
             <s-text>Aucune collection de plats n’est configurée.</s-text>
           )}
+
+          <s-stack gap="base">
+            <s-text>
+              <strong>Protection boutique en ligne</strong>
+            </s-text>
+            <s-text>
+              Les repas Mileyo restent <strong>Actifs</strong> (Admin GraphQL /
+              Builder / Portal) mais ne doivent pas être achetables via le canal{" "}
+              <strong>Boutique en ligne</strong>. Cette action cible uniquement
+              la collection de plats configurée ci-dessus — aucun autre produit,
+              aucun autre canal.
+            </s-text>
+            {!hasWritePublications ? (
+              <s-stack gap="base">
+                <s-text>
+                  L’accès optionnel <strong>write_publications</strong> n’est
+                  pas encore accordé. Le reste de Mileyo fonctionne sans ce
+                  scope. Autorisez-le uniquement pour utiliser cette protection.
+                </s-text>
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="requestMealPublicationScopes"
+                  />
+                  <s-button type="submit">
+                    Autoriser l’accès publications
+                  </s-button>
+                </Form>
+              </s-stack>
+            ) : null}
+            {settings.mealCollectionId ? (
+              <Form method="post">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="unpublishMealsOnlineStore"
+                />
+                <s-stack gap="base">
+                  <label style={fieldStyle}>
+                    <input
+                      name="confirmUnpublishMealsOnlineStore"
+                      required
+                      type="checkbox"
+                      value="1"
+                    />{" "}
+                    Je confirme dépublier tous les repas de{" "}
+                    <strong>{settings.mealCollectionTitle}</strong> du canal
+                    Boutique en ligne uniquement (status ACTIVE conservé).
+                  </label>
+                  <s-button
+                    disabled={!hasWritePublications || undefined}
+                    type="submit"
+                  >
+                    Dépublier les repas de la boutique en ligne
+                  </s-button>
+                </s-stack>
+              </Form>
+            ) : (
+              <s-text>
+                Sélectionnez une collection de plats avant de lancer la
+                protection Online Store.
+              </s-text>
+            )}
+            {actionData?.mealOnlineStoreUnpublish ||
+            actionData?.needsPublicationScopes ||
+            actionData?.message?.toLowerCase().includes("online store") ||
+            actionData?.message?.toLowerCase().includes("boutique en ligne") ||
+            actionData?.message?.toLowerCase().includes(
+              "protection online store",
+            ) ||
+            actionData?.message?.toLowerCase().includes("publications") ? (
+              <>
+                {actionData.message ? (
+                  <s-text>{actionData.message}</s-text>
+                ) : null}
+                {actionData.mealOnlineStoreUnpublish ? (
+                  <s-text>
+                    Analysés : {actionData.mealOnlineStoreUnpublish.totalMeals}{" "}
+                    · Déjà protégés :{" "}
+                    {actionData.mealOnlineStoreUnpublish.alreadyUnpublished} ·
+                    Dépubliés : {actionData.mealOnlineStoreUnpublish.unpublished}{" "}
+                    · Erreurs : {actionData.mealOnlineStoreUnpublish.failed}
+                  </s-text>
+                ) : null}
+                {actionData.errors?.length ? (
+                  <ActionErrors errors={actionData.errors} />
+                ) : null}
+              </>
+            ) : null}
+          </s-stack>
         </s-stack>
       </s-section>
 
@@ -466,7 +558,10 @@ export default function Settings() {
                 <s-text>
                   Prix catalogue : <strong>0.00</strong>. Aucune macro inventée.
                   Les produits déjà configurés sont ignorés (idempotent). Les
-                  structures ambiguës sont bloquées sans mutation.
+                  structures ambiguës sont bloquées sans mutation. La protection
+                  Online Store s’exécute <strong>avant</strong> toute conversion
+                  (fail-closed) : si elle échoue, aucune conversion n’est
+                  effectuée.
                 </s-text>
                 <s-text>
                   {settings.mealCollectionTitle ? (

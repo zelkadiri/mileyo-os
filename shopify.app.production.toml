@@ -60,8 +60,11 @@ api_version = "2026-07"
 # TODO(box-v2-inventory): After merging, deploy updated Shopify app config and reinstall /
 # approve new scopes on each shop (dev + production): read_locations, write_inventory.
 # Required to activate Box V2 InventoryItems at Online Store fulfillment locations.
+# TODO(meal-online-store-unpublish): Deploy optional_scopes write_publications (dev + production).
+# Requested at runtime from Settings when using meal Online Store protection — does not force
+# re-consent on install for existing required scopes. write includes read.
 scopes = "write_metaobject_definitions,write_metaobjects,read_orders,write_products,read_own_subscription_contracts,write_own_subscription_contracts,read_customers,write_customers,read_locations,write_inventory,unauthenticated_read_product_listings,unauthenticated_read_checkouts,unauthenticated_write_checkouts,write_app_proxy"
-optional_scopes = [ ]
+optional_scopes = [ "write_publications" ]
 use_legacy_install_flow = false
 
 [auth]

@@ -154,6 +154,7 @@ export const loadSettingsPageData = async (
     ) => Promise<Response>;
   },
   shop: string,
+  options: { hasWritePublications?: boolean } = {},
 ) => {
   const settings = await prisma.appSettings.upsert({
     create: { shop },
@@ -164,6 +165,7 @@ export const loadSettingsPageData = async (
 
   return {
     collections,
+    hasWritePublications: options.hasWritePublications === true,
     settings,
     shop,
   };

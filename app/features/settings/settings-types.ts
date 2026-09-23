@@ -127,7 +127,16 @@ export type SettingsActionData = {
   downloadToken?: string;
   errors?: string[];
   filename?: string;
+  /** Structured counts from Online Store meal unpublish (ops + post-catalog). */
+  mealOnlineStoreUnpublish?: {
+    alreadyUnpublished: number;
+    failed: number;
+    totalMeals: number;
+    unpublished: number;
+  };
   message?: string;
+  /** True when write_publications optional scope is missing. */
+  needsPublicationScopes?: boolean;
   /** Variants successfully written on Apply. */
   nutritionImportAppliedCount?: number;
   /** Raw CSV retained after preview so Apply can revalidate server-side. */
