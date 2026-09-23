@@ -2,7 +2,7 @@
  * Process-local short TTL cache for GET /apps/box-builder Shopify Admin catalog.
  *
  * Scope (intentional):
- * - Used only by fetchCachedBuilder* wrappers called from the Builder loader
+ * - Used by fetchCachedBuilder* (Builder loader) and public-meals App Proxy
  * - Shared only within the same Node isolate / Vercel function instance
  * - Lost on cold start; not shared across all serverless instances
  * - Opportunistic optimization — no distributed coherence required
@@ -15,8 +15,11 @@
  * - false → miss or joined an in-flight fetch (waited for GraphQL / peer)
  */
 
-/** Default TTL for builder boxes/meals catalog entries. */
+/** Default TTL for builder boxes/meals + public meals catalog entries. */
 export const BUILDER_CATALOG_CACHE_TTL_MS = 30_000;
+
+/** Alias — public meals share the same short TTL as the Builder catalog. */
+export const PUBLIC_MEALS_CACHE_TTL_MS = BUILDER_CATALOG_CACHE_TTL_MS;
 
 type CacheEntry<T> = {
   expiresAt: number;
@@ -31,9 +34,11 @@ type CacheBucket = {
 const buckets: {
   boxes: CacheBucket;
   meals: CacheBucket;
+  publicMeals: CacheBucket;
 } = {
   boxes: { entries: new Map(), inFlight: new Map() },
   meals: { entries: new Map(), inFlight: new Map() },
+  publicMeals: { entries: new Map(), inFlight: new Map() },
 };
 
 export type BuilderCatalogCacheKind = keyof typeof buckets;
@@ -70,6 +75,17 @@ export const builderMealsCacheKey = (
 ): string =>
   JSON.stringify([
     "meals",
+    requireNonEmpty("shop", shop),
+    requireNonEmpty("mealCollectionId", mealCollectionId),
+  ]);
+
+/** Public storefront meals DTO — keyed by shop + mealCollectionId (never mix shops). */
+export const publicMealsCacheKey = (
+  shop: string,
+  mealCollectionId: string,
+): string =>
+  JSON.stringify([
+    "publicMeals",
     requireNonEmpty("shop", shop),
     requireNonEmpty("mealCollectionId", mealCollectionId),
   ]);

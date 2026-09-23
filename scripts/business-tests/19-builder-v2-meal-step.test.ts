@@ -41,6 +41,7 @@ const buildThreeVariantProduct = (
 ): MealCatalogProduct => ({
   id: PRODUCT_A,
   title: "Poulet curry",
+  description: null,
   imageAlt: "Poulet curry",
   imageUrl: "https://cdn.example/poulet.jpg",
   allergenes: ["gluten"],

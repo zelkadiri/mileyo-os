@@ -35,6 +35,8 @@ export type MealCatalogVariant = {
 export type MealCatalogProduct = {
   id: string;
   title: string;
+  /** Admin Product.description — HTML already stripped by Shopify. */
+  description: string | null;
   imageAlt: string;
   imageUrl: string | null;
   allergenes: string[];
@@ -46,6 +48,8 @@ export type MealCatalogProduct = {
 export type ShopifyMealCatalogProductNode = {
   id: string;
   title: string;
+  /** Plain-text description (HTML tags removed by Shopify Admin API). */
+  description?: string | null;
   featuredImage?: { altText?: string | null; url: string } | null;
   badge1Metafield?: { value: string } | null;
   badge2Metafield?: { value: string } | null;
@@ -56,6 +60,9 @@ export type ShopifyMealCatalogProductNode = {
     nodes: ShopifyMealCatalogVariantNode[];
   };
 };
+
+/** Admin collection.products sort keys we use. */
+export type MealCatalogSortKey = "TITLE" | "COLLECTION_DEFAULT";
 
 export type ShopifyMealCatalogVariantNode = {
   id: string;
@@ -73,15 +80,16 @@ export type ShopifyMealCatalogVariantNode = {
 };
 
 const mealCollectionProductsQuery = `#graphql
-  query SubscriptionMealCatalogProducts($id: ID!) {
+  query SubscriptionMealCatalogProducts($id: ID!, $sortKey: ProductCollectionSortKeys!) {
     collection(id: $id) {
-      products(first: 50, sortKey: TITLE) {
+      products(first: 50, sortKey: $sortKey) {
         pageInfo {
           hasNextPage
         }
         nodes {
           id
           title
+          description
           featuredImage {
             altText
             url
@@ -184,11 +192,20 @@ export const toMealCatalogVariant = (
   ),
 });
 
+const normalizePlainDescription = (
+  value: string | null | undefined,
+): string | null => {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
 export const toMealCatalogProduct = (
   product: ShopifyMealCatalogProductNode,
 ): MealCatalogProduct => ({
   id: product.id,
   title: product.title,
+  description: normalizePlainDescription(product.description),
   imageAlt: product.featuredImage?.altText ?? product.title,
   imageUrl: product.featuredImage?.url ?? null,
   allergenes: parseAllergenesMetafield(product.allergenesMetafield?.value),
@@ -205,17 +222,28 @@ export const toMealCatalogProducts = (
   products: ShopifyMealCatalogProductNode[],
 ): MealCatalogProduct[] => products.map(toMealCatalogProduct);
 
+/**
+ * Load meal products from AppSettings.mealCollectionId via Admin GraphQL.
+ *
+ * Default sortKey TITLE preserves historical Builder ordering.
+ * Pass COLLECTION_DEFAULT for storefront / theme collection order
+ * (matches Liquid `collection.products` when sort is merchant/manual).
+ */
 export const fetchMealCatalogProducts = async (
   admin: {
     graphql: (
       query: string,
-      options?: { variables?: { id: string } },
+      options?: {
+        variables?: { id: string; sortKey?: MealCatalogSortKey };
+      },
     ) => Promise<Response>;
   },
   mealCollectionId: string,
+  options?: { sortKey?: MealCatalogSortKey },
 ) => {
+  const sortKey = options?.sortKey ?? "TITLE";
   const response = await admin.graphql(mealCollectionProductsQuery, {
-    variables: { id: mealCollectionId },
+    variables: { id: mealCollectionId, sortKey },
   });
   const json = (await response.json()) as MealCollectionProductsResponse;
 
