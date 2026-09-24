@@ -87,12 +87,15 @@ export const productionHeadingStyle = {
 } as const;
 
 export const mealRowStyle = {
-  alignItems: "baseline",
   borderBottom: "1px solid #fed7aa",
+  padding: "0.85rem 0",
+} as const;
+
+export const mealRowHeaderStyle = {
+  alignItems: "baseline",
   display: "flex",
   gap: "1rem",
   justifyContent: "space-between",
-  padding: "0.85rem 0",
 } as const;
 
 export const mealTitleStyle = {
@@ -107,6 +110,40 @@ export const mealQuantityStyle = {
   fontWeight: 800,
   margin: 0,
   whiteSpace: "nowrap" as const,
+} as const;
+
+export const mealObjectiveListStyle = {
+  display: "flex",
+  flexDirection: "column" as const,
+  gap: "0.2rem",
+  marginTop: "0.45rem",
+  paddingLeft: "0.15rem",
+} as const;
+
+export const mealObjectiveRowStyle = {
+  alignItems: "baseline",
+  color: "#9a3412",
+  display: "flex",
+  fontSize: "0.9rem",
+  fontWeight: 500,
+  gap: "1rem",
+  justifyContent: "space-between",
+  opacity: 0.78,
+} as const;
+
+export const mealObjectiveLabelStyle = {
+  margin: 0,
+} as const;
+
+export const mealObjectiveQuantityStyle = {
+  fontWeight: 600,
+  margin: 0,
+  whiteSpace: "nowrap" as const,
+} as const;
+
+export const mealBulkPortionHintStyle = {
+  fontWeight: 500,
+  opacity: 0.85,
 } as const;
 
 export const warningBannerStyle = {

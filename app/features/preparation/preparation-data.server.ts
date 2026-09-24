@@ -1,5 +1,7 @@
 import db from "../../db.server";
 import { KITCHEN_PREPARATION_BOX_ORDER_WHERE } from "../../constants/boxOrder";
+import type { SubscriptionObjective } from "../../constants/subscriptionObjective";
+import { fetchMealCatalogProducts } from "../../services/subscriptionMealCatalog.server";
 import { authenticate } from "../../shopify.server";
 import {
   getTodayDeliveryDate,
@@ -7,6 +9,11 @@ import {
   parseDeliveryDate,
   type DeliveryDateString,
 } from "../../utils/deliveryDate";
+import { parseSubscriptionObjective } from "../../utils/subscriptionObjective";
+import {
+  buildBulkPortionGramsByMealTitle,
+  enrichMealTotalsWithBulkPortionGrams,
+} from "./preparation-bulk-portion";
 import {
   isKitchenPreparationBoxOrder,
   isSubscriptionPreparationOrder,
@@ -17,10 +24,18 @@ import type {
   PreparationDayData,
   PreparationDaySummary,
   PreparationMealTotal,
+  PreparationObjectiveQuantities,
   PreparationOrder,
   PreparationPageData,
   UpcomingPreparationDate,
 } from "./preparation-types";
+
+const emptyObjectiveQuantities = (): PreparationObjectiveQuantities => ({
+  balanced: 0,
+  bulk: 0,
+  unknown: 0,
+  weight_loss: 0,
+});
 
 const compareMealTotals = (
   left: PreparationMealTotal,
@@ -33,20 +48,77 @@ const compareMealTotals = (
   return left.mealTitle.localeCompare(right.mealTitle, "fr");
 };
 
+const objectiveBucket = (
+  objective: SubscriptionObjective | null,
+): keyof PreparationObjectiveQuantities => objective ?? "unknown";
+
 export const aggregateMealTotals = (
   orders: PreparationOrder[],
 ): PreparationMealTotal[] => {
-  const counts = new Map<string, number>();
+  const byTitle = new Map<
+    string,
+    {
+      objectiveQuantities: PreparationObjectiveQuantities;
+      totalQuantity: number;
+    }
+  >();
 
   for (const order of orders) {
+    const bucket = objectiveBucket(order.objective);
+
     for (const mealTitle of order.selectedMeals) {
-      counts.set(mealTitle, (counts.get(mealTitle) ?? 0) + 1);
+      const entry = byTitle.get(mealTitle) ?? {
+        objectiveQuantities: emptyObjectiveQuantities(),
+        totalQuantity: 0,
+      };
+
+      entry.totalQuantity += 1;
+      entry.objectiveQuantities[bucket] += 1;
+      byTitle.set(mealTitle, entry);
     }
   }
 
-  return [...counts.entries()]
-    .map(([mealTitle, totalQuantity]) => ({ mealTitle, totalQuantity }))
+  return [...byTitle.entries()]
+    .map(([mealTitle, entry]) => ({
+      bulkPortionGrams: null,
+      mealTitle,
+      objectiveQuantities: entry.objectiveQuantities,
+      totalQuantity: entry.totalQuantity,
+    }))
     .sort(compareMealTotals);
+};
+
+/**
+ * Fail-soft: one meal-collection GraphQL fetch per page.
+ * On any error / missing collection → empty map (all bulk grams stay null).
+ */
+export const loadBulkPortionGramsByMealTitleFailSoft = async (
+  admin: {
+    graphql: (
+      query: string,
+      options?: {
+        variables?: { id: string; sortKey?: "TITLE" | "COLLECTION_DEFAULT" };
+      },
+    ) => Promise<Response>;
+  },
+  shop: string,
+): Promise<Map<string, number | null>> => {
+  try {
+    const settings = await db.appSettings.findUnique({
+      select: { mealCollectionId: true },
+      where: { shop },
+    });
+    const mealCollectionId = settings?.mealCollectionId?.trim() ?? "";
+
+    if (!mealCollectionId) {
+      return new Map();
+    }
+
+    const products = await fetchMealCatalogProducts(admin, mealCollectionId);
+    return buildBulkPortionGramsByMealTitle(products);
+  } catch {
+    return new Map();
+  }
 };
 
 export const mapBoxOrderToPreparationOrder = (
@@ -61,6 +133,7 @@ export const mapBoxOrderToPreparationOrder = (
   desiredDeliveryDate: order.desiredDeliveryDate,
   id: order.id,
   mealsCount: order.mealsCount,
+  objective: parseSubscriptionObjective(order.objective ?? null),
   orderName: order.shopifyOrderName,
   orderType: order.orderType,
   scheduledDeliveryDate,
@@ -205,7 +278,7 @@ export const getUpcomingPreparationDates = async (
 export const loadPreparationPageData = async (
   request: Request,
 ): Promise<PreparationPageData> => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const url = new URL(request.url);
   const dateParam = url.searchParams.get("date");
@@ -229,10 +302,23 @@ export const loadPreparationPageData = async (
       upcomingDates[0]?.scheduledDeliveryDate ?? getTodayDeliveryDate();
   }
 
-  const dayData =
+  let dayData =
     selectedDate && !dateQueryInvalid
       ? await getPreparationDayData(shop, selectedDate)
       : null;
+
+  // One catalog load per page — never N calls per meal/order. Fail-soft on errors.
+  if (dayData) {
+    const bulkPortionGramsByTitle =
+      await loadBulkPortionGramsByMealTitleFailSoft(admin, shop);
+    dayData = {
+      ...dayData,
+      mealTotals: enrichMealTotalsWithBulkPortionGrams(
+        dayData.mealTotals,
+        bulkPortionGramsByTitle,
+      ),
+    };
+  }
 
   return {
     dateQueryInvalid,

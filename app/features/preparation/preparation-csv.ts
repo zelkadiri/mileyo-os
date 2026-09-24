@@ -1,6 +1,17 @@
+import {
+  SUBSCRIPTION_OBJECTIVE,
+  SUBSCRIPTION_OBJECTIVE_OPTION_LABEL,
+  type SubscriptionObjective,
+} from "../../constants/subscriptionObjective";
+import { UNKNOWN_SUBSCRIPTION_OBJECTIVE_LABEL } from "../../utils/subscriptionObjective";
 import { escapeCsvValue } from "../orders/orders-csv";
+import { formatBulkPortionGramsCsvCell } from "./preparation-bulk-portion";
 import { formatSelectedMealsForCsv } from "./preparation-formatters";
-import type { PreparationDayData } from "./preparation-types";
+import type {
+  PreparationDayData,
+  PreparationMealTotal,
+  PreparationObjectiveQuantities,
+} from "./preparation-types";
 
 export const PREPARATION_PRODUCTION_CSV_FILENAME =
   "mileyo-preparation-production.csv";
@@ -8,10 +19,16 @@ export const PREPARATION_PRODUCTION_CSV_FILENAME =
 export const PREPARATION_DELIVERY_ORDERS_CSV_FILENAME =
   "mileyo-preparation-delivery-orders.csv";
 
+/** Kitchen-facing production CSV: one row per meal, objectives as columns. */
 export const PREPARATION_PRODUCTION_CSV_HEADERS = [
-  "scheduledDeliveryDate",
-  "mealTitle",
-  "totalQuantity",
+  "Date livraison",
+  "Plat",
+  SUBSCRIPTION_OBJECTIVE_OPTION_LABEL[SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS],
+  SUBSCRIPTION_OBJECTIVE_OPTION_LABEL[SUBSCRIPTION_OBJECTIVE.BALANCED],
+  SUBSCRIPTION_OBJECTIVE_OPTION_LABEL[SUBSCRIPTION_OBJECTIVE.BULK],
+  "Grammage prise de masse (g)",
+  UNKNOWN_SUBSCRIPTION_OBJECTIVE_LABEL,
+  "Total",
 ] as const;
 
 export const PREPARATION_DELIVERY_ORDERS_CSV_HEADERS = [
@@ -27,15 +44,49 @@ export const PREPARATION_DELIVERY_ORDERS_CSV_HEADERS = [
   "deliveryRescheduleReason",
 ] as const;
 
-export const buildPreparationProductionCsvRow = ({
-  mealTitle,
+export const PREPARATION_UNKNOWN_OBJECTIVE_LABEL =
+  UNKNOWN_SUBSCRIPTION_OBJECTIVE_LABEL;
+
+export const getPreparationObjectiveLabel = (
+  objective: SubscriptionObjective | "unknown",
+): string => {
+  if (objective === "unknown") {
+    return PREPARATION_UNKNOWN_OBJECTIVE_LABEL;
+  }
+
+  return SUBSCRIPTION_OBJECTIVE_OPTION_LABEL[objective];
+};
+
+/** Stable display / CSV order: weight_loss → balanced → bulk → unknown. */
+export const PREPARATION_OBJECTIVE_ROW_ORDER = [
+  SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS,
+  SUBSCRIPTION_OBJECTIVE.BALANCED,
+  SUBSCRIPTION_OBJECTIVE.BULK,
+  "unknown",
+] as const satisfies ReadonlyArray<keyof PreparationObjectiveQuantities>;
+
+export const buildPreparationProductionCsvRow = (
+  mealTotal: PreparationMealTotal,
+  scheduledDeliveryDate: string,
+): [
+  string,
+  string,
+  number,
+  number,
+  number,
+  number | "",
+  number,
+  number,
+] => [
   scheduledDeliveryDate,
-  totalQuantity,
-}: {
-  mealTitle: string;
-  scheduledDeliveryDate: string;
-  totalQuantity: number;
-}) => [scheduledDeliveryDate, mealTitle, totalQuantity];
+  mealTotal.mealTitle,
+  mealTotal.objectiveQuantities.weight_loss,
+  mealTotal.objectiveQuantities.balanced,
+  mealTotal.objectiveQuantities.bulk,
+  formatBulkPortionGramsCsvCell(mealTotal),
+  mealTotal.objectiveQuantities.unknown,
+  mealTotal.totalQuantity,
+];
 
 export const buildPreparationDeliveryOrdersCsvRow = (
   order: PreparationDayData["orders"][number],
@@ -56,11 +107,10 @@ export const buildPreparationProductionCsvContent = (data: PreparationDayData) =
   const rows = [
     PREPARATION_PRODUCTION_CSV_HEADERS,
     ...data.mealTotals.map((mealTotal) =>
-      buildPreparationProductionCsvRow({
-        mealTitle: mealTotal.mealTitle,
-        scheduledDeliveryDate: data.summary.scheduledDeliveryDate,
-        totalQuantity: mealTotal.totalQuantity,
-      }),
+      buildPreparationProductionCsvRow(
+        mealTotal,
+        data.summary.scheduledDeliveryDate,
+      ),
     ),
   ];
 

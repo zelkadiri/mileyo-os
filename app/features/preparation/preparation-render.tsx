@@ -1,5 +1,6 @@
 import { Form, Link, useLoaderData } from "react-router";
 
+import { SUBSCRIPTION_OBJECTIVE } from "../../constants/subscriptionObjective";
 import {
   formatDeliveryDateLabel,
   parseDeliveryDate,
@@ -7,6 +8,8 @@ import {
 import {
   downloadPreparationDeliveryOrdersCsv,
   downloadPreparationProductionCsv,
+  getPreparationObjectiveLabel,
+  PREPARATION_OBJECTIVE_ROW_ORDER,
 } from "./preparation-csv";
 import type { loadPreparationPageData } from "./preparation-data.server";
 import {
@@ -24,7 +27,13 @@ import {
   exportButtonStyle,
   introStyle,
   listStyle,
+  mealBulkPortionHintStyle,
+  mealObjectiveLabelStyle,
+  mealObjectiveListStyle,
+  mealObjectiveQuantityStyle,
+  mealObjectiveRowStyle,
   mealQuantityStyle,
+  mealRowHeaderStyle,
   mealRowStyle,
   mealTitleStyle,
   orderMetaStyle,
@@ -199,12 +208,46 @@ export default function PreparationPage() {
                     Aucun plat à préparer pour cette date.
                   </p>
                 ) : (
-                  dayData?.mealTotals.map((meal) => (
-                    <div key={meal.mealTitle} style={mealRowStyle}>
-                      <p style={mealTitleStyle}>{meal.mealTitle}</p>
-                      <p style={mealQuantityStyle}>x{meal.totalQuantity}</p>
-                    </div>
-                  ))
+                  dayData?.mealTotals.map((meal) => {
+                    const objectiveRows = PREPARATION_OBJECTIVE_ROW_ORDER.filter(
+                      (objective) => meal.objectiveQuantities[objective] > 0,
+                    );
+
+                    return (
+                      <div key={meal.mealTitle} style={mealRowStyle}>
+                        <div style={mealRowHeaderStyle}>
+                          <p style={mealTitleStyle}>{meal.mealTitle}</p>
+                          <p style={mealQuantityStyle}>x{meal.totalQuantity}</p>
+                        </div>
+                        {objectiveRows.length > 0 ? (
+                          <div style={mealObjectiveListStyle}>
+                            {objectiveRows.map((objective) => (
+                              <div
+                                key={`${meal.mealTitle}-${objective}`}
+                                style={mealObjectiveRowStyle}
+                              >
+                                <p style={mealObjectiveLabelStyle}>
+                                  {getPreparationObjectiveLabel(objective)}
+                                </p>
+                                <p style={mealObjectiveQuantityStyle}>
+                                  x{meal.objectiveQuantities[objective]}
+                                  {objective === SUBSCRIPTION_OBJECTIVE.BULK ? (
+                                    <span style={mealBulkPortionHintStyle}>
+                                      {" "}
+                                      •{" "}
+                                      {meal.bulkPortionGrams != null
+                                        ? `${meal.bulkPortionGrams} g / portion`
+                                        : "Grammage inconnu"}
+                                    </span>
+                                  ) : null}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })
                 )}
               </div>
 
@@ -262,6 +305,12 @@ export default function PreparationPage() {
                             <p style={orderMetaStyle}>
                               Nombre de repas :{" "}
                               {order.mealsCount ?? "Non renseigné"}
+                            </p>
+                            <p style={orderMetaStyle}>
+                              Objectif :{" "}
+                              {getPreparationObjectiveLabel(
+                                order.objective ?? "unknown",
+                              )}
                             </p>
                             <p style={orderMetaStyle}>
                               Date souhaitée :{" "}

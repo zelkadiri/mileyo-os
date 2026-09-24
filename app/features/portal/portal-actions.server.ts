@@ -42,6 +42,7 @@ import {
   fetchSubscriptionContractCurrentVariantId,
   updateSubscriptionContractBoxViaDraft,
 } from "../../services/subscriptionContractBoxChange.server";
+import { resolveCurrentSubscriptionObjective } from "../../services/subscriptionObjectiveResolution.server";
 import {
   BOX_CHANGE_EFFECT,
   BOX_CHANGE_IMMEDIATE_PAUSED_SUCCESS_MESSAGE,
@@ -189,17 +190,13 @@ const resolveSelectionObjective = async (
     subscriptionContractId: string | null;
   },
   boxCatalog: Awaited<ReturnType<typeof fetchBuilderBoxOptions>>,
-) => {
-  const currentVariantId =
-    (selection.subscriptionContractId
-      ? await fetchSubscriptionContractCurrentVariantId(
-          admin,
-          selection.subscriptionContractId,
-        )
-      : null) ?? selection.boxVariantShopifyId;
-
-  return findBuilderBoxByVariantId(boxCatalog, currentVariantId)?.objective ?? null;
-};
+) =>
+  resolveCurrentSubscriptionObjective({
+    admin,
+    boxVariantShopifyId: selection.boxVariantShopifyId,
+    catalog: boxCatalog,
+    subscriptionContractId: selection.subscriptionContractId,
+  });
 
 const loadSyncedSelectionForAction = async ({
   admin,

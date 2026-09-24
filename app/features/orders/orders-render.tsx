@@ -1,5 +1,6 @@
 import { useLoaderData, useSearchParams } from "react-router";
 
+import { formatSubscriptionObjectiveLabel } from "../../utils/subscriptionObjective";
 import { downloadOrdersCsv } from "./orders-csv";
 import type { loadOrdersPageData } from "./orders-data.server";
 import {
@@ -91,6 +92,9 @@ export default function OrdersPage() {
                     <s-text>
                       Nombre de repas (commande) :{" "}
                       {order.mealsCount ?? "Non renseigné"}
+                    </s-text>
+                    <s-text>
+                      Objectif : {formatSubscriptionObjectiveLabel(order.objective)}
                     </s-text>
                     {hasFutureConfig ? (
                       <>

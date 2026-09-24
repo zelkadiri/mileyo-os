@@ -1,3 +1,4 @@
+import type { SubscriptionObjective } from "../../constants/subscriptionObjective";
 import type { DeliveryDateString } from "../../utils/deliveryDate";
 
 export type PreparationDaySummary = {
@@ -9,9 +10,24 @@ export type PreparationDaySummary = {
   rescheduledOrders: number;
 };
 
+/** Per-objective kitchen counts. `unknown` = BoxOrder.objective is null. */
+export type PreparationObjectiveQuantities = {
+  weight_loss: number;
+  balanced: number;
+  bulk: number;
+  unknown: number;
+};
+
 export type PreparationMealTotal = {
   mealTitle: string;
   totalQuantity: number;
+  objectiveQuantities: PreparationObjectiveQuantities;
+  /**
+   * Live catalog bulk portion grams (custom.portion_grams).
+   * null when bulk=0, unresolved, ambiguous title, or catalog unavailable.
+   * Never invent a default — 0 is not used for "unknown".
+   */
+  bulkPortionGrams: number | null;
 };
 
 export type PreparationOrder = {
@@ -23,6 +39,8 @@ export type PreparationOrder = {
   boxTitle: string | null;
   mealsCount: number | null;
   selectedMeals: string[];
+  /** Historical snapshot from BoxOrder — never invent a default. */
+  objective: SubscriptionObjective | null;
   desiredDeliveryDate: string | null;
   scheduledDeliveryDate: DeliveryDateString;
   deliveryRescheduleReason: string | null;
@@ -66,6 +84,8 @@ export type PreparationBoxOrderRecord = {
   boxTitle: string | null;
   mealsCount: number | null;
   selectedMeals: unknown;
+  /** Historical snapshot — null for legacy / unresolved. */
+  objective?: string | null;
   desiredDeliveryDate: string | null;
   scheduledDeliveryDate: string | null;
   deliveryRescheduleReason: string | null;

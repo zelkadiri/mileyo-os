@@ -610,6 +610,16 @@ const runSuite = () => {
       "classification documents same-order identity rule",
       classificationSource.includes("one Shopify order ID"),
     );
+    ctx.assertTrue(
+      "objective snapshot resolved from paid box line helper",
+      orchestratorSource.includes("resolveBoxOrderObjectiveSnapshotFromOrder") &&
+        orchestratorSource.includes("...objectiveSnapshotWrite"),
+    );
+    ctx.assertTrue(
+      "objective snapshot write never forced to null on upsert",
+      orchestratorSource.includes("boxOrderObjectiveSnapshotWriteData") &&
+        !orchestratorSource.includes("objective: null"),
+    );
   }
 
   ctx.scenario("Cutoff/current delivery — no service refactor required");

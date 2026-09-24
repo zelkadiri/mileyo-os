@@ -1,3 +1,5 @@
+import type { SubscriptionObjective } from "../../constants/subscriptionObjective";
+
 export type AdminOrderDto = {
   boxTitle: string | null;
   cancelledAt: Date | null;
@@ -14,6 +16,8 @@ export type AdminOrderDto = {
   id: string;
   isSubscriptionRenewal: boolean;
   mealsCount: number | null;
+  /** Historical snapshot from BoxOrder — not the live subscription objective. */
+  objective: SubscriptionObjective | null;
   orderType: string | null;
   selectedMeals: unknown;
   selectedMealsSource: string | null;

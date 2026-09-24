@@ -3,8 +3,11 @@ import {
   isTerminalPortalDisplayStatus,
 } from "../../constants/subscriptionStatus";
 import db from "../../db.server";
-import { authenticate } from "../../shopify.server";
+import { authenticate, unauthenticated } from "../../shopify.server";
+import { fetchBuilderBoxOptions } from "../builder/builder-catalog.server";
+import type { BuilderBoxOption } from "../builder/builder-types";
 import { dedupeSubscriptionSelectionsByContract } from "../../services/subscriptionMealSelection.server";
+import { resolveCurrentSubscriptionObjective } from "../../services/subscriptionObjectiveResolution.server";
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
 import {
   isRecoveryDevRetryEnabled,
@@ -85,6 +88,67 @@ export const loadSubscriptionsPageData = async (
     }
   }
 
+  let catalog: BuilderBoxOption[] = [];
+  let admin: Awaited<ReturnType<typeof unauthenticated.admin>>["admin"] | null =
+    null;
+
+  try {
+    ({ admin } = await unauthenticated.admin(shop));
+    catalog = await fetchBuilderBoxOptions(admin);
+  } catch (error) {
+    console.log("[SUBSCRIPTIONS] objective catalog load failed", {
+      error: error instanceof Error ? error.message : error,
+      shop,
+    });
+    catalog = [];
+  }
+
+  const selectionDtos = await Promise.all(
+    selections.map(async (selection) => {
+      let objective = null;
+
+      if (admin && catalog.length > 0) {
+        try {
+          objective = await resolveCurrentSubscriptionObjective({
+            admin,
+            boxVariantShopifyId: selection.boxVariantShopifyId,
+            catalog,
+            subscriptionContractId: selection.subscriptionContractId,
+          });
+        } catch (error) {
+          console.log("[SUBSCRIPTIONS] objective resolve failed", {
+            error: error instanceof Error ? error.message : error,
+            selectionId: selection.id,
+          });
+          objective = null;
+        }
+      }
+
+      return {
+        active: selection.active,
+        boxSubscriptionPrice: selection.boxSubscriptionPrice,
+        boxTitle: selection.boxTitle,
+        createdAt: selection.createdAt,
+        customerEmail: selection.customerEmail,
+        customerName: customerNameByOrderId.get(selection.shopifyOrderId) ?? null,
+        id: selection.id,
+        isTerminal: isTerminalPortalDisplayStatus(selection.status),
+        lastBillingAttemptAt: selection.lastBillingAttemptAt,
+        lastBillingAttemptError: selection.lastBillingAttemptError,
+        lastBillingAttemptStatus: selection.lastBillingAttemptStatus,
+        mealsCount: selection.mealsCount,
+        nextBillingDate: selection.nextBillingDate,
+        objective,
+        selectedMeals: selection.selectedMeals,
+        shopifyOrderId: selection.shopifyOrderId,
+        shopifyOrderName: selection.shopifyOrderName,
+        status: selection.status,
+        subscriptionContractId: selection.subscriptionContractId,
+        updatedAt: selection.updatedAt,
+      };
+    }),
+  );
+
   return {
     hiddenDuplicateCount,
     paymentRecoveries: paymentRecoveries.map((recovery) => {
@@ -125,27 +189,7 @@ export const loadSubscriptionsPageData = async (
         status: recovery.status,
       };
     }),
-    selections: selections.map((selection) => ({
-      active: selection.active,
-      boxSubscriptionPrice: selection.boxSubscriptionPrice,
-      boxTitle: selection.boxTitle,
-      createdAt: selection.createdAt,
-      customerEmail: selection.customerEmail,
-      customerName: customerNameByOrderId.get(selection.shopifyOrderId) ?? null,
-      id: selection.id,
-      isTerminal: isTerminalPortalDisplayStatus(selection.status),
-      lastBillingAttemptAt: selection.lastBillingAttemptAt,
-      lastBillingAttemptError: selection.lastBillingAttemptError,
-      lastBillingAttemptStatus: selection.lastBillingAttemptStatus,
-      mealsCount: selection.mealsCount,
-      nextBillingDate: selection.nextBillingDate,
-      selectedMeals: selection.selectedMeals,
-      shopifyOrderId: selection.shopifyOrderId,
-      shopifyOrderName: selection.shopifyOrderName,
-      status: selection.status,
-      subscriptionContractId: selection.subscriptionContractId,
-      updatedAt: selection.updatedAt,
-    })),
+    selections: selectionDtos,
     showRecoveryDevRetry: isRecoveryDevRetryEnabled(),
     showSubscriptionTestActions: isSubscriptionTestActionsEnabled(),
     statusCounts,

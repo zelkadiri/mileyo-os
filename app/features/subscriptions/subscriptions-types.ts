@@ -1,3 +1,5 @@
+import type { SubscriptionObjective } from "../../constants/subscriptionObjective";
+
 export type SubscriptionRecoveryDto = {
   boxSubscriptionPrice: string | null;
   boxTitle: string | null;
@@ -37,6 +39,8 @@ export type SubscriptionSelectionDto = {
   lastBillingAttemptStatus: string | null;
   mealsCount: number | null;
   nextBillingDate: Date | null;
+  /** Current / next-cycle objective from live contract variant (not BoxOrder). */
+  objective: SubscriptionObjective | null;
   selectedMeals: unknown;
   shopifyOrderId: string;
   shopifyOrderName: string | null;

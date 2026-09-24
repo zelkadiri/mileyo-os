@@ -8,6 +8,8 @@ export type OrderLineItem = {
   selling_plan_allocation?: unknown;
   selling_plan_id?: number | string | null;
   title?: string;
+  /** Shopify REST orders/create — numeric variant id of the paid line. */
+  variant_id?: number | string | null;
 };
 
 export type OrderCustomerPayload = {

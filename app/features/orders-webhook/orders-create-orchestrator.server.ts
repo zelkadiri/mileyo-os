@@ -52,6 +52,10 @@ import {
 import type { DeliveryRescheduleReason } from "../../constants/deliverySchedule";
 import type { DeliveryDateString } from "../../utils/deliveryDate";
 import { classifyOrdersCreateCycle } from "./orders-create-cycle-classification.server";
+import {
+  boxOrderObjectiveSnapshotWriteData,
+  resolveBoxOrderObjectiveSnapshotFromOrder,
+} from "./box-order-objective-snapshot.server";
 import { findBoxLineItem, getCustomerName } from "./orders-create-parsers";
 import type { OrdersCreateWebhookPayload } from "./orders-create-types";
 
@@ -403,6 +407,38 @@ export const handleOrdersCreateWebhook = async ({
 
   const boxOrderDeliveryData = buildBoxOrderDeliveryData(deliverySchedule);
 
+  let objectiveSnapshotWrite: ReturnType<
+    typeof boxOrderObjectiveSnapshotWriteData
+  > = {};
+
+  try {
+    const { admin: objectiveAdmin } = await unauthenticated.admin(shop);
+    const objectiveSnapshot = await resolveBoxOrderObjectiveSnapshotFromOrder({
+      admin: objectiveAdmin,
+      order,
+    });
+    objectiveSnapshotWrite =
+      boxOrderObjectiveSnapshotWriteData(objectiveSnapshot);
+
+    console.log("[ORDERS_CREATE] box objective snapshot", {
+      boxVariantShopifyId:
+        "boxVariantShopifyId" in objectiveSnapshotWrite
+          ? objectiveSnapshotWrite.boxVariantShopifyId
+          : null,
+      objective:
+        "objective" in objectiveSnapshotWrite
+          ? objectiveSnapshotWrite.objective
+          : null,
+      resolved: Object.keys(objectiveSnapshotWrite).length > 0,
+      shopifyOrderId,
+    });
+  } catch (error) {
+    console.log("[ORDERS_CREATE] box objective snapshot failed", {
+      error: error instanceof Error ? error.message : error,
+      shopifyOrderId,
+    });
+  }
+
   console.log("[SUBSCRIPTION_SELECTION] order processed", {
     decision,
     isAttachedToIncomingOrder,
@@ -445,6 +481,7 @@ export const handleOrdersCreateWebhook = async ({
           ? (matchedSelection?.id ?? null)
           : null,
       ...boxOrderDeliveryData,
+      ...objectiveSnapshotWrite,
     },
     update: {
       boxTitle: resolvedBoxTitle,
@@ -465,6 +502,8 @@ export const handleOrdersCreateWebhook = async ({
           ? (matchedSelection?.id ?? null)
           : null,
       ...boxOrderDeliveryData,
+      // Only spreads when resolved — never nulls an existing historical snapshot.
+      ...objectiveSnapshotWrite,
     },
     where: {
       shop_shopifyOrderId: {

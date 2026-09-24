@@ -85,6 +85,10 @@ model BoxOrder {
   desiredDeliveryDate     String?  @db.VarChar(10)
   scheduledDeliveryDate   String?  @db.VarChar(10)
   deliveryRescheduleReason  String?
+  /// Paid box variant for this order (historical snapshot). Nullable for legacy/simulated.
+  boxVariantShopifyId     String?
+  /// Objective at order time from box variant metafield. Nullable for legacy/unresolved.
+  objective               String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 

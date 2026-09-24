@@ -2,6 +2,7 @@ import db from "../../db.server";
 import { authenticate } from "../../shopify.server";
 import { dedupeSubscriptionSelectionsByContract } from "../../services/subscriptionMealSelection.server";
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
+import { parseSubscriptionObjective } from "../../utils/subscriptionObjective";
 import type { AdminOrderDto, OrdersPageData } from "./orders-types";
 
 export const loadOrdersPageData = async (
@@ -63,6 +64,7 @@ export const loadOrdersPageData = async (
         id: order.id,
         isSubscriptionRenewal: order.isSubscriptionRenewal,
         mealsCount: order.mealsCount,
+        objective: parseSubscriptionObjective(order.objective),
         orderType: order.orderType,
         selectedMeals: order.selectedMeals,
         selectedMealsSource: order.selectedMealsSource,

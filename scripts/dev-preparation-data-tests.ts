@@ -8,6 +8,7 @@ import {
   PREPARATION_DELIVERY_ORDERS_CSV_HEADERS,
   PREPARATION_PRODUCTION_CSV_HEADERS,
 } from "../app/features/preparation/preparation-csv";
+import { enrichMealTotalsWithBulkPortionGrams } from "../app/features/preparation/preparation-bulk-portion";
 import { buildPreparationDayDataFromBoxOrders } from "../app/features/preparation/preparation-data.server";
 import { normalizeSelectedMealsForPreparation } from "../app/features/preparation/preparation-formatters";
 import type { PreparationBoxOrderRecord } from "../app/features/preparation/preparation-types";
@@ -148,9 +149,37 @@ function main() {
     PREPARATION_PRODUCTION_CSV_HEADERS.map((header) => `"${header}"`).join(","),
   );
   assertEqual(
+    "11. Production CSV header includes grammage column",
+    productionLines[0]?.includes('"Grammage prise de masse (g)"'),
+    true,
+  );
+  assertEqual(
     "11. Production CSV first meal row",
     productionLines[1],
-    `"2026-07-16","Poulet tikka","3"`,
+    `"2026-07-16","Poulet tikka","0","0","0","","3","3"`,
+  );
+  assertEqual(
+    "11. Production CSV one row per meal (Poulet tikka)",
+    productionLines.filter((line) => line.includes('"Poulet tikka"')).length,
+    1,
+  );
+  assertEqual(
+    "11. default bulkPortionGrams is null without catalog",
+    data.mealTotals.find((meal) => meal.mealTitle === "Poulet tikka")
+      ?.bulkPortionGrams,
+    null,
+  );
+  assertEqual(
+    "11. Production CSV data rows omit technical codes",
+    productionLines
+      .slice(1)
+      .some(
+        (line) =>
+          line.includes("weight_loss") ||
+          line.includes("balanced") ||
+          line.includes("bulk"),
+      ),
+    false,
   );
 
   const deliveryCsv = buildPreparationDeliveryOrdersCsvContent(data);
@@ -257,6 +286,17 @@ function main() {
     "15. Simulated-only meal not counted",
     simulatedMix.mealTotals.some((meal) => meal.mealTitle === "Boulgour"),
     false,
+  );
+
+  const withGrams = enrichMealTotalsWithBulkPortionGrams(
+    data.mealTotals,
+    new Map([["Poulet tikka", 550]]),
+  );
+  // Poulet tikka has bulk=0 in fixture → grams stay null
+  assertEqual(
+    "16. enrich ignores grams when bulk=0",
+    withGrams.find((meal) => meal.mealTitle === "Poulet tikka")?.bulkPortionGrams,
+    null,
   );
 
   const failed = checks.filter((check) => !check.ok);

@@ -1,5 +1,6 @@
 import type { AdminOrderDto } from "./orders-types";
 import { formatCsvDateTime, getSelectedMealsFromJson } from "./orders-formatters";
+import { formatSubscriptionObjectiveLabel } from "../../utils/subscriptionObjective";
 
 export const ORDERS_CSV_FILENAME = "mileyo-box-orders.csv";
 
@@ -10,6 +11,8 @@ export const ORDERS_CSV_HEADERS = [
   "Type",
   "Box",
   "Meals count",
+  "Objective",
+  "Objective label",
   "Selected meals",
   "Selected meals source",
   "Subscription renewal",
@@ -32,6 +35,8 @@ export const buildOrdersCsvRow = (order: AdminOrderDto) => [
   order.orderType,
   order.boxTitle,
   order.mealsCount,
+  order.objective ?? "",
+  formatSubscriptionObjectiveLabel(order.objective),
   getSelectedMealsFromJson(order.selectedMeals).join(" | "),
   order.selectedMealsSource,
   order.isSubscriptionRenewal ? "yes" : "no",

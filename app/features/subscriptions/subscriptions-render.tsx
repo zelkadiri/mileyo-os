@@ -1,5 +1,6 @@
 import { Form, useLoaderData, useSearchParams } from "react-router";
 
+import { formatSubscriptionObjectiveLabel } from "../../utils/subscriptionObjective";
 import type { loadSubscriptionsPageData } from "./subscriptions-data.server";
 import {
   DEV_RECOVERY_RETRY_DEFAULT_NOW,
@@ -312,6 +313,10 @@ export default function SubscriptionsPage() {
                     <s-text>
                       {isTerminal ? "Dernière box configurée" : "Prochaine box configurée"} :{" "}
                       {selection.boxTitle ?? "Non renseignée"}
+                    </s-text>
+                    <s-text>
+                      Objectif actuel :{" "}
+                      {formatSubscriptionObjectiveLabel(selection.objective)}
                     </s-text>
                     <s-text>
                       {isTerminal ? "Nombre de repas (dernière sélection)" : "Nombre de repas (prochaine commande)"} :{" "}

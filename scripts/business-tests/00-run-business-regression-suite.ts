@@ -28,6 +28,8 @@ const BUSINESS_SUITES = [
   "05-pause-resume.test.ts",
   "06-portal-state.test.ts",
   "07-preparation-backoffice.test.ts",
+  "07b-box-order-objective-snapshot.test.ts",
+  "07c-backoffice-objective-display.test.ts",
   "08-legacy-alignment-backfill.test.ts",
   "09-edge-cases.test.ts",
   "10-subscription-cycle-constants.test.ts",
