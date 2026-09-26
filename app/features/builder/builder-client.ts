@@ -155,33 +155,72 @@ export const builderClientScript = `
     var option = findDeliveryWindowOption(selectedDeliveryWindowKey);
     return Boolean(
       option &&
+        !option.unavailable &&
         option.scheduledDeliveryDate === selectedScheduledDeliveryDate,
     );
   }
 
+  function clearInvalidDeliveryWindowSelection() {
+    if (!selectedDeliveryWindowKey && !selectedScheduledDeliveryDate) {
+      return;
+    }
+    if (!isSelectedDeliveryWindowValid()) {
+      selectedDeliveryWindowKey = null;
+      selectedScheduledDeliveryDate = null;
+    }
+  }
+
   function renderDeliveryWindows() {
     if (!deliveryWindowGrid || !data.deliveryConfig) return;
+    clearInvalidDeliveryWindowSelection();
     deliveryWindowGrid.innerHTML = "";
     getDeliveryWindowOptions().forEach(function (option) {
       var button = document.createElement("button");
-      var isSelected = selectedDeliveryWindowKey === option.key;
+      var isUnavailable = Boolean(option.unavailable);
+      var isSelected =
+        !isUnavailable && selectedDeliveryWindowKey === option.key;
       button.className =
-        "delivery-window-card" + (isSelected ? " selected" : "");
+        "delivery-window-card" +
+        (isSelected ? " selected" : "") +
+        (isUnavailable ? " unavailable" : "");
       button.type = "button";
+      button.disabled = isUnavailable;
+      button.setAttribute("aria-disabled", isUnavailable ? "true" : "false");
       button.setAttribute("aria-pressed", isSelected ? "true" : "false");
+      if (isUnavailable) {
+        button.setAttribute(
+          "aria-label",
+          option.rangeLabel + " — complète, non disponible",
+        );
+      }
+
+      if (isUnavailable) {
+        var badge = document.createElement("span");
+        badge.className = "delivery-window-card-badge";
+        badge.textContent = "COMPLET";
+        button.appendChild(badge);
+      }
 
       var range = document.createElement("span");
       range.className = "delivery-window-card-range";
       range.textContent = option.rangeLabel;
       button.appendChild(range);
 
-      button.addEventListener("click", function () {
-        selectedDeliveryWindowKey = option.key;
-        selectedScheduledDeliveryDate = option.scheduledDeliveryDate;
-        renderDeliveryWindows();
-        updateDeliveryCta();
-        setError("");
-      });
+      if (isUnavailable) {
+        var message = document.createElement("span");
+        message.className = "delivery-window-card-message";
+        message.textContent = "Cette semaine de livraison est complète";
+        button.appendChild(message);
+      } else {
+        button.addEventListener("click", function () {
+          selectedDeliveryWindowKey = option.key;
+          selectedScheduledDeliveryDate = option.scheduledDeliveryDate;
+          renderDeliveryWindows();
+          updateDeliveryCta();
+          setError("");
+        });
+      }
+
       deliveryWindowGrid.appendChild(button);
     });
   }
@@ -1602,7 +1641,7 @@ export const builderClientScript = `
     }
 
     var selectedWindow = findDeliveryWindowOption(selectedDeliveryWindowKey);
-    if (!selectedWindow) {
+    if (!selectedWindow || selectedWindow.unavailable) {
       setError("Choisissez une fenêtre de livraison valide.");
       showStep("livraison");
       return Promise.reject(new Error("invalid_delivery"));

@@ -6,6 +6,7 @@ import {
   computeNextWeeklyDeliveryDate,
   computeRenewalDeliveryDate,
   getWeekday,
+  isUnavailableBuilderDeliveryThursday,
   parseDeliveryDate,
   projectActiveScheduledDeliveryDate,
   referenceDateFromInstant,
@@ -533,6 +534,14 @@ export const resolveFirstOrderDeliverySchedule = ({
     fromCustomerChoice: true,
     referenceDate,
   });
+
+  // Capacity-full builder Thursdays must never fall through to legacy J+3/J+10.
+  if (
+    !weeklySchedule &&
+    isUnavailableBuilderDeliveryThursday(desiredDeliveryDate)
+  ) {
+    return null;
+  }
 
   const schedule =
     weeklySchedule ??

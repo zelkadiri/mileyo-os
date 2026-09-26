@@ -42,8 +42,27 @@ export type BuilderDeliveryWindowOption = {
   shortRangeLabel: string;
   scheduledDeliveryDate: DeliveryDateString;
   thursdayDate: DeliveryDateString;
+  /** Temporary capacity block — still listed in UI, not selectable. */
+  unavailable: boolean;
   weekStartDate: DeliveryDateString;
 };
+
+/**
+ * Temporary capacity-full builder windows, keyed by business Thursday
+ * (`scheduledDeliveryDate` / `thursdayDate`). Display end is always Thursday+2.
+ * Add entries here only — do not hardcode the same dates elsewhere.
+ */
+export const UNAVAILABLE_BUILDER_DELIVERY_THURSDAYS = [
+  "2026-10-01",
+] as const;
+
+export const isUnavailableBuilderDeliveryThursday = (
+  thursdayDate: string | null | undefined,
+): boolean =>
+  typeof thursdayDate === "string" &&
+  (UNAVAILABLE_BUILDER_DELIVERY_THURSDAYS as readonly string[]).includes(
+    thursdayDate,
+  );
 
 /** Calendar date in Europe/Paris, ISO `YYYY-MM-DD`. */
 export type DeliveryDateString = string & { readonly __brand: "DeliveryDateString" };
@@ -1074,6 +1093,7 @@ export const buildWeeklyDeliveryWindow = ({
     ),
     scheduledDeliveryDate: thursdayDate,
     thursdayDate,
+    unavailable: isUnavailableBuilderDeliveryThursday(thursdayDate),
     weekStartDate,
   };
 };
@@ -1119,9 +1139,9 @@ export const buildBuilderDeliveryWindowOptions = (
 export const getWeeklyFirstOrderAllowedThursdays = (
   referenceDate: DeliveryDateString,
 ): DeliveryDateString[] =>
-  buildBuilderDeliveryWindowOptionsFromReferenceDate(referenceDate).map(
-    (option) => option.scheduledDeliveryDate,
-  );
+  buildBuilderDeliveryWindowOptionsFromReferenceDate(referenceDate)
+    .filter((option) => !option.unavailable)
+    .map((option) => option.scheduledDeliveryDate);
 
 export const scheduleWeeklyFirstOrderDeliveryDate = ({
   desiredDeliveryDate,
@@ -1132,8 +1152,15 @@ export const scheduleWeeklyFirstOrderDeliveryDate = ({
   fromCustomerChoice?: boolean;
   referenceDate: DeliveryDateString;
 }): DeliveryScheduleResult | null => {
+  // Capacity-full windows are never accepted, even if still listed in the UI.
+  if (isUnavailableBuilderDeliveryThursday(desiredDeliveryDate)) {
+    return null;
+  }
+
   const options = buildBuilderDeliveryWindowOptionsFromReferenceDate(referenceDate);
-  const allowedThursdays = options.map((option) => option.scheduledDeliveryDate);
+  const allowedThursdays = options
+    .filter((option) => !option.unavailable)
+    .map((option) => option.scheduledDeliveryDate);
 
   if (allowedThursdays.includes(desiredDeliveryDate)) {
     return {
@@ -1144,7 +1171,9 @@ export const scheduleWeeklyFirstOrderDeliveryDate = ({
   }
 
   const imminentThursday = getNextStrictThursday(referenceDate);
-  const firstEligibleThursday = options[0]?.scheduledDeliveryDate;
+  const firstEligibleThursday = options.find(
+    (option) => !option.unavailable,
+  )?.scheduledDeliveryDate;
 
   if (
     fromCustomerChoice &&

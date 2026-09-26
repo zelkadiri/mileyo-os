@@ -708,6 +708,17 @@ const runSuite = () => {
     parseCheckoutLeadContext({ scheduledDeliveryDate: "20/08/2026" })
       .scheduledDeliveryDate,
   );
+  ctx.assertNull(
+    "unavailable capacity window not stored on lead",
+    parseCheckoutLeadContext({ scheduledDeliveryDate: "2026-10-01" })
+      .scheduledDeliveryDate,
+  );
+  ctx.assertEqual(
+    "available window still stored on lead",
+    parseCheckoutLeadContext({ scheduledDeliveryDate: "2026-10-08" })
+      .scheduledDeliveryDate,
+    "2026-10-08",
+  );
 
   ctx.scenario("I. No Shopify discount/selling-plan mutation in 13H");
   const v2PlanInput = getV2WeeklySellingPlanGroupInput().sellingPlansToCreate[0];

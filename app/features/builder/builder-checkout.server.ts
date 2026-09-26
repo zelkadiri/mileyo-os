@@ -15,7 +15,10 @@ import {
   DELIVERY_DATE_PROPERTY_TECHNICAL,
   DELIVERY_DATE_PROPERTY_VISIBLE,
 } from "../../utils/orderLineItemProperties";
-import { parseDeliveryDate } from "../../utils/deliveryDate";
+import {
+  isUnavailableBuilderDeliveryThursday,
+  parseDeliveryDate,
+} from "../../utils/deliveryDate";
 import { parseMealCountMetafield } from "../../utils/mealCountMetafield";
 import { captureTechnicalError } from "../../services/observability/captureTechnicalError.server";
 
@@ -213,6 +216,7 @@ export const parseCreateBuilderCheckoutInput = (
     !sellingPlanId ||
     !deliveryRangeLabel ||
     !scheduledDeliveryDate ||
+    isUnavailableBuilderDeliveryThursday(scheduledDeliveryDate) ||
     mealCount == null ||
     !meals
   ) {

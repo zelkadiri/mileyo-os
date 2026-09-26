@@ -1,6 +1,9 @@
 import prisma from "../../db.server";
 import { parseSubscriptionObjective } from "../../utils/subscriptionObjective";
-import { parseDeliveryDate } from "../../utils/deliveryDate";
+import {
+  isUnavailableBuilderDeliveryThursday,
+  parseDeliveryDate,
+} from "../../utils/deliveryDate";
 import { parseMealCountMetafield } from "../../utils/mealCountMetafield";
 import {
   CAPTURE_CHECKOUT_LEAD_INTENT,
@@ -62,9 +65,14 @@ export const parseCheckoutLeadContext = (input: {
       : parseMealCountMetafield(asOptionalString(input.mealCount));
 
   const rawDeliveryDate = asOptionalString(input.scheduledDeliveryDate);
-  const scheduledDeliveryDate = rawDeliveryDate
+  const parsedDeliveryDate = rawDeliveryDate
     ? parseDeliveryDate(rawDeliveryDate)
     : null;
+  const scheduledDeliveryDate =
+    parsedDeliveryDate &&
+    !isUnavailableBuilderDeliveryThursday(parsedDeliveryDate)
+      ? parsedDeliveryDate
+      : null;
 
   return {
     boxVariantId,

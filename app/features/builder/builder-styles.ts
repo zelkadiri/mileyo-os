@@ -731,8 +731,8 @@ body {
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 
-.delivery-window-card:hover,
-.delivery-window-card:focus-visible {
+.delivery-window-card:hover:not(:disabled):not(.unavailable),
+.delivery-window-card:focus-visible:not(:disabled):not(.unavailable) {
   border-color: rgba(185, 138, 215, 0.55);
   box-shadow: 0 4px 16px rgba(90, 27, 105, 0.08);
   outline: none;
@@ -744,6 +744,38 @@ body {
   box-shadow: 0 4px 18px rgba(185, 138, 215, 0.18);
 }
 
+.delivery-window-card.unavailable,
+.delivery-window-card:disabled {
+  background: rgba(246, 244, 247, 0.95);
+  border-color: rgba(120, 110, 128, 0.22);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.72;
+  transform: none;
+}
+
+.delivery-window-card.unavailable:hover,
+.delivery-window-card.unavailable:focus-visible,
+.delivery-window-card:disabled:hover,
+.delivery-window-card:disabled:focus-visible {
+  border-color: rgba(120, 110, 128, 0.22);
+  box-shadow: none;
+  outline: none;
+  transform: none;
+}
+
+.delivery-window-card-badge {
+  align-self: center;
+  background: rgba(90, 27, 105, 0.1);
+  border-radius: 999px;
+  color: var(--mileyo-purple-black);
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 10px;
+}
+
 .delivery-window-card-range {
   color: var(--mileyo-purple-black);
   font-size: 0.95rem;
@@ -752,6 +784,17 @@ body {
   overflow-wrap: anywhere;
   text-align: center;
   width: 100%;
+}
+
+.delivery-window-card.unavailable .delivery-window-card-range {
+  color: rgba(60, 45, 70, 0.78);
+}
+
+.delivery-window-card-message {
+  color: rgba(60, 45, 70, 0.82);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .delivery-flexibility-note {
