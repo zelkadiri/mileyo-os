@@ -27,6 +27,7 @@ import {
   parseCreateBuilderCheckoutBody,
   parseCreateBuilderCheckoutInput,
 } from "../../app/features/builder/builder-checkout.server";
+import { parseCheckoutLeadContext } from "../../app/features/builder/builder-lead.server";
 import { CREATE_BUILDER_CHECKOUT_INTENT } from "../../app/features/builder/builder-email";
 import {
   createBusinessTestContext,
@@ -58,14 +59,15 @@ const assertWindowPair = (
   const options = buildBuilderDeliveryWindowOptionsFromReferenceDate(
     requireDate(referenceDate),
   );
+  const firstThursday = requireDate(expectedThursday);
   const secondThursday =
     expectedSecondThursday ??
-    addCalendarDays(requireDate(expectedThursday), 7);
+    addCalendarDays(firstThursday, 7);
 
   ctx.assertEqual(
-    `${referenceDate} offers exactly two windows`,
+    `${referenceDate} offers exactly four windows`,
     options.length,
-    2,
+    4,
   );
   ctx.assertEqual(
     `${referenceDate} first window thursday`,
@@ -91,6 +93,20 @@ const assertWindowPair = (
     options[1]?.deliveryWindowEndDate,
     addCalendarDays(secondThursday, 2),
   );
+  for (let index = 0; index < options.length; index += 1) {
+    const option = options[index];
+    const expectedOptionThursday = addCalendarDays(firstThursday, index * 7);
+    ctx.assertEqual(
+      `${referenceDate} window ${index + 1} thursday`,
+      option?.thursdayDate,
+      expectedOptionThursday,
+    );
+    ctx.assertEqual(
+      `${referenceDate} window ${index + 1} saturday`,
+      option?.deliveryWindowEndDate,
+      addCalendarDays(expectedOptionThursday, 2),
+    );
+  }
 };
 
 const runSuite = () => {
@@ -130,7 +146,7 @@ const runSuite = () => {
   ctx.assertEqual("tuesday 00:00 first thursday", tuesdayOptions[0]?.thursdayDate, "2026-08-27");
   ctx.assertEqual("tuesday 00:00 second thursday", tuesdayOptions[1]?.thursdayDate, "2026-09-03");
 
-  ctx.scenario("Toujours exactement deux options");
+  ctx.scenario("Toujours exactement quatre options");
   for (const referenceDate of [
     "2026-08-13",
     "2026-08-14",
@@ -144,7 +160,7 @@ const runSuite = () => {
     const options = buildBuilderDeliveryWindowOptionsFromReferenceDate(
       requireDate(referenceDate),
     );
-    ctx.assertEqual(`${referenceDate} has two options`, options.length, 2);
+    ctx.assertEqual(`${referenceDate} has four options`, options.length, 4);
   }
 
   ctx.scenario("Thursday canonical + weekStart/key stable");
@@ -200,8 +216,8 @@ const runSuite = () => {
   const summerOptions = buildBuilderDeliveryWindowOptions(
     new Date("2026-07-10T12:00:00.000Z"),
   );
-  ctx.assertEqual("winter weekly options count", winterOptions.length, 2);
-  ctx.assertEqual("summer weekly options count", summerOptions.length, 2);
+  ctx.assertEqual("winter weekly options count", winterOptions.length, 4);
+  ctx.assertEqual("summer weekly options count", summerOptions.length, 4);
 
   ctx.scenario("First-order weekly validation — Thu 13 checkout");
   const referenceDate = requireDate("2026-08-13");
@@ -415,6 +431,9 @@ const runSuite = () => {
   const checkoutServerSource = readRepoFile(
     "app/features/builder/builder-checkout.server.ts",
   );
+  const leadServerSource = readRepoFile(
+    "app/features/builder/builder-lead.server.ts",
+  );
   ctx.assertTrue(
     "checkout uses selectedScheduledDeliveryDate",
     clientSource.includes("scheduledDeliveryDate: selectedScheduledDeliveryDate") &&
@@ -429,34 +448,50 @@ const runSuite = () => {
     clientSource.includes("_mileyo_delivery_week"),
   );
 
-  ctx.scenario("Fenêtre complète temporaire — 2026-10-01 → 2026-10-03");
+  ctx.scenario("Fenêtres complètes temporaires — 2026-10-01 et 2026-10-08");
   const blockedReference = requireDate("2026-09-24");
   const blockedOptions = buildBuilderDeliveryWindowOptionsFromReferenceDate(
     blockedReference,
   );
-  const blockedWindow = blockedOptions.find(
+  ctx.assertEqual("september 24 offers four windows", blockedOptions.length, 4);
+
+  const blockedOct1 = blockedOptions.find(
     (option) => option.thursdayDate === "2026-10-01",
   );
-  const openWindow = blockedOptions.find(
+  const blockedOct8 = blockedOptions.find(
     (option) => option.thursdayDate === "2026-10-08",
   );
+  const openOct15 = blockedOptions.find(
+    (option) => option.thursdayDate === "2026-10-15",
+  );
+  const openOct22 = blockedOptions.find(
+    (option) => option.thursdayDate === "2026-10-22",
+  );
 
-  ctx.assertEqual("blocked window still listed", Boolean(blockedWindow), true);
+  ctx.assertEqual("oct 1 window still listed", Boolean(blockedOct1), true);
+  ctx.assertEqual("oct 8 window still listed", Boolean(blockedOct8), true);
   ctx.assertEqual(
-    "blocked window end is saturday 3",
-    blockedWindow?.deliveryWindowEndDate,
+    "oct 1 window end is saturday 3",
+    blockedOct1?.deliveryWindowEndDate,
     "2026-10-03",
   );
-  ctx.assertEqual("blocked window marked unavailable", blockedWindow?.unavailable, true);
-  ctx.assertEqual("next window remains available", openWindow?.unavailable, false);
   ctx.assertEqual(
-    "range label for blocked window",
-    blockedWindow?.rangeLabel,
+    "oct 8 window end is saturday 10",
+    blockedOct8?.deliveryWindowEndDate,
+    "2026-10-10",
+  );
+  ctx.assertEqual("oct 1 marked unavailable", blockedOct1?.unavailable, true);
+  ctx.assertEqual("oct 8 marked unavailable", blockedOct8?.unavailable, true);
+  ctx.assertEqual("oct 15 remains available", openOct15?.unavailable, false);
+  ctx.assertEqual("oct 22 remains available", openOct22?.unavailable, false);
+  ctx.assertEqual(
+    "range label for oct 1",
+    blockedOct1?.rangeLabel,
     "Livraison entre jeudi 1 octobre et samedi 3 octobre",
   );
   ctx.assertEqual(
-    "range label for open window",
-    openWindow?.rangeLabel,
+    "range label for oct 8",
+    blockedOct8?.rangeLabel,
     "Livraison entre jeudi 8 octobre et samedi 10 octobre",
   );
 
@@ -465,48 +500,73 @@ const runSuite = () => {
     "allowed thursdays exclude 2026-10-01",
     allowedWithoutBlocked.includes(requireDate("2026-10-01")),
   );
-  ctx.assertTrue(
-    "allowed thursdays still include 2026-10-08",
+  ctx.assertFalse(
+    "allowed thursdays exclude 2026-10-08",
     allowedWithoutBlocked.includes(requireDate("2026-10-08")),
   );
+  ctx.assertTrue(
+    "allowed thursdays still include 2026-10-15",
+    allowedWithoutBlocked.includes(requireDate("2026-10-15")),
+  );
+  ctx.assertTrue(
+    "allowed thursdays still include 2026-10-22",
+    allowedWithoutBlocked.includes(requireDate("2026-10-22")),
+  );
 
-  const rejectedBlocked = scheduleWeeklyFirstOrderDeliveryDate({
+  const rejectedOct1 = scheduleWeeklyFirstOrderDeliveryDate({
     desiredDeliveryDate: requireDate("2026-10-01"),
     referenceDate: blockedReference,
   });
-  ctx.assertNull("weekly schedule rejects blocked thursday", rejectedBlocked);
+  ctx.assertNull("weekly schedule rejects 2026-10-01", rejectedOct1);
 
-  const acceptedOpen = scheduleWeeklyFirstOrderDeliveryDate({
+  const rejectedOct8 = scheduleWeeklyFirstOrderDeliveryDate({
     desiredDeliveryDate: requireDate("2026-10-08"),
     referenceDate: blockedReference,
   });
+  ctx.assertNull("weekly schedule rejects 2026-10-08", rejectedOct8);
+
+  const acceptedOpen = scheduleWeeklyFirstOrderDeliveryDate({
+    desiredDeliveryDate: requireDate("2026-10-15"),
+    referenceDate: blockedReference,
+  });
   ctx.assertEqual(
-    "weekly schedule accepts next thursday",
+    "weekly schedule accepts next open thursday",
     acceptedOpen?.scheduledDeliveryDate,
-    "2026-10-08",
+    "2026-10-15",
   );
 
-  const webhookBlocked = resolveFirstOrderDeliverySchedule({
+  const webhookBlockedOct1 = resolveFirstOrderDeliverySchedule({
     lineItemProperties: [
       { name: DELIVERY_DATE_PROPERTY_TECHNICAL, value: "2026-10-01" },
     ],
     orderCreatedAt: new Date("2026-09-24T12:00:00.000Z"),
   });
   ctx.assertNull(
-    "first-order webhook rejects blocked thursday (no legacy fallback)",
-    webhookBlocked,
+    "first-order webhook rejects 2026-10-01 (no legacy fallback)",
+    webhookBlockedOct1,
+  );
+
+  const webhookBlockedOct8 = resolveFirstOrderDeliverySchedule({
+    lineItemProperties: [
+      { name: DELIVERY_DATE_PROPERTY_TECHNICAL, value: "2026-10-08" },
+    ],
+    orderCreatedAt: new Date("2026-09-24T12:00:00.000Z"),
+  });
+  ctx.assertNull(
+    "first-order webhook rejects 2026-10-08 (no legacy fallback)",
+    webhookBlockedOct8,
   );
 
   const webhookOpen = resolveFirstOrderDeliverySchedule({
     lineItemProperties: [
-      { name: DELIVERY_DATE_PROPERTY_TECHNICAL, value: "2026-10-08" },
+      { name: DELIVERY_DATE_PROPERTY_TECHNICAL, value: "2026-10-15" },
     ],
     orderCreatedAt: new Date("2026-09-24T12:00:00.000Z"),
   });
   ctx.assertEqual(
     "first-order webhook accepts open thursday",
     webhookOpen?.scheduledDeliveryDate,
-    "2026-10-08",
+    "2026-10-15",
   );
 
   const checkoutBodyBase = {
@@ -518,55 +578,117 @@ const runSuite = () => {
     meals: [{ quantity: 12, title: "Poulet tikka" }],
     sellingPlanId: "gid://shopify/SellingPlan/3530227852",
   };
-  const blockedCheckoutInput = parseCreateBuilderCheckoutInput(
+  const blockedCheckoutOct1 = parseCreateBuilderCheckoutInput(
     parseCreateBuilderCheckoutBody({
       ...checkoutBodyBase,
       scheduledDeliveryDate: "2026-10-01",
     }),
   );
   ctx.assertNull(
-    "builder checkout input rejects blocked thursday",
-    blockedCheckoutInput,
+    "builder checkout input rejects 2026-10-01",
+    blockedCheckoutOct1,
   );
 
-  const openCheckoutInput = parseCreateBuilderCheckoutInput(
+  const blockedCheckoutOct8 = parseCreateBuilderCheckoutInput(
     parseCreateBuilderCheckoutBody({
       ...checkoutBodyBase,
       deliveryRangeLabel: "Livraison entre jeudi 8 octobre et samedi 10 octobre",
       scheduledDeliveryDate: "2026-10-08",
     }),
   );
+  ctx.assertNull(
+    "builder checkout input rejects 2026-10-08",
+    blockedCheckoutOct8,
+  );
+
+  const openCheckoutInput = parseCreateBuilderCheckoutInput(
+    parseCreateBuilderCheckoutBody({
+      ...checkoutBodyBase,
+      deliveryRangeLabel: "Livraison entre jeudi 15 octobre et samedi 17 octobre",
+      scheduledDeliveryDate: "2026-10-15",
+    }),
+  );
   ctx.assertEqual(
     "builder checkout input accepts open thursday",
     openCheckoutInput?.scheduledDeliveryDate,
-    "2026-10-08",
+    "2026-10-15",
   );
 
-  // Blocking is date-keyed, not index-keyed: after Tue skip, Oct 8 is first and not COMPLET.
+  const leadBlockedOct1 = parseCheckoutLeadContext({
+    scheduledDeliveryDate: "2026-10-01",
+  });
+  ctx.assertNull(
+    "lead context clears unavailable 2026-10-01",
+    leadBlockedOct1.scheduledDeliveryDate,
+  );
+
+  const leadBlockedOct8 = parseCheckoutLeadContext({
+    scheduledDeliveryDate: "2026-10-08",
+  });
+  ctx.assertNull(
+    "lead context clears unavailable 2026-10-08",
+    leadBlockedOct8.scheduledDeliveryDate,
+  );
+
+  const leadOpen = parseCheckoutLeadContext({
+    scheduledDeliveryDate: "2026-10-15",
+  });
+  ctx.assertEqual(
+    "lead context keeps open thursday",
+    leadOpen.scheduledDeliveryDate,
+    "2026-10-15",
+  );
+
+  // Blocking is date-keyed, not index-keyed: after Tue skip, Oct 8 is first but
+  // unavailable only because thursdayDate === "2026-10-08"; later slots stay open.
   const afterSkipOptions = buildBuilderDeliveryWindowOptionsFromReferenceDate(
     requireDate("2026-09-29"),
   );
+  ctx.assertEqual("after Tue skip still four windows", afterSkipOptions.length, 4);
   ctx.assertEqual(
     "after Tue skip first thursday is 2026-10-08",
     afterSkipOptions[0]?.thursdayDate,
     "2026-10-08",
   );
   ctx.assertEqual(
-    "first listed window does not inherit COMPLET by index",
+    "oct 8 unavailable by thursdayDate even when first",
     afterSkipOptions[0]?.unavailable,
+    true,
+  );
+  ctx.assertEqual(
+    "second listed window stays available (no index inherit)",
+    afterSkipOptions[1]?.unavailable,
     false,
   );
+  ctx.assertEqual(
+    "second listed thursday is 2026-10-15",
+    afterSkipOptions[1]?.thursdayDate,
+    "2026-10-15",
+  );
   ctx.assertFalse(
-    "blocked thursday absent once window rolls forward",
+    "blocked oct 1 absent once window rolls forward",
     afterSkipOptions.some((option) => option.thursdayDate === "2026-10-01"),
+  );
+  ctx.assertEqual(
+    "only one unavailable window after skip",
+    afterSkipOptions.filter((option) => option.unavailable).length,
+    1,
+  );
+  ctx.assertEqual(
+    "only date-matched window unavailable after skip",
+    afterSkipOptions.find((option) => option.unavailable)?.thursdayDate,
+    "2026-10-08",
   );
 
   // Future windows at the same list position never inherit the block.
   const futureAugust = buildBuilderDeliveryWindowOptionsFromReferenceDate(
     requireDate("2026-08-13"),
   );
-  ctx.assertEqual("august first window not unavailable", futureAugust[0]?.unavailable, false);
-  ctx.assertEqual("august second window not unavailable", futureAugust[1]?.unavailable, false);
+  ctx.assertEqual("august offers four windows", futureAugust.length, 4);
+  ctx.assertTrue(
+    "august windows not unavailable by index",
+    futureAugust.every((option) => option.unavailable === false),
+  );
 
   ctx.assertTrue(
     "client clears invalid delivery selection",
@@ -593,14 +715,20 @@ const runSuite = () => {
     checkoutServerSource.includes("isUnavailableBuilderDeliveryThursday(scheduledDeliveryDate)"),
   );
   ctx.assertTrue(
+    "lead rejects unavailable scheduledDeliveryDate",
+    leadServerSource.includes("isUnavailableBuilderDeliveryThursday(parsedDeliveryDate)"),
+  );
+  ctx.assertTrue(
     "single source of truth config present",
     deliveryDateSource.includes("UNAVAILABLE_BUILDER_DELIVERY_THURSDAYS") &&
-      deliveryDateSource.includes('"2026-10-01"'),
+      deliveryDateSource.includes('"2026-10-01"') &&
+      deliveryDateSource.includes('"2026-10-08"'),
   );
   ctx.assertFalse(
     "blocking is not label-based",
     clientSource.includes('includes("1 octobre")') ||
-      clientSource.includes("1 octobre"),
+      clientSource.includes("1 octobre") ||
+      clientSource.includes("8 octobre"),
   );
 
   return finishSuite("20-builder-weekly-delivery-step", ctx);

@@ -54,6 +54,7 @@ export type BuilderDeliveryWindowOption = {
  */
 export const UNAVAILABLE_BUILDER_DELIVERY_THURSDAYS = [
   "2026-10-01",
+  "2026-10-08",
 ] as const;
 
 export const isUnavailableBuilderDeliveryThursday = (
@@ -1098,27 +1099,24 @@ export const buildWeeklyDeliveryWindow = ({
   };
 };
 
+const BUILDER_DELIVERY_WINDOW_OPTION_COUNT = 4;
+
 export const buildBuilderDeliveryWindowOptionsFromReferenceDate = (
   referenceDate: DeliveryDateString,
   options?: { locale?: string },
 ): BuilderDeliveryWindowOption[] => {
   const locale = options?.locale ?? "fr-FR";
   const firstThursday = getFirstEligibleDeliveryThursday(referenceDate);
-  const secondThursday = addCalendarDays(
-    firstThursday,
-    DELIVERY_WEEKLY_INTERVAL_DAYS,
-  );
 
-  return [
+  return Array.from({ length: BUILDER_DELIVERY_WINDOW_OPTION_COUNT }, (_, index) =>
     buildWeeklyDeliveryWindow({
       locale,
-      thursdayDate: firstThursday,
+      thursdayDate: addCalendarDays(
+        firstThursday,
+        index * DELIVERY_WEEKLY_INTERVAL_DAYS,
+      ),
     }),
-    buildWeeklyDeliveryWindow({
-      locale,
-      thursdayDate: secondThursday,
-    }),
-  ];
+  );
 };
 
 export const buildBuilderDeliveryWindowOptions = (

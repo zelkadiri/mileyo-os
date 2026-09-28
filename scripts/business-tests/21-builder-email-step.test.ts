@@ -713,11 +713,16 @@ const runSuite = () => {
     parseCheckoutLeadContext({ scheduledDeliveryDate: "2026-10-01" })
       .scheduledDeliveryDate,
   );
-  ctx.assertEqual(
-    "available window still stored on lead",
+  ctx.assertNull(
+    "unavailable capacity window 2026-10-08 not stored on lead",
     parseCheckoutLeadContext({ scheduledDeliveryDate: "2026-10-08" })
       .scheduledDeliveryDate,
-    "2026-10-08",
+  );
+  ctx.assertEqual(
+    "available window still stored on lead",
+    parseCheckoutLeadContext({ scheduledDeliveryDate: "2026-10-15" })
+      .scheduledDeliveryDate,
+    "2026-10-15",
   );
 
   ctx.scenario("I. No Shopify discount/selling-plan mutation in 13H");

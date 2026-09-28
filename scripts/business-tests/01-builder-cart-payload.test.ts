@@ -147,7 +147,7 @@ const runSuite = () => {
     weeklyReference!,
   );
   ctx.when("on liste les fenêtres disponibles");
-  ctx.assertEqual("weekly options count", weeklyOptions.length, 2);
+  ctx.assertEqual("weekly options count", weeklyOptions.length, 4);
   ctx.assertEqual(
     "first weekly thursday canonical",
     weeklyOptions[0]?.scheduledDeliveryDate,
