@@ -206,6 +206,58 @@ export const builderClientScript = `
       range.textContent = option.rangeLabel;
       button.appendChild(range);
 
+      var capacity =
+        typeof option.capacity === "number" && option.capacity > 0
+          ? option.capacity
+          : 10;
+      var firstOrderCount =
+        typeof option.firstOrderCount === "number" && option.firstOrderCount > 0
+          ? Math.floor(option.firstOrderCount)
+          : 0;
+      // Manual UNAVAILABLE_BUILDER_DELIVERY_THURSDAYS: present as full gauge
+      // without changing the real firstOrderCount from the server.
+      var displayCount =
+        isUnavailable && firstOrderCount < capacity
+          ? capacity
+          : firstOrderCount;
+      var fillPercent = Math.min(
+        100,
+        Math.round((displayCount / capacity) * 100),
+      );
+
+      var capacityBlock = document.createElement("div");
+      capacityBlock.className = "delivery-window-capacity";
+
+      var capacityTrack = document.createElement("div");
+      capacityTrack.className = "delivery-window-capacity-track";
+      capacityTrack.setAttribute("aria-hidden", "true");
+      var capacityFill = document.createElement("div");
+      capacityFill.className = "delivery-window-capacity-fill";
+      if (fillPercent >= 90 && fillPercent < 100) {
+        capacityFill.className += " nearly-full";
+      }
+      if (isUnavailable || fillPercent >= 100) {
+        capacityFill.className += " full";
+      }
+      capacityFill.style.width = fillPercent + "%";
+      capacityTrack.appendChild(capacityFill);
+      capacityBlock.appendChild(capacityTrack);
+
+      var capacityLabel = document.createElement("span");
+      capacityLabel.className = "delivery-window-capacity-label";
+      capacityLabel.textContent =
+        displayCount + " / " + capacity + " places réservées";
+      capacityBlock.appendChild(capacityLabel);
+
+      if (!isUnavailable && firstOrderCount === capacity - 1) {
+        var almostFull = document.createElement("span");
+        almostFull.className = "delivery-window-capacity-hint";
+        almostFull.textContent = "Presque complet";
+        capacityBlock.appendChild(almostFull);
+      }
+
+      button.appendChild(capacityBlock);
+
       if (isUnavailable) {
         var message = document.createElement("span");
         message.className = "delivery-window-card-message";

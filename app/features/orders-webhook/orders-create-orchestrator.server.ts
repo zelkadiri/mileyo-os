@@ -58,6 +58,7 @@ import {
 } from "./box-order-objective-snapshot.server";
 import { findBoxLineItem, getCustomerName } from "./orders-create-parsers";
 import type { OrdersCreateWebhookPayload } from "./orders-create-types";
+import { isBuilderDeliveryThursdayAcceptingFirstOrders } from "../builder/builder-delivery-capacity.server";
 
 const buildBoxOrderDeliveryData = (
   schedule:
@@ -325,12 +326,33 @@ export const handleOrdersCreateWebhook = async ({
     ? new Date(order.created_at)
     : new Date();
 
-  const firstOrderDeliverySchedule = !isRenewal
+  let firstOrderDeliverySchedule = !isRenewal
     ? resolveFirstOrderDeliverySchedule({
         lineItemProperties: boxLineItem.properties,
         orderCreatedAt,
       })
     : null;
+
+  // Soft capacity fail-closed for NEW first orders only — never renewals,
+  // never same-order replay. Do not auto-reschedule to another Thursday.
+  if (
+    !isRenewal &&
+    !isSameOrderReplay &&
+    firstOrderDeliverySchedule?.scheduledDeliveryDate
+  ) {
+    const accepting = await isBuilderDeliveryThursdayAcceptingFirstOrders({
+      excludeShopifyOrderId: shopifyOrderId,
+      shop,
+      thursdayDate: firstOrderDeliverySchedule.scheduledDeliveryDate,
+    });
+    if (!accepting) {
+      console.log("[ORDERS_CREATE] first-order capacity full — schedule skipped", {
+        scheduledDeliveryDate: firstOrderDeliverySchedule.scheduledDeliveryDate,
+        shopifyOrderId,
+      });
+      firstOrderDeliverySchedule = null;
+    }
+  }
 
   let renewalDeliverySchedule: RenewalDeliveryScheduleResolution | null = null;
 

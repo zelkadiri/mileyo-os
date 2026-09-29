@@ -9,6 +9,7 @@ import {
   CAPTURE_CHECKOUT_LEAD_INTENT,
   normalizeBuilderEmail,
 } from "./builder-email";
+import { applyCapacityToBuilderDeliveryDate } from "./builder-delivery-capacity.server";
 
 export { CAPTURE_CHECKOUT_LEAD_INTENT };
 
@@ -133,6 +134,12 @@ export const captureCheckoutLead = async ({
     return { message: "Entrez une adresse e-mail valide.", ok: false };
   }
 
+  // Soft capacity: still capture the lead, but never persist a full/manual date.
+  const scheduledDeliveryDate = await applyCapacityToBuilderDeliveryDate({
+    scheduledDeliveryDate: context.scheduledDeliveryDate,
+    shop,
+  });
+
   const now = new Date();
 
   try {
@@ -143,7 +150,7 @@ export const captureCheckoutLead = async ({
         lastSeenAt: now,
         mealCount: context.mealCount,
         objective: context.objective,
-        scheduledDeliveryDate: context.scheduledDeliveryDate,
+        scheduledDeliveryDate,
         shop,
       },
       update: {
@@ -151,7 +158,7 @@ export const captureCheckoutLead = async ({
         lastSeenAt: now,
         mealCount: context.mealCount,
         objective: context.objective,
-        scheduledDeliveryDate: context.scheduledDeliveryDate,
+        scheduledDeliveryDate,
       },
       where: {
         shop_email: {

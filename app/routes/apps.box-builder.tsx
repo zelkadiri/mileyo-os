@@ -11,6 +11,7 @@ import {
   parseCreateBuilderCheckoutBody,
   parseCreateBuilderCheckoutInput,
 } from "../features/builder/builder-checkout.server";
+import { enrichBuilderDeliveryWindowOptionsWithCapacity } from "../features/builder/builder-delivery-capacity.server";
 import {
   CAPTURE_CHECKOUT_LEAD_INTENT,
   captureCheckoutLead,
@@ -170,7 +171,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) =>
 
     const [boxes, meals] = await Promise.all([boxesPromise, mealsPromise]);
 
-    const deliveryWindowOptions = buildBuilderDeliveryWindowOptions();
+    const deliveryWindowOptions =
+      await enrichBuilderDeliveryWindowOptionsWithCapacity({
+        options: buildBuilderDeliveryWindowOptions(),
+        shop,
+      });
     const deliveryConfig = {
       deliveryWindowOptions,
       timezone: DELIVERY_TIMEZONE,

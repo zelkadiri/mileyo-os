@@ -21,6 +21,7 @@ import {
 } from "../../utils/deliveryDate";
 import { parseMealCountMetafield } from "../../utils/mealCountMetafield";
 import { captureTechnicalError } from "../../services/observability/captureTechnicalError.server";
+import { isBuilderDeliveryThursdayAcceptingFirstOrders } from "./builder-delivery-capacity.server";
 
 export { CREATE_BUILDER_CHECKOUT_INTENT };
 
@@ -311,6 +312,17 @@ export const createBuilderStorefrontCheckout = async ({
 }): Promise<CreateBuilderCheckoutResult> => {
   if (!shop) {
     return { message: "Boutique introuvable.", ok: false };
+  }
+
+  // Soft capacity gate (manual block OR first-order count >= capacity).
+  // Rare double-checkout oversell at 9/10 is accepted — no reservation.
+  const acceptingDelivery =
+    await isBuilderDeliveryThursdayAcceptingFirstOrders({
+      shop,
+      thursdayDate: input.scheduledDeliveryDate,
+    });
+  if (!acceptingDelivery) {
+    return { message: BUILDER_CART_PREPARE_ERROR, ok: false };
   }
 
   const attributes = buildBuilderCheckoutLineAttributes({

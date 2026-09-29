@@ -31,18 +31,30 @@ const DELIVERY_WINDOW_DISPLAY_END_OFFSET_DAYS = 2;
 /** Tuesday and Wednesday — imminent delivery window is skipped after Monday cutoff. */
 const DELIVERY_WINDOW_SKIP_WEEKDAYS = [2, 3] as const;
 
+/** Max first-order / new-subscription orders per builder delivery Thursday. */
+export const BUILDER_DELIVERY_FIRST_ORDER_CAPACITY = 10;
+
 export type BuilderDeliveryWindowOption = {
   /** Legacy field kept for payload shape; builder UI shows `rangeLabel` only. */
   cardLabel: string;
+  /** Shared soft capacity for first orders on this Thursday. */
+  capacity: number;
   /** Visible window end (Saturday) — display only, not the business delivery date. */
   deliveryWindowEndDate: DeliveryDateString;
+  /** Counted first orders (`isSubscriptionRenewal = false`) for this Thursday. */
+  firstOrderCount: number;
   key: DeliveryDateString;
   rangeLabel: string;
+  /** Places left before the soft first-order capacity is reached. */
+  remainingCapacity: number;
   /** Compact email/recap form, e.g. "entre le 24 et le 26 septembre". */
   shortRangeLabel: string;
   scheduledDeliveryDate: DeliveryDateString;
   thursdayDate: DeliveryDateString;
-  /** Temporary capacity block — still listed in UI, not selectable. */
+  /**
+   * Not selectable: manual block and/or first-order capacity reached.
+   * Still listed in the UI (badge COMPLET).
+   */
   unavailable: boolean;
   weekStartDate: DeliveryDateString;
 };
@@ -64,6 +76,37 @@ export const isUnavailableBuilderDeliveryThursday = (
   (UNAVAILABLE_BUILDER_DELIVERY_THURSDAYS as readonly string[]).includes(
     thursdayDate,
   );
+
+/**
+ * Pure capacity fields for one builder Thursday.
+ * Manual blocks always win: unavailable even when count &lt; capacity.
+ */
+export const resolveBuilderDeliveryWindowCapacityFields = ({
+  capacity = BUILDER_DELIVERY_FIRST_ORDER_CAPACITY,
+  firstOrderCount,
+  manualUnavailable,
+}: {
+  capacity?: number;
+  firstOrderCount: number;
+  manualUnavailable: boolean;
+}): Pick<
+  BuilderDeliveryWindowOption,
+  "capacity" | "firstOrderCount" | "remainingCapacity" | "unavailable"
+> => {
+  const safeCount =
+    Number.isFinite(firstOrderCount) && firstOrderCount > 0
+      ? Math.floor(firstOrderCount)
+      : 0;
+  const safeCapacity =
+    Number.isFinite(capacity) && capacity > 0 ? Math.floor(capacity) : 0;
+
+  return {
+    capacity: safeCapacity,
+    firstOrderCount: safeCount,
+    remainingCapacity: Math.max(0, safeCapacity - safeCount),
+    unavailable: manualUnavailable || safeCount >= safeCapacity,
+  };
+};
 
 /** Calendar date in Europe/Paris, ISO `YYYY-MM-DD`. */
 export type DeliveryDateString = string & { readonly __brand: "DeliveryDateString" };
@@ -1082,6 +1125,12 @@ export const buildWeeklyDeliveryWindow = ({
     },
   );
 
+  const manualUnavailable = isUnavailableBuilderDeliveryThursday(thursdayDate);
+  const capacityFields = resolveBuilderDeliveryWindowCapacityFields({
+    firstOrderCount: 0,
+    manualUnavailable,
+  });
+
   return {
     cardLabel: rangeLabel,
     deliveryWindowEndDate,
@@ -1094,8 +1143,8 @@ export const buildWeeklyDeliveryWindow = ({
     ),
     scheduledDeliveryDate: thursdayDate,
     thursdayDate,
-    unavailable: isUnavailableBuilderDeliveryThursday(thursdayDate),
     weekStartDate,
+    ...capacityFields,
   };
 };
 

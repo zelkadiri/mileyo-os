@@ -128,6 +128,7 @@ const BUSINESS_SUITES = [
   "103-builder-catalog-cache.test.ts",
   "104-meal-online-store-unpublish.test.ts",
   "105-public-meals-app-proxy.test.ts",
+  "106-builder-delivery-capacity.test.ts",
 ];
 
 const LEGACY_SUITES = [

@@ -790,6 +790,56 @@ body {
   color: rgba(60, 45, 70, 0.78);
 }
 
+.delivery-window-capacity {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.delivery-window-capacity-track {
+  background: rgba(90, 27, 105, 0.1);
+  border-radius: 999px;
+  height: 6px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.delivery-window-capacity-fill {
+  background: var(--mileyo-purple);
+  border-radius: inherit;
+  height: 100%;
+  max-width: 100%;
+  transition: width 0.2s ease;
+}
+
+.delivery-window-capacity-fill.nearly-full {
+  background: #9a5fb8;
+}
+
+.delivery-window-capacity-fill.full {
+  background: rgba(90, 27, 105, 0.45);
+}
+
+.delivery-window-capacity-label {
+  color: var(--mileyo-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.delivery-window-capacity-hint {
+  color: var(--mileyo-purple-black);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.delivery-window-card.unavailable .delivery-window-capacity-label,
+.delivery-window-card.unavailable .delivery-window-capacity-hint {
+  color: rgba(60, 45, 70, 0.72);
+}
+
 .delivery-window-card-message {
   color: rgba(60, 45, 70, 0.82);
   font-size: 0.86rem;

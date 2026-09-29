@@ -368,6 +368,10 @@ const runSuite = () => {
     loaderSource.includes("buildBuilderDeliveryWindowOptions"),
   );
   ctx.assertTrue(
+    "loader enriches delivery windows with capacity",
+    loaderSource.includes("enrichBuilderDeliveryWindowOptionsWithCapacity"),
+  );
+  ctx.assertTrue(
     "loader exposes deliveryWindowOptions",
     loaderSource.includes("deliveryWindowOptions"),
   );
