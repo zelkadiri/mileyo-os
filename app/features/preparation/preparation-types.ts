@@ -1,6 +1,9 @@
 import type { SubscriptionObjective } from "../../constants/subscriptionObjective";
 import type { DeliveryDateString } from "../../utils/deliveryDate";
 
+export const ARCHIVE_PREPARATION_DATE_INTENT =
+  "archive_preparation_delivery_date";
+
 export type PreparationDaySummary = {
   scheduledDeliveryDate: DeliveryDateString;
   totalOrders: number;
@@ -44,6 +47,8 @@ export type PreparationOrder = {
   desiredDeliveryDate: string | null;
   scheduledDeliveryDate: DeliveryDateString;
   deliveryRescheduleReason: string | null;
+  /** From rawOrder.shipping_address — null when missing/unusable. */
+  shippingAddress: string | null;
   createdAt: Date;
 };
 
@@ -64,14 +69,19 @@ export type UpcomingPreparationDate = {
 };
 
 export type PreparationPageData = {
+  /** True when selected date is past (Paris) and not archived — show Archiver. */
+  canArchiveSelectedDate: boolean;
   selectedCutoff: {
     deadlineLabel: string | null;
     isKnown: boolean;
     isPassed: boolean;
   } | null;
+  /** True when selected date has archivedAt set — still loadable via ?date=. */
+  selectedDateIsArchived: boolean;
   dateQueryInvalid: boolean;
   dayData: PreparationDayData | null;
   selectedDate: DeliveryDateString | null;
+  /** Non-archived delivery dates for chip navigation only. */
   upcomingDates: UpcomingPreparationDate[];
 };
 
@@ -93,5 +103,7 @@ export type PreparationBoxOrderRecord = {
   /** Simulated test orders must never appear in kitchen preparation. */
   simulated: boolean;
   cancelledAt?: Date | null;
+  /** Shopify order payload — used for shipping address only; fail-soft. */
+  rawOrder?: unknown;
   createdAt: Date;
 };

@@ -4,17 +4,22 @@ import type { SubscriptionObjective } from "../../constants/subscriptionObjectiv
 import { fetchMealCatalogProducts } from "../../services/subscriptionMealCatalog.server";
 import { authenticate } from "../../shopify.server";
 import {
-  getTodayDeliveryDate,
   getDeliveryCutoffStatus,
+  isDeliveryDatePast,
   parseDeliveryDate,
   type DeliveryDateString,
 } from "../../utils/deliveryDate";
 import { parseSubscriptionObjective } from "../../utils/subscriptionObjective";
 import {
+  filterVisiblePreparationDates,
+  getArchivedPreparationDeliveryDateSet,
+} from "./preparation-archive.server";
+import {
   buildBulkPortionGramsByMealTitle,
   enrichMealTotalsWithBulkPortionGrams,
 } from "./preparation-bulk-portion";
 import {
+  extractShippingAddressLabel,
   isKitchenPreparationBoxOrder,
   isSubscriptionPreparationOrder,
   normalizeSelectedMealsForPreparation,
@@ -138,6 +143,7 @@ export const mapBoxOrderToPreparationOrder = (
   orderType: order.orderType,
   scheduledDeliveryDate,
   selectedMeals: normalizeSelectedMealsForPreparation(order.selectedMeals),
+  shippingAddress: extractShippingAddressLabel(order.rawOrder),
 });
 
 export const buildPreparationDaySummary = ({
@@ -234,6 +240,10 @@ export const getPreparationDayData = async (
   return buildPreparationDayDataFromBoxOrders(boxOrders, scheduledDeliveryDate);
 };
 
+/**
+ * All kitchen delivery dates with orders (includes archived).
+ * Chip navigation must use `getVisiblePreparationDates` instead.
+ */
 export const getUpcomingPreparationDates = async (
   shop: string,
 ): Promise<UpcomingPreparationDate[]> => {
@@ -275,14 +285,46 @@ export const getUpcomingPreparationDates = async (
   return dates;
 };
 
-export const loadPreparationPageData = async (
-  request: Request,
-): Promise<PreparationPageData> => {
-  const { admin, session } = await authenticate.admin(request);
-  const shop = session.shop;
-  const url = new URL(request.url);
+export const getVisiblePreparationDates = async (
+  shop: string,
+): Promise<UpcomingPreparationDate[]> => {
+  const [allDates, archivedDates] = await Promise.all([
+    getUpcomingPreparationDates(shop),
+    getArchivedPreparationDeliveryDateSet(shop),
+  ]);
+
+  return filterVisiblePreparationDates(allDates, archivedDates);
+};
+
+type PreparationAdminGraphql = {
+  graphql: (
+    query: string,
+    options?: {
+      variables?: { id: string; sortKey?: "TITLE" | "COLLECTION_DEFAULT" };
+    },
+  ) => Promise<Response>;
+};
+
+/**
+ * Core loader body (auth already resolved). Exported for integration tests so
+ * archive + BoxOrder queries hit the real Prisma client without Shopify session.
+ */
+export const loadPreparationPageDataForShop = async ({
+  admin,
+  requestUrl,
+  shop,
+}: {
+  admin: PreparationAdminGraphql;
+  requestUrl: string;
+  shop: string;
+}): Promise<PreparationPageData> => {
+  const url = new URL(requestUrl);
   const dateParam = url.searchParams.get("date");
-  const upcomingDates = await getUpcomingPreparationDates(shop);
+  const [allDates, archivedDates] = await Promise.all([
+    getUpcomingPreparationDates(shop),
+    getArchivedPreparationDeliveryDateSet(shop),
+  ]);
+  const upcomingDates = filterVisiblePreparationDates(allDates, archivedDates);
 
   let selectedDate: DeliveryDateString | null = null;
   let dateQueryInvalid = false;
@@ -297,10 +339,17 @@ export const loadPreparationPageData = async (
     }
   }
 
+  // Default to first visible chip only — never invent "today" with no prep.
   if (!selectedDate && !dateQueryInvalid) {
-    selectedDate =
-      upcomingDates[0]?.scheduledDeliveryDate ?? getTodayDeliveryDate();
+    selectedDate = upcomingDates[0]?.scheduledDeliveryDate ?? null;
   }
+
+  const selectedDateIsArchived =
+    selectedDate != null && archivedDates.has(selectedDate);
+  const canArchiveSelectedDate =
+    selectedDate != null &&
+    isDeliveryDatePast(selectedDate) &&
+    !selectedDateIsArchived;
 
   let dayData =
     selectedDate && !dateQueryInvalid
@@ -321,6 +370,7 @@ export const loadPreparationPageData = async (
   }
 
   return {
+    canArchiveSelectedDate,
     dateQueryInvalid,
     dayData,
     selectedDate: dateQueryInvalid ? null : selectedDate,
@@ -336,6 +386,19 @@ export const loadPreparationPageData = async (
             };
           })()
         : null,
+    selectedDateIsArchived,
     upcomingDates,
   };
+};
+
+export const loadPreparationPageData = async (
+  request: Request,
+): Promise<PreparationPageData> => {
+  const { admin, session } = await authenticate.admin(request);
+
+  return loadPreparationPageDataForShop({
+    admin,
+    requestUrl: request.url,
+    shop: session.shop,
+  });
 };

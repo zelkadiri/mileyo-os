@@ -217,6 +217,24 @@ export const getTodayDeliveryDate = (
   timezone: string = DEFAULT_DELIVERY_SCHEDULE_CONFIG.timezone,
 ): DeliveryDateString => referenceDateFromInstant(new Date(), timezone);
 
+/**
+ * True when `date` is strictly before today in Europe/Paris (calendar day).
+ * Invalid / missing dates return false (fail-soft).
+ */
+export const isDeliveryDatePast = (
+  date: string | null | undefined,
+  now: Date = new Date(),
+  timezone: string = DEFAULT_DELIVERY_SCHEDULE_CONFIG.timezone,
+): boolean => {
+  const parsed = parseDeliveryDate(date);
+
+  if (!parsed) {
+    return false;
+  }
+
+  return compareDeliveryDates(parsed, referenceDateFromInstant(now, timezone)) < 0;
+};
+
 export const addCalendarDays = (
   date: DeliveryDateString,
   days: number,

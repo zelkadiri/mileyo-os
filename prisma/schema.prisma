@@ -96,6 +96,20 @@ model BoxOrder {
   @@index([shop, scheduledDeliveryDate])
 }
 
+/// Kitchen prep UI state per delivery date (e.g. archived from chip nav).
+/// Does not alter BoxOrder rows or scheduledDeliveryDate.
+model PreparationDeliveryDateState {
+  id                    String    @id @default(cuid())
+  shop                  String
+  scheduledDeliveryDate String    @db.VarChar(10)
+  archivedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([shop, scheduledDeliveryDate])
+  @@index([shop, archivedAt])
+}
+
 model SubscriptionMealSelection {
   id                       String    @id @default(cuid())
   shop                     String

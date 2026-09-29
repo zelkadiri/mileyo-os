@@ -170,33 +170,57 @@ export const chipRowStyle = {
   gap: "0.5rem",
 } as const;
 
-export const chipLinkStyle = (active: boolean) =>
+export const chipLinkStyle = (active: boolean, past = false) =>
   ({
-    background: active ? "#111827" : "#ffffff",
-    border: "1px solid #d1d5db",
+    background: active ? "#111827" : past ? "#f3f4f6" : "#ffffff",
+    border: `1px solid ${past && !active ? "#e5e7eb" : "#d1d5db"}`,
     borderRadius: "999px",
-    color: active ? "#ffffff" : "#111827",
-    display: "inline-block",
+    color: active ? "#ffffff" : past ? "#6b7280" : "#111827",
+    display: "inline-flex",
+    alignItems: "center",
     font: "inherit",
     fontSize: "0.875rem",
     fontWeight: 600,
+    gap: "0.35rem",
+    opacity: past && !active ? 0.85 : 1,
     padding: "0.4rem 0.75rem",
     textDecoration: "none",
   }) as const;
 
-export const cutoffBadgeStyle = (variant: "open" | "closed") =>
+export const cutoffBadgeStyle = (variant: "open" | "closed" | "done") =>
   ({
-    background: variant === "open" ? "rgba(124, 201, 167, 0.18)" : "rgba(243, 203, 184, 0.35)",
+    background:
+      variant === "open"
+        ? "rgba(124, 201, 167, 0.18)"
+        : variant === "done"
+          ? "rgba(156, 163, 175, 0.2)"
+          : "rgba(243, 203, 184, 0.35)",
     border: `1px solid ${
-      variant === "open" ? "rgba(124, 201, 167, 0.42)" : "rgba(243, 203, 184, 0.72)"
+      variant === "open"
+        ? "rgba(124, 201, 167, 0.42)"
+        : variant === "done"
+          ? "rgba(156, 163, 175, 0.45)"
+          : "rgba(243, 203, 184, 0.72)"
     }`,
     borderRadius: "999px",
-    color: variant === "open" ? "#2f6f57" : "#8b4f2f",
+    color:
+      variant === "open" ? "#2f6f57" : variant === "done" ? "#4b5563" : "#8b4f2f",
     display: "inline-flex",
     fontSize: "0.8rem",
     fontWeight: 700,
     padding: "0.35rem 0.7rem",
   }) as const;
+
+export const termineChipBadgeStyle = {
+  background: "rgba(156, 163, 175, 0.28)",
+  borderRadius: "999px",
+  color: "#4b5563",
+  display: "inline-flex",
+  fontSize: "0.65rem",
+  fontWeight: 800,
+  letterSpacing: "0.02em",
+  padding: "0.12rem 0.4rem",
+} as const;
 
 export const cutoffChipDotStyle = (variant: "open" | "closed") =>
   ({

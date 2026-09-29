@@ -129,6 +129,7 @@ const BUSINESS_SUITES = [
   "104-meal-online-store-unpublish.test.ts",
   "105-public-meals-app-proxy.test.ts",
   "106-builder-delivery-capacity.test.ts",
+  "107-preparation-delivery-date-archive.test.ts",
 ];
 
 const LEGACY_SUITES = [

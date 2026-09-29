@@ -3,8 +3,10 @@ import { Form, Link, useLoaderData } from "react-router";
 import { SUBSCRIPTION_OBJECTIVE } from "../../constants/subscriptionObjective";
 import {
   formatDeliveryDateLabel,
+  isDeliveryDatePast,
   parseDeliveryDate,
 } from "../../utils/deliveryDate";
+import { ARCHIVE_PREPARATION_DATE_INTENT } from "./preparation-types";
 import {
   downloadPreparationDeliveryOrdersCsv,
   downloadPreparationProductionCsv,
@@ -44,17 +46,28 @@ import {
   summaryGridStyle,
   summaryLabelStyle,
   summaryValueStyle,
+  termineChipBadgeStyle,
   warningBannerStyle,
 } from "./preparation-styles";
 
 type PreparationPageData = Awaited<ReturnType<typeof loadPreparationPageData>>;
 
 export default function PreparationPage() {
-  const { dateQueryInvalid, dayData, selectedCutoff, selectedDate, upcomingDates } =
-    useLoaderData<PreparationPageData>();
+  const {
+    canArchiveSelectedDate,
+    dateQueryInvalid,
+    dayData,
+    selectedCutoff,
+    selectedDate,
+    selectedDateIsArchived,
+    upcomingDates,
+  } = useLoaderData<PreparationPageData>();
   const summary = dayData?.summary ?? null;
   const hasOrders = (summary?.totalOrders ?? 0) > 0;
   const hasMeals = (summary?.totalMeals ?? 0) > 0;
+  const selectedDateIsPast = selectedDate
+    ? isDeliveryDatePast(selectedDate)
+    : false;
 
   return (
     <s-page heading="Préparation">
@@ -88,32 +101,37 @@ export default function PreparationPage() {
 
             {upcomingDates.length > 0 ? (
               <div style={chipRowStyle}>
-                {upcomingDates.map((entry) => (
-                  <Link
-                    key={entry.scheduledDeliveryDate}
-                    style={chipLinkStyle(
-                      selectedDate === entry.scheduledDeliveryDate,
-                    )}
-                    to={`/app/preparation?date=${encodeURIComponent(entry.scheduledDeliveryDate)}`}
-                  >
-                    {formatDeliveryDateLabel(entry.scheduledDeliveryDate, {
-                      short: true,
-                    })}{" "}
-                    ({entry.orderCount})
-                    {entry.cutoff?.isKnown ? (
-                      <span
-                        aria-label={
-                          entry.cutoff.isPassed
-                            ? "Cutoff passé"
-                            : "Modifications ouvertes"
-                        }
-                        style={cutoffChipDotStyle(
-                          entry.cutoff.isPassed ? "closed" : "open",
-                        )}
-                      />
-                    ) : null}
-                  </Link>
-                ))}
+                {upcomingDates.map((entry) => {
+                  const isPast = isDeliveryDatePast(entry.scheduledDeliveryDate);
+                  const isActive = selectedDate === entry.scheduledDeliveryDate;
+
+                  return (
+                    <Link
+                      key={entry.scheduledDeliveryDate}
+                      style={chipLinkStyle(isActive, isPast)}
+                      to={`/app/preparation?date=${encodeURIComponent(entry.scheduledDeliveryDate)}`}
+                    >
+                      {formatDeliveryDateLabel(entry.scheduledDeliveryDate, {
+                        short: true,
+                      })}{" "}
+                      ({entry.orderCount})
+                      {isPast ? (
+                        <span style={termineChipBadgeStyle}>TERMINÉ</span>
+                      ) : entry.cutoff?.isKnown ? (
+                        <span
+                          aria-label={
+                            entry.cutoff.isPassed
+                              ? "Cutoff passé"
+                              : "Modifications ouvertes"
+                          }
+                          style={cutoffChipDotStyle(
+                            entry.cutoff.isPassed ? "closed" : "open",
+                          )}
+                        />
+                      ) : null}
+                    </Link>
+                  );
+                })}
               </div>
             ) : (
               <s-text>Aucune livraison planifiée pour le moment.</s-text>
@@ -130,7 +148,38 @@ export default function PreparationPage() {
                       {formatDeliveryDateLabel(selectedDate)}
                     </strong>
                   </s-text>
-                  {selectedCutoff?.isKnown ? (
+                  {selectedDateIsPast ? (
+                    <div
+                      style={{
+                        alignItems: "center",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <span style={cutoffBadgeStyle("done")}>TERMINÉ</span>
+                      {selectedDateIsArchived ? (
+                        <span style={cutoffBadgeStyle("done")}>Archivée</span>
+                      ) : null}
+                      {canArchiveSelectedDate && selectedDate ? (
+                        <Form method="post">
+                          <input
+                            name="intent"
+                            type="hidden"
+                            value={ARCHIVE_PREPARATION_DATE_INTENT}
+                          />
+                          <input
+                            name="date"
+                            type="hidden"
+                            value={selectedDate}
+                          />
+                          <button style={secondaryButtonStyle} type="submit">
+                            Archiver
+                          </button>
+                        </Form>
+                      ) : null}
+                    </div>
+                  ) : selectedCutoff?.isKnown ? (
                     <div>
                       {selectedCutoff.isPassed ? (
                         <span style={cutoffBadgeStyle("closed")}>
@@ -294,6 +343,10 @@ export default function PreparationPage() {
                               {order.customerEmail
                                 ? ` (${order.customerEmail})`
                                 : ""}
+                            </p>
+                            <p style={orderMetaStyle}>
+                              Adresse :{" "}
+                              {order.shippingAddress ?? "Non renseignée"}
                             </p>
                             <p style={orderMetaStyle}>
                               Type :{" "}

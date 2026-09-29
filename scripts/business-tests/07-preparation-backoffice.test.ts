@@ -17,11 +17,17 @@ import {
   buildPreparationDayDataFromBoxOrders,
   loadBulkPortionGramsByMealTitleFailSoft,
 } from "../../app/features/preparation/preparation-data.server";
-import { normalizeSelectedMealsForPreparation } from "../../app/features/preparation/preparation-formatters";
+import {
+  extractShippingAddressLabel,
+  normalizeSelectedMealsForPreparation,
+} from "../../app/features/preparation/preparation-formatters";
 import type { PreparationBoxOrderRecord } from "../../app/features/preparation/preparation-types";
 import type { ShopifyMealCatalogProductNode } from "../../app/services/subscriptionMealCatalog.server";
 import { toMealCatalogProducts } from "../../app/services/subscriptionMealCatalog.server";
-import { parseDeliveryDate } from "../../app/utils/deliveryDate";
+import {
+  isDeliveryDatePast,
+  parseDeliveryDate,
+} from "../../app/utils/deliveryDate";
 import {
   createBusinessTestContext,
   finishSuite,
@@ -592,6 +598,105 @@ const runSuite = async () => {
     "orders without delivery date excluded",
     data.orders.some((order) => order.id === "ignored-no-date"),
     false,
+  );
+
+  ctx.scenario("TERMINÉ — isDeliveryDatePast strictement avant aujourd'hui Paris");
+  const fixedNow = new Date("2026-09-29T12:00:00.000Z");
+  ctx.assertEqual(
+    "past date is past",
+    isDeliveryDatePast("2026-09-25", fixedNow),
+    true,
+  );
+  ctx.assertEqual(
+    "today is not past",
+    isDeliveryDatePast("2026-09-29", fixedNow),
+    false,
+  );
+  ctx.assertEqual(
+    "future date is not past",
+    isDeliveryDatePast("2026-10-02", fixedNow),
+    false,
+  );
+  ctx.assertEqual(
+    "invalid date fail-soft false",
+    isDeliveryDatePast("not-a-date", fixedNow),
+    false,
+  );
+
+  ctx.scenario("Adresse livraison depuis rawOrder.shipping_address (fail-soft)");
+  ctx.assertEqual(
+    "full address with address2",
+    extractShippingAddressLabel({
+      shipping_address: {
+        address1: "12 rue Example",
+        address2: "Apt 3",
+        city: "Paris",
+        zip: "75001",
+      },
+    }),
+    "12 rue Example, Apt 3, 75001 Paris",
+  );
+  ctx.assertEqual(
+    "address without address2",
+    extractShippingAddressLabel({
+      shipping_address: {
+        address1: "12 rue Example",
+        city: "Paris",
+        zip: "75001",
+      },
+    }),
+    "12 rue Example, 75001 Paris",
+  );
+  ctx.assertEqual(
+    "missing shipping_address → null",
+    extractShippingAddressLabel({ id: 1 }),
+    null,
+  );
+  ctx.assertEqual(
+    "null rawOrder → null",
+    extractShippingAddressLabel(null),
+    null,
+  );
+  ctx.assertEqual(
+    "empty shipping_address → null",
+    extractShippingAddressLabel({ shipping_address: {} }),
+    null,
+  );
+
+  const addressOrders = buildPreparationDayDataFromBoxOrders(
+    [
+      baseOrder({
+        id: "with-address",
+        rawOrder: {
+          shipping_address: {
+            address1: "5 avenue Test",
+            city: "Lyon",
+            zip: "69001",
+          },
+        },
+        selectedMeals: ["Saumon"],
+        shopifyOrderName: "#6101",
+      }),
+      baseOrder({
+        id: "without-address",
+        rawOrder: null,
+        selectedMeals: ["Poulet tikka"],
+        shopifyOrderName: "#6102",
+      }),
+    ],
+    TARGET_DATE,
+  );
+  ctx.assertEqual(
+    "mapped shippingAddress from rawOrder",
+    addressOrders.orders.find((order) => order.id === "with-address")
+      ?.shippingAddress,
+    "5 avenue Test, 69001 Lyon",
+  );
+  ctx.assertEqual(
+    "missing rawOrder → shippingAddress null",
+    addressOrders.orders.find((order) => order.id === "without-address")
+      ?.shippingAddress,
+    null,
   );
 
   return finishSuite("07-preparation-backoffice", ctx);
