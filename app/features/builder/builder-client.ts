@@ -214,12 +214,14 @@ export const builderClientScript = `
         typeof option.firstOrderCount === "number" && option.firstOrderCount > 0
           ? Math.floor(option.firstOrderCount)
           : 0;
+      // UI only: never show more reserved places than capacity (e.g. 12 → 10/10).
+      // Real firstOrderCount from the server is left untouched for business logic.
+      var displayCount = Math.min(firstOrderCount, capacity);
       // Manual UNAVAILABLE_BUILDER_DELIVERY_THURSDAYS: present as full gauge
-      // without changing the real firstOrderCount from the server.
-      var displayCount =
-        isUnavailable && firstOrderCount < capacity
-          ? capacity
-          : firstOrderCount;
+      // when the real count is still below capacity.
+      if (isUnavailable && displayCount < capacity) {
+        displayCount = capacity;
+      }
       var fillPercent = Math.min(
         100,
         Math.round((displayCount / capacity) * 100),

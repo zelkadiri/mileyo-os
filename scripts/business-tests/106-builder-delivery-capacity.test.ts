@@ -435,9 +435,50 @@ const runSuite = async () => {
         clientSource.includes("delivery-window-capacity"),
     );
     ctx.assertTrue(
+      "client clamps gauge display to capacity",
+      clientSource.includes("displayCount = Math.min(firstOrderCount, capacity)"),
+    );
+    ctx.assertTrue(
       "client presents manual blocks as full gauge",
       clientSource.includes("displayCount") &&
-        clientSource.includes("isUnavailable && firstOrderCount < capacity"),
+        clientSource.includes("isUnavailable && displayCount < capacity"),
+    );
+    // Pure display helper mirror — does not mutate server firstOrderCount.
+    const displayReservedPlaces = (
+      firstOrderCount: number,
+      capacity: number,
+      unavailable = false,
+    ) => {
+      let displayCount = Math.min(firstOrderCount, capacity);
+      if (unavailable && displayCount < capacity) {
+        displayCount = capacity;
+      }
+      return displayCount;
+    };
+    ctx.assertEqual("UI 9/10 → 9", displayReservedPlaces(9, 10), 9);
+    ctx.assertEqual("UI 10/10 → 10", displayReservedPlaces(10, 10), 10);
+    ctx.assertEqual(
+      "UI 12/10 réel → affiche 10",
+      displayReservedPlaces(12, 10),
+      10,
+    );
+    ctx.assertEqual(
+      "vrai count serveur reste 12 (métier)",
+      resolveBuilderDeliveryWindowCapacityFields({
+        firstOrderCount: 12,
+        manualUnavailable: false,
+      }).firstOrderCount,
+      12,
+    );
+    ctx.assertEqual(
+      "UI 12/10 + unavailable → encore 10",
+      displayReservedPlaces(12, 10, true),
+      10,
+    );
+    ctx.assertEqual(
+      "UI manual 0 + unavailable → 10 (plein)",
+      displayReservedPlaces(0, 10, true),
+      10,
     );
     ctx.assertTrue(
       "client keeps existing COMPLET badge",
