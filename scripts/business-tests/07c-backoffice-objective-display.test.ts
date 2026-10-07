@@ -231,6 +231,11 @@ const runSuite = async () => {
       prepRender.includes('order.objective ?? "unknown"'),
   );
   ctx.assertTrue(
+    "prep detail shows Téléphone from customerPhone",
+    prepRender.includes("Téléphone :") &&
+      prepRender.includes('order.customerPhone ?? "Non renseigné"'),
+  );
+  ctx.assertTrue(
     "orders maps BoxOrder.objective only",
     ordersData.includes("parseSubscriptionObjective(order.objective)") &&
       !ordersData.includes("resolveCurrentSubscriptionObjective"),

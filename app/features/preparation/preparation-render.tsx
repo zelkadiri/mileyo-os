@@ -345,6 +345,10 @@ export default function PreparationPage() {
                                 : ""}
                             </p>
                             <p style={orderMetaStyle}>
+                              Téléphone :{" "}
+                              {order.customerPhone ?? "Non renseigné"}
+                            </p>
+                            <p style={orderMetaStyle}>
                               Adresse :{" "}
                               {order.shippingAddress ?? "Non renseignée"}
                             </p>

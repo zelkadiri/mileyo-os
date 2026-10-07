@@ -1,6 +1,10 @@
 /**
  * Business regression — preparation backoffice aggregation and exports.
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { SUBSCRIPTION_OBJECTIVE } from "../../app/constants/subscriptionObjective";
 import {
   buildBulkPortionGramsByMealTitle,
@@ -18,6 +22,7 @@ import {
   loadBulkPortionGramsByMealTitleFailSoft,
 } from "../../app/features/preparation/preparation-data.server";
 import {
+  extractCustomerPhoneFromRawOrder,
   extractShippingAddressLabel,
   normalizeSelectedMealsForPreparation,
 } from "../../app/features/preparation/preparation-formatters";
@@ -28,10 +33,12 @@ import {
   isDeliveryDatePast,
   parseDeliveryDate,
 } from "../../app/utils/deliveryDate";
-import {
-  createBusinessTestContext,
-  finishSuite,
-} from "./_framework";
+import { createBusinessTestContext, finishSuite } from "./_framework";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(__dirname, "../..");
+const readRepoFile = (relativePath: string) =>
+  readFileSync(join(repoRoot, relativePath), "utf8");
 
 const TARGET_DATE = parseDeliveryDate("2026-07-16")!;
 
@@ -572,14 +579,95 @@ const runSuite = async () => {
   );
 
   ctx.scenario("Export commandes CSV correct");
-  const deliveryCsv = buildPreparationDeliveryOrdersCsvContent(data);
+  ctx.assertTrue(
+    "headers include customerEmail",
+    PREPARATION_DELIVERY_ORDERS_CSV_HEADERS.includes("customerEmail"),
+  );
+  ctx.assertTrue(
+    "headers include customerPhone",
+    PREPARATION_DELIVERY_ORDERS_CSV_HEADERS.includes("customerPhone"),
+  );
+  ctx.assertTrue(
+    "headers include shippingAddress",
+    PREPARATION_DELIVERY_ORDERS_CSV_HEADERS.includes("shippingAddress"),
+  );
+  ctx.assertTrue(
+    "headers include objective",
+    PREPARATION_DELIVERY_ORDERS_CSV_HEADERS.includes("objective"),
+  );
+
+  const richDeliveryData = buildPreparationDayDataFromBoxOrders(
+    [
+      baseOrder({
+        customerEmail: "livraison@example.com",
+        id: "csv-rich",
+        objective: SUBSCRIPTION_OBJECTIVE.BULK,
+        rawOrder: {
+          shipping_address: {
+            address1: "10 rue CSV",
+            city: "Nantes",
+            phone: "0611223344",
+            zip: "44000",
+          },
+        },
+        selectedMeals: ["Poulet tikka"],
+        shopifyOrderName: "#7201",
+      }),
+      baseOrder({
+        customerEmail: "sans-objectif@example.com",
+        id: "csv-unknown-objective",
+        objective: null,
+        rawOrder: {
+          phone: "0699887766",
+          shipping_address: {
+            address1: "2 place Test",
+            city: "Lille",
+            zip: "59000",
+          },
+        },
+        selectedMeals: ["Saumon"],
+        shopifyOrderName: "#7202",
+      }),
+    ],
+    TARGET_DATE,
+  );
+  const deliveryCsv = buildPreparationDeliveryOrdersCsvContent(richDeliveryData);
   ctx.assertTrue(
     "delivery CSV has headers",
     deliveryCsv.startsWith(
-      PREPARATION_DELIVERY_ORDERS_CSV_HEADERS.map((header) => `"${header}"`).join(","),
+      PREPARATION_DELIVERY_ORDERS_CSV_HEADERS.map((header) => `"${header}"`).join(
+        ",",
+      ),
     ),
   );
-  ctx.assertTrue("delivery CSV includes order name", deliveryCsv.includes("#1001"));
+  ctx.assertTrue("delivery CSV includes order name", deliveryCsv.includes("#7201"));
+  ctx.assertTrue(
+    "delivery CSV includes email",
+    deliveryCsv.includes("livraison@example.com"),
+  );
+  ctx.assertTrue(
+    "delivery CSV includes phone",
+    deliveryCsv.includes("0611223344"),
+  );
+  ctx.assertTrue(
+    "delivery CSV includes shipping address",
+    deliveryCsv.includes("10 rue CSV, 44000 Nantes"),
+  );
+  ctx.assertTrue(
+    "delivery CSV includes objective label",
+    deliveryCsv.includes("Prise de masse"),
+  );
+  ctx.assertTrue(
+    "delivery CSV does not use technical objective code as cell",
+    !deliveryCsv
+      .split("\n")
+      .slice(1)
+      .some((row) => row.split(",").includes('"bulk"')),
+  );
+  ctx.assertTrue(
+    "delivery CSV null objective → Objectif inconnu",
+    deliveryCsv.includes(PREPARATION_UNKNOWN_OBJECTIVE_LABEL),
+  );
 
   ctx.scenario("Projection portail n'altère pas l'historique préparation");
   ctx.assertEqual(
@@ -697,6 +785,116 @@ const runSuite = async () => {
     addressOrders.orders.find((order) => order.id === "without-address")
       ?.shippingAddress,
     null,
+  );
+
+  ctx.scenario("Téléphone depuis rawOrder (priorités fail-soft)");
+  ctx.assertEqual(
+    "1. shipping_address.phone",
+    extractCustomerPhoneFromRawOrder({
+      shipping_address: { phone: "0600000001" },
+    }),
+    "0600000001",
+  );
+  ctx.assertEqual(
+    "2. order.phone when shipping missing",
+    extractCustomerPhoneFromRawOrder({ phone: "0600000002" }),
+    "0600000002",
+  );
+  ctx.assertEqual(
+    "3. customer.phone when order.phone missing",
+    extractCustomerPhoneFromRawOrder({
+      customer: { phone: "0600000003" },
+    }),
+    "0600000003",
+  );
+  ctx.assertEqual(
+    "4. billing_address.phone only",
+    extractCustomerPhoneFromRawOrder({
+      billing_address: { phone: "0600000004" },
+    }),
+    "0600000004",
+  );
+  ctx.assertEqual(
+    "5. shipping wins over other phones",
+    extractCustomerPhoneFromRawOrder({
+      billing_address: { phone: "0699999999" },
+      customer: { phone: "0688888888" },
+      phone: "0677777777",
+      shipping_address: { phone: "0600000005" },
+    }),
+    "0600000005",
+  );
+  ctx.assertEqual(
+    "6. empty/whitespace skipped → next fallback",
+    extractCustomerPhoneFromRawOrder({
+      customer: { phone: "0600000006" },
+      phone: "   ",
+      shipping_address: { phone: "" },
+    }),
+    "0600000006",
+  );
+  ctx.assertEqual(
+    "7. null rawOrder → null",
+    extractCustomerPhoneFromRawOrder(null),
+    null,
+  );
+  ctx.assertEqual(
+    "8. invalid rawOrder → null",
+    extractCustomerPhoneFromRawOrder(["not-an-order"]),
+    null,
+  );
+
+  ctx.scenario("Mapping customerPhone depuis rawOrder");
+  const phoneMapped = buildPreparationDayDataFromBoxOrders(
+    [
+      baseOrder({
+        id: "with-phone",
+        rawOrder: {
+          shipping_address: {
+            address1: "1 rue Phone",
+            city: "Paris",
+            phone: "0612345678",
+            zip: "75002",
+          },
+        },
+        selectedMeals: ["Saumon"],
+        shopifyOrderName: "#6301",
+      }),
+      baseOrder({
+        id: "without-phone",
+        rawOrder: {
+          shipping_address: {
+            address1: "2 rue Phone",
+            city: "Paris",
+            zip: "75003",
+          },
+        },
+        selectedMeals: ["Poulet tikka"],
+        shopifyOrderName: "#6302",
+      }),
+    ],
+    TARGET_DATE,
+  );
+  ctx.assertEqual(
+    "mapped customerPhone from shipping_address",
+    phoneMapped.orders.find((order) => order.id === "with-phone")?.customerPhone,
+    "0612345678",
+  );
+  ctx.assertEqual(
+    "missing phone → customerPhone null",
+    phoneMapped.orders.find((order) => order.id === "without-phone")
+      ?.customerPhone,
+    null,
+  );
+
+  ctx.scenario("UI Préparation affiche customerPhone");
+  const prepRender = readRepoFile(
+    "app/features/preparation/preparation-render.tsx",
+  );
+  ctx.assertTrue(
+    "prep card renders Téléphone from customerPhone",
+    prepRender.includes("Téléphone :") &&
+      prepRender.includes('order.customerPhone ?? "Non renseigné"'),
   );
 
   return finishSuite("07-preparation-backoffice", ctx);

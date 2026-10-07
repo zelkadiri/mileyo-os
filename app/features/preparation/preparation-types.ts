@@ -38,6 +38,8 @@ export type PreparationOrder = {
   orderName: string | null;
   customerName: string | null;
   customerEmail: string | null;
+  /** From rawOrder phone fields (Shopify) — fail-soft; null when missing/unusable. */
+  customerPhone: string | null;
   orderType: string | null;
   boxTitle: string | null;
   mealsCount: number | null;

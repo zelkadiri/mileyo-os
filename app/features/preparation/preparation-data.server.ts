@@ -19,6 +19,7 @@ import {
   enrichMealTotalsWithBulkPortionGrams,
 } from "./preparation-bulk-portion";
 import {
+  extractCustomerPhoneFromRawOrder,
   extractShippingAddressLabel,
   isKitchenPreparationBoxOrder,
   isSubscriptionPreparationOrder,
@@ -134,6 +135,7 @@ export const mapBoxOrderToPreparationOrder = (
   createdAt: order.createdAt,
   customerEmail: order.customerEmail,
   customerName: order.customerName,
+  customerPhone: extractCustomerPhoneFromRawOrder(order.rawOrder),
   deliveryRescheduleReason: order.deliveryRescheduleReason,
   desiredDeliveryDate: order.desiredDeliveryDate,
   id: order.id,
