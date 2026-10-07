@@ -262,7 +262,7 @@ const runSuite = async () => {
       mealsCount: 3,
       portalUrl,
       selectedMeals: ["Poulet curry", "Saumon teriyaki", "Lasagnes"],
-      supportHref: "mailto:contact@mileyo.fr",
+      supportHref: "mailto:support@mileyo.fr",
       supportLabel: "Nous contacter",
     }),
   ];

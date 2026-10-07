@@ -168,7 +168,7 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "mailto autorisé",
-    isAllowedSupportChatUrl("mailto:contact@mileyo.fr"),
+    isAllowedSupportChatUrl("mailto:support@mileyo.fr"),
   );
   ctx.assertFalse(
     "javascript refusé",

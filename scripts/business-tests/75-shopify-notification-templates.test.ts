@@ -328,7 +328,7 @@ const runSuite = async () => {
     mileyo.includes("letter-spacing: -0.02em") &&
       !/font-family:\s*Georgia/i.test(mileyo),
   );
-  ctx.assertTrue("contact@mileyo.fr", mileyo.includes("contact@mileyo.fr"));
+  ctx.assertTrue("support@mileyo.fr", mileyo.includes("support@mileyo.fr"));
   ctx.assertTrue("CTA français portal", mileyo.includes("Accéder à mon espace Mileyo"));
   ctx.assertTrue(
     "CTA portal path",
@@ -517,8 +517,8 @@ const runSuite = async () => {
     original.includes(MILEYO_EMAIL_LOGO_URL),
   );
   ctx.assertFalse(
-    "contact@mileyo.fr absent de l’original",
-    original.includes("contact@mileyo.fr"),
+    "support@mileyo.fr absent de l’original",
+    original.includes("support@mileyo.fr"),
   );
   ctx.assertFalse(
     "Token cream Mileyo absent de l’original",
@@ -1278,8 +1278,8 @@ const runSuite = async () => {
     "Delivered bloc aide colis",
     deliveredMileyo.includes("mileyo-help") &&
       deliveredMileyo.includes("Vous ne trouvez pas votre colis") &&
-      deliveredMileyo.includes("mailto:contact@mileyo.fr") &&
-      deliveredMileyo.includes("contact@mileyo.fr"),
+      deliveredMileyo.includes("mailto:support@mileyo.fr") &&
+      deliveredMileyo.includes("support@mileyo.fr"),
   );
   ctx.assertFalse(
     "Delivered Mileyo sans Afficher votre commande",
@@ -1327,9 +1327,9 @@ const runSuite = async () => {
       deliveredMileyo.includes("discount_allocations"),
   );
   ctx.assertTrue(
-    "Delivered footer contact@mileyo.fr",
+    "Delivered footer support@mileyo.fr",
     deliveredMileyo.includes("Une question") &&
-      deliveredMileyo.includes("mailto:contact@mileyo.fr"),
+      deliveredMileyo.includes("mailto:support@mileyo.fr"),
   );
   ctx.assertFalse(
     "Logo CDN absent original delivered",
@@ -1645,10 +1645,10 @@ const runSuite = async () => {
       cancelledOriginal.includes("<span>Rembourser</span>"),
   );
   ctx.assertTrue(
-    "Order cancelled footer contact@mileyo.fr",
+    "Order cancelled footer support@mileyo.fr",
     cancelledMileyo.includes("Une question sur cette annulation") &&
-      cancelledMileyo.includes("mailto:contact@mileyo.fr") &&
-      cancelledMileyo.includes("contact@mileyo.fr"),
+      cancelledMileyo.includes("mailto:support@mileyo.fr") &&
+      cancelledMileyo.includes("support@mileyo.fr"),
   );
   ctx.assertFalse(
     "Logo CDN absent original order-cancelled",
@@ -1906,10 +1906,10 @@ const runSuite = async () => {
     refundMileyo.includes("Gérer mon abonnement"),
   );
   ctx.assertTrue(
-    "Refund footer contact@mileyo.fr",
+    "Refund footer support@mileyo.fr",
     refundMileyo.includes("Une question concernant votre remboursement") &&
-      refundMileyo.includes("mailto:contact@mileyo.fr") &&
-      refundMileyo.includes("contact@mileyo.fr"),
+      refundMileyo.includes("mailto:support@mileyo.fr") &&
+      refundMileyo.includes("support@mileyo.fr"),
   );
   ctx.assertFalse(
     "Logo CDN absent original refund",
@@ -2162,10 +2162,10 @@ const runSuite = async () => {
     paymentMileyo.includes("Gérer mon abonnement"),
   );
   ctx.assertTrue(
-    "Payment method update footer contact@mileyo.fr",
+    "Payment method update footer support@mileyo.fr",
     paymentMileyo.includes("Une question") &&
-      paymentMileyo.includes("mailto:contact@mileyo.fr") &&
-      paymentMileyo.includes("contact@mileyo.fr"),
+      paymentMileyo.includes("mailto:support@mileyo.fr") &&
+      paymentMileyo.includes("support@mileyo.fr"),
   );
   ctx.assertTrue(
     "Payment method update marqueur marketplace footer",

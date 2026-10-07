@@ -138,7 +138,7 @@ const runSuite = async () => {
   ctx.assertTrue(
     "helper support — URL configurable (AppSettings + env + fallback)",
     merchantSupportHelper.includes("MILEYO_SUPPORT_CONTACT_URL") &&
-      merchantSupportHelper.includes("mailto:contact@mileyo.fr") &&
+      merchantSupportHelper.includes("mailto:support@mileyo.fr") &&
       merchantSupportHelper.includes("supportChatUrl"),
   );
   ctx.assertTrue(

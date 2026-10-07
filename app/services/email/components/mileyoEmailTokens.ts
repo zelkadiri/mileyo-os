@@ -11,7 +11,7 @@ import type * as React from "react";
  */
 
 export const MILEYO_EMAIL_SUPPORT_FALLBACK_HREF =
-  "mailto:contact@mileyo.fr" as const;
+  "mailto:support@mileyo.fr" as const;
 export const MILEYO_EMAIL_SUPPORT_LABEL = "Nous contacter" as const;
 
 /** Official palette (portal/builder). */

@@ -6,7 +6,7 @@ export type MerchantSupportContact = {
   label: string;
 };
 
-export const MERCHANT_SUPPORT_FALLBACK_HREF = "mailto:contact@mileyo.fr";
+export const MERCHANT_SUPPORT_FALLBACK_HREF = "mailto:support@mileyo.fr";
 export const MERCHANT_SUPPORT_LABEL = "Nous contacter";
 
 /** Allowed schemes for support / dietitian chat URLs. */

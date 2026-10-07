@@ -400,7 +400,7 @@ const runSuite = async () => {
   const renderedWithName = await renderEmailTemplate("upcoming-delivery", {
     ...baseRenderProps,
     customerName: "Alice",
-    supportHref: "mailto:contact@mileyo.fr",
+    supportHref: "mailto:support@mileyo.fr",
     supportLabel: "Contactez notre équipe",
   });
   const renderedWithoutName = await renderEmailTemplate("upcoming-delivery", {
