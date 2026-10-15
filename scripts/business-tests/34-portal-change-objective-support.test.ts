@@ -56,6 +56,8 @@ const activeSelection = (): PortalSelection => ({
   mealsCount: 8,
   modificationBlocked: false,
   modificationBlockedReason: null,
+  subscriptionControlBlocked: false,
+  subscriptionControlBlockedReason: null,
   nextBillingDate: "2026-08-27T00:00:00.000Z",
   nextScheduledDeliveryDate: "2026-08-27",
   objective: SUBSCRIPTION_OBJECTIVE.WEIGHT_LOSS,

@@ -91,6 +91,7 @@ export const getPortalModificationBlockReason = (
     status: string;
   } | null,
   now: Date = new Date(),
+  actionKind: PortalModificationActionKind = "modification",
 ): PortalModificationBlockReason | null => {
   const billingBlockReason = getSubscriptionModificationBlockReason(
     selection,
@@ -99,6 +100,11 @@ export const getPortalModificationBlockReason = (
 
   if (billingBlockReason) {
     return billingBlockReason;
+  }
+
+  // Lifecycle controls (pause/resume) must not inherit delivery-cutoff locks.
+  if (actionKind === "subscription_control") {
+    return null;
   }
 
   return getDeliveryCutoffBlockReason(selection, now);

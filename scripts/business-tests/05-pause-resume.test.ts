@@ -3,10 +3,14 @@
  */
 import { SUBSCRIPTION_SELECTION_STATUS } from "../../app/constants/subscriptionMealSelection";
 import { DELIVERY_TIMEZONE } from "../../app/constants/deliverySchedule";
+import { RECOVERY_STATUS } from "../../app/constants/subscriptionPaymentRecovery";
 import {
   getPortalModificationBlockReason,
 } from "../../app/services/subscriptionModificationBlock.server";
-import { calculateNextBillingDateFromPolicy } from "../../app/services/subscriptionBillingWorker.server";
+import {
+  calculateNextBillingDateFromPolicy,
+  RESUME_LOCK_STATUS,
+} from "../../app/services/subscriptionBillingWorker.server";
 import { resolveResumeDeliverySchedule } from "../../app/utils/deliveryDate";
 import {
   createBusinessTestContext,
@@ -98,19 +102,113 @@ const runSuite = () => {
       activeSelection(),
       null,
       mondayBeforeCutoff,
+      "subscription_control",
     ),
   );
 
-  ctx.scenario("Pause après cutoff — refusée");
+  ctx.scenario("Après cutoff — plats bloqués, pause/reprise autorisées");
   ctx.given("cutoff livraison jeudi 23 déjà passé");
   ctx.assertEqual(
-    "pause blocked after cutoff",
+    "meal change blocked after cutoff",
     getPortalModificationBlockReason(
       activeSelection(),
       null,
       tuesdayAfterCutoff,
+      "modification",
     ),
     "cutoff_passed",
+  );
+  ctx.assertNull(
+    "pause allowed after cutoff",
+    getPortalModificationBlockReason(
+      activeSelection(),
+      null,
+      tuesdayAfterCutoff,
+      "subscription_control",
+    ),
+  );
+  ctx.assertNull(
+    "resume allowed after cutoff",
+    getPortalModificationBlockReason(
+      {
+        ...activeSelection(),
+        active: false,
+        status: SUBSCRIPTION_SELECTION_STATUS.PAUSED,
+      },
+      null,
+      tuesdayAfterCutoff,
+      "subscription_control",
+    ),
+  );
+  ctx.assertEqual(
+    "cutoff alone still blocks modification DTO path",
+    getPortalModificationBlockReason(
+      activeSelection(),
+      null,
+      tuesdayAfterCutoff,
+      "modification",
+    ) !== null &&
+      getPortalModificationBlockReason(
+        activeSelection(),
+        null,
+        tuesdayAfterCutoff,
+        "subscription_control",
+      ) === null,
+    true,
+  );
+
+  ctx.scenario("Locks transactionnels — pause toujours bloquée");
+  ctx.given("cutoff passé + état billing/recovery/resume/missing contract");
+  ctx.assertEqual(
+    "pause blocked by billing_processing after cutoff",
+    getPortalModificationBlockReason(
+      {
+        ...activeSelection(),
+        lastBillingAttemptAt: new Date(),
+        lastBillingAttemptStatus: "submitted",
+      },
+      null,
+      tuesdayAfterCutoff,
+      "subscription_control",
+    ),
+    "billing_processing",
+  );
+  ctx.assertEqual(
+    "pause blocked by recovery_processing after cutoff",
+    getPortalModificationBlockReason(
+      activeSelection(),
+      { status: RECOVERY_STATUS.PROCESSING },
+      tuesdayAfterCutoff,
+      "subscription_control",
+    ),
+    "recovery_processing",
+  );
+  ctx.assertEqual(
+    "pause blocked by resume_processing",
+    getPortalModificationBlockReason(
+      {
+        ...activeSelection(),
+        resumeAttemptOrderId: null,
+        resumeAttemptStatus: RESUME_LOCK_STATUS.PROCESSING,
+      },
+      null,
+      tuesdayAfterCutoff,
+      "subscription_control",
+    ),
+    "resume_processing",
+  );
+  ctx.assertEqual(
+    "pause blocked by missing_contract",
+    getPortalModificationBlockReason(
+      {
+        ...activeSelection(),
+        subscriptionContractId: null,
+      },
+      null,
+      tuesdayAfterCutoff,
+      "subscription_control",
+    ),
+    "missing_contract",
   );
 
   ctx.scenario("Reprise simple avant cutoff");
@@ -216,6 +314,7 @@ const runSuite = () => {
       },
       null,
       mondayBeforeCutoff,
+      "subscription_control",
     ),
   );
 

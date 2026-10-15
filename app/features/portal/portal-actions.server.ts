@@ -307,6 +307,7 @@ const getPortalModificationBlockResponse = async ({
     selection,
     recoveryRecord,
     getCutoffNow(),
+    actionKind,
   );
 
   if (!blockReason) {

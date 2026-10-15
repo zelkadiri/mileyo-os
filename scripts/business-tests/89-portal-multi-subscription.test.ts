@@ -86,6 +86,8 @@ const baseSelection = (
   mealsCount: 10,
   modificationBlocked: false,
   modificationBlockedReason: null,
+  subscriptionControlBlocked: false,
+  subscriptionControlBlockedReason: null,
   nextBillingDate: "2026-08-29T22:05:00.000Z",
   nextScheduledDeliveryDate: "2026-09-03",
   objective: SUBSCRIPTION_OBJECTIVE.BULK,

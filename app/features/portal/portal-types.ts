@@ -125,6 +125,9 @@ export type PortalSelection = {
   boxChangeBlockedReason: string | null;
   modificationBlocked: boolean;
   modificationBlockedReason: string | null;
+  /** Transactional locks only — never includes delivery cutoff. */
+  subscriptionControlBlocked: boolean;
+  subscriptionControlBlockedReason: string | null;
   deliveryAddress: PortalDeliveryAddressState;
   deliveryCutoff: PortalDeliveryCutoffStatus;
   boxSubscriptionPrice: string | null;

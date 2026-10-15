@@ -228,19 +228,91 @@ function main() {
   );
 
   expectPortalBlock(
-    "pause blocked after cutoff",
-    getPortalModificationBlockReason(baseSelection(), null, tuesdayMidnightParis),
+    "meal/box modification blocked after cutoff",
+    getPortalModificationBlockReason(
+      baseSelection(),
+      null,
+      tuesdayMidnightParis,
+      "modification",
+    ),
     "cutoff_passed",
   );
 
   expectPortalBlock(
-    "resume blocked after cutoff",
+    "pause allowed after cutoff",
+    getPortalModificationBlockReason(
+      baseSelection(),
+      null,
+      tuesdayMidnightParis,
+      "subscription_control",
+    ),
+    null,
+  );
+
+  expectPortalBlock(
+    "resume allowed after cutoff",
     getPortalModificationBlockReason(
       { ...baseSelection(), status: "paused", active: false },
       null,
       tuesdayMidnightParis,
+      "subscription_control",
     ),
-    "cutoff_passed",
+    null,
+  );
+
+  expectPortalBlock(
+    "pause blocked by billing_processing after cutoff",
+    getPortalModificationBlockReason(
+      {
+        ...baseSelection(),
+        lastBillingAttemptAt: new Date(),
+        lastBillingAttemptStatus: "submitted",
+      },
+      null,
+      tuesdayMidnightParis,
+      "subscription_control",
+    ),
+    "billing_processing",
+  );
+
+  expectPortalBlock(
+    "pause blocked by recovery_processing after cutoff",
+    getPortalModificationBlockReason(
+      baseSelection(),
+      { status: RECOVERY_STATUS.PROCESSING },
+      tuesdayMidnightParis,
+      "subscription_control",
+    ),
+    "recovery_processing",
+  );
+
+  expectPortalBlock(
+    "pause blocked by resume_processing",
+    getPortalModificationBlockReason(
+      {
+        ...baseSelection(),
+        resumeAttemptOrderId: null,
+        resumeAttemptStatus: RESUME_LOCK_STATUS.PROCESSING,
+      },
+      null,
+      tuesdayMidnightParis,
+      "subscription_control",
+    ),
+    "resume_processing",
+  );
+
+  expectPortalBlock(
+    "pause blocked by missing_contract",
+    getPortalModificationBlockReason(
+      {
+        ...baseSelection(),
+        subscriptionContractId: null,
+      },
+      null,
+      tuesdayMidnightParis,
+      "subscription_control",
+    ),
+    "missing_contract",
   );
 
   expectPortalBlock(

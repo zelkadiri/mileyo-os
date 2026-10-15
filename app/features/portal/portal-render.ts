@@ -569,6 +569,7 @@ const renderNextBoxCard = ({
   const isPaused = portalState === "paused";
   const isResumeProcessing = portalState === "resume_processing";
   const isModificationBlocked = selection.modificationBlocked;
+  const isSubscriptionControlBlocked = selection.subscriptionControlBlocked;
   const modificationBlockedReason =
     selection.modificationBlockedReason ?? selection.boxChangeBlockedReason;
   const pickerBoxes = selection.objective
@@ -591,7 +592,7 @@ const renderNextBoxCard = ({
       : "Votre abonnement sera repris sans prélèvement immédiat.";
 
   const mealEditorOpenByDefault =
-    isPaused && !isResumeProcessing && !isModificationBlocked;
+    isPaused && !isResumeProcessing && !isSubscriptionControlBlocked;
   const mealsForHero = selection.objective
     ? meals.filter((meal) => meal.objective === selection.objective)
     : meals;
@@ -709,7 +710,9 @@ const renderNextBoxCard = ({
         </div>
         <div class="meal-grid meal-editor-grid"></div>
         ${
-          isPaused && !selection.resumeBlockedMessage && !isModificationBlocked
+          isPaused &&
+          !selection.resumeBlockedMessage &&
+          !isSubscriptionControlBlocked
             ? `<p class="resume-note">${escapeHtml(resumeNote)}</p>`
             : ""
         }
@@ -727,7 +730,7 @@ const renderNextBoxCard = ({
             : ""
         }
         ${
-          isPaused && !isModificationBlocked
+          isPaused && !isSubscriptionControlBlocked
             ? `<div class="meal-editor-actions">
           ${
             !selection.resumeBlockedMessage
@@ -829,7 +832,7 @@ const renderNextBoxCard = ({
               : ""
         }
         ${
-          isActive && !isModificationBlocked
+          isActive && !isSubscriptionControlBlocked
             ? `<button class="settings-row pause-button" type="button">
           <span class="settings-row-copy">
             <span class="settings-row-label">Mettre mon abonnement en pause</span>

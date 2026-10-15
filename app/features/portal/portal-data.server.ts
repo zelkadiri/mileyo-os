@@ -459,6 +459,13 @@ export const loadPortalData = async ({
           reconciled,
           recoveryRecord,
           cutoffNow,
+          "modification",
+        );
+        const subscriptionControlBlockReason = getPortalModificationBlockReason(
+          reconciled,
+          recoveryRecord,
+          cutoffNow,
+          "subscription_control",
         );
         const currentBox = findBuilderBoxByVariantId(catalog, currentVariantId);
         const objective = currentBox?.objective ?? null;
@@ -569,7 +576,17 @@ export const loadPortalData = async ({
             boxChangeBlockedReason,
             modificationBlocked: modificationBlockReason !== null,
             modificationBlockedReason: modificationBlockReason
-              ? getPortalModificationBlockMessage(modificationBlockReason)
+              ? getPortalModificationBlockMessage(
+                  modificationBlockReason,
+                  "modification",
+                )
+              : null,
+            subscriptionControlBlocked: subscriptionControlBlockReason !== null,
+            subscriptionControlBlockedReason: subscriptionControlBlockReason
+              ? getPortalModificationBlockMessage(
+                  subscriptionControlBlockReason,
+                  "subscription_control",
+                )
               : null,
             deliveryAddress,
             deliveryCutoff: (() => {

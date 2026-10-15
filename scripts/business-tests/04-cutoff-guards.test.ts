@@ -127,25 +127,63 @@ const runSuite = () => {
   ctx.given("livraison jeudi 16 juillet, lundi 13 juillet 20h Paris");
   ctx.assertNull(
     "meal change allowed before cutoff",
-    getPortalModificationBlockReason(baseSelection(), null, mondayBeforeCutoff),
+    getPortalModificationBlockReason(
+      baseSelection(),
+      null,
+      mondayBeforeCutoff,
+      "modification",
+    ),
   );
   ctx.assertNull(
     "pause allowed before cutoff",
-    getPortalModificationBlockReason(baseSelection(), null, mondayBeforeCutoff),
+    getPortalModificationBlockReason(
+      baseSelection(),
+      null,
+      mondayBeforeCutoff,
+      "subscription_control",
+    ),
   );
 
-  ctx.scenario("Après cutoff — modifications bloquées");
+  ctx.scenario("Après cutoff — modifications bloquées, pause autorisée");
   ctx.given("cutoff lundi 13 juillet 23h59 passé");
   ctx.when("on tente une modification mardi 00h00");
   ctx.assertEqual(
     "meal change blocked after cutoff",
-    getPortalModificationBlockReason(baseSelection(), null, tuesdayAfterCutoff),
+    getPortalModificationBlockReason(
+      baseSelection(),
+      null,
+      tuesdayAfterCutoff,
+      "modification",
+    ),
     "cutoff_passed",
   );
   ctx.assertEqual(
-    "pause blocked after cutoff",
-    getPortalModificationBlockReason(baseSelection(), null, tuesdayAfterCutoff),
+    "box change blocked after cutoff",
+    getPortalModificationBlockReason(
+      baseSelection(),
+      null,
+      tuesdayAfterCutoff,
+      "modification",
+    ),
     "cutoff_passed",
+  );
+  ctx.assertNull(
+    "pause allowed after cutoff",
+    getPortalModificationBlockReason(
+      baseSelection(),
+      null,
+      tuesdayAfterCutoff,
+      "subscription_control",
+    ),
+  );
+  ctx.assertNull(
+    "resume allowed after cutoff",
+    getPortalModificationBlockReason(
+      { ...baseSelection(), active: false, status: "paused" },
+      null,
+      tuesdayAfterCutoff,
+      "subscription_control",
+    ),
   );
 
   ctx.scenario("Livraison vendredi — cutoff lundi, pas mardi");
