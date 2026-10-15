@@ -130,6 +130,7 @@ const BUSINESS_SUITES = [
   "105-public-meals-app-proxy.test.ts",
   "106-builder-delivery-capacity.test.ts",
   "107-preparation-delivery-date-archive.test.ts",
+  "108-portal-pause-shopify-status.test.ts",
 ];
 
 const LEGACY_SUITES = [

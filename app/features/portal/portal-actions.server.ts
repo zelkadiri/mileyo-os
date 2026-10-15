@@ -94,6 +94,7 @@ import {
   syncAndAssertSubscriptionContractActionAllowed,
 } from "../../services/subscriptionContractSync.server";
 import { authenticateMileyoAppProxy } from "../../utils/appProxyAuth.server";
+import { confirmShopifyPauseContract } from "./portal-pause-shopify-confirmation";
 import { renderMessage, renderPortal } from "./portal-render";
 
 type SubscriptionContractStatusResponse = {
@@ -167,8 +168,10 @@ const pauseSubscriptionContract = async (
     return { error: userErrorMessage };
   }
 
-  if (!result?.contract?.id) {
-    return { error: "Shopify n’a pas confirmé la mise en pause." };
+  const confirmation = confirmShopifyPauseContract(result?.contract);
+
+  if ("error" in confirmation) {
+    return { error: confirmation.error };
   }
 
   return { ok: true as const };
