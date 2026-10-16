@@ -170,6 +170,40 @@ const runSuite = () => {
     saturdayAugust29.toISOString(),
   );
 
+  ctx.scenario("schedule_only — NBD stale multi-semaines hors recovery");
+  ctx.given("reprise vendredi 21 août avec ancien samedi 1er août passé");
+  const staleAugust1 = cycleSlot(requireDate("2026-08-01"));
+  const staleMultiWeek = resolveResumeDeliverySchedule({
+    existingNextBillingDate: staleAugust1,
+    mode: "schedule_only",
+    now: fridayAugust21,
+    selection: thursdaySelection(),
+  });
+  ctx.assertEqual(
+    "stale NBD still targets Thursday 27 Aug before its cutoff",
+    staleMultiWeek?.resumeTargetDeliveryDate,
+    "2026-08-27",
+  );
+  ctx.assertEqual(
+    "stale NBD realigns to Saturday 22 Aug that pays target",
+    staleMultiWeek?.alignedNextBillingDate.toISOString(),
+    saturdayAugust22.toISOString(),
+  );
+
+  ctx.scenario("immediate_payment recovery — next billing skips paid box (anti double)");
+  ctx.given("pay_now couvre jeudi 27 → prochain billing samedi 29");
+  ctx.assertEqual(
+    "recovery immediate_payment next cycle is Saturday 29",
+    immediatePayment?.alignedNextBillingDate.toISOString(),
+    saturdayAugust29.toISOString(),
+  );
+  ctx.assertEqual(
+    "recovery immediate_payment is not same-weekend Saturday 22",
+    immediatePayment?.alignedNextBillingDate.toISOString() ===
+      saturdayAugust22.toISOString(),
+    false,
+  );
+
   ctx.scenario("Writers Shopify inchangés");
   ctx.assertEqual(
     "resume helper does not call Shopify nextBillingDate writer",

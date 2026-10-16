@@ -565,8 +565,21 @@ export const loadPortalData = async ({
         const resumeUi = derivePortalResumeUi({
           freshNextBillingDate: freshNextBillingDateForResume,
           localNextBillingDate: reconciled.nextBillingDate,
+          now: cutoffNow,
           recovery: recoveryRecord,
+          selection: {
+            nextScheduledDeliveryDate:
+              effectiveNextScheduledDeliveryDate ??
+              reconciled.nextScheduledDeliveryDate,
+            preferredDeliveryWeekday: reconciled.preferredDeliveryWeekday ?? null,
+          },
         });
+
+        // Paused voluntary resume: never surface a stale past NBD as "next charge".
+        const displayNextBillingDate =
+          reconciled.status === "paused" && !resumeUi.resumeRequiresPayment
+            ? (resumeUi.resumeDisplayNextBillingDate?.toISOString() ?? null)
+            : (reconciled.nextBillingDate?.toISOString() ?? null);
 
         return {
           legacy: null,
@@ -610,7 +623,7 @@ export const loadPortalData = async ({
             mealsCount: reconciled.mealsCount as number,
             objective,
             objectiveLabel: getPortalObjectiveLabel(objective),
-            nextBillingDate: reconciled.nextBillingDate?.toISOString() ?? null,
+            nextBillingDate: displayNextBillingDate,
             nextScheduledDeliveryDate:
               effectiveNextScheduledDeliveryDate ?? null,
             pendingBoxChange,

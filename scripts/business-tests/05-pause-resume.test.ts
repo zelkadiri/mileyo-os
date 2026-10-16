@@ -303,6 +303,34 @@ const runSuite = () => {
     false,
   );
 
+  ctx.scenario("Pause volontaire multi-semaines — NBD stale → schedule_only");
+  ctx.given("reprise mardi 21 juillet après 3 semaines, NBD passé, recovery=null");
+  const staleBilling = parisInstant("2026-06-28", 0, 5);
+  const voluntaryMultiWeek = resolveResumeDeliverySchedule({
+    existingNextBillingDate: staleBilling,
+    mode: "schedule_only",
+    now: tuesdayAfterCutoff,
+    selection: {
+      nextScheduledDeliveryDate: "2026-07-16",
+      preferredDeliveryWeekday: 4,
+    },
+  });
+  ctx.assertEqual(
+    "voluntary multi-week resume skips cutoff-passed delivery",
+    voluntaryMultiWeek?.resumeTargetDeliveryDate,
+    "2026-07-30",
+  );
+  ctx.assertTrue(
+    "voluntary multi-week resume writes a future Saturday",
+    (voluntaryMultiWeek?.alignedNextBillingDate.getTime() ?? 0) >
+      tuesdayAfterCutoff.getTime(),
+  );
+  ctx.assertEqual(
+    "voluntary multi-week next billing is Saturday that pays target delivery",
+    voluntaryMultiWeek?.alignedNextBillingDate.toISOString(),
+    "2026-07-24T22:05:00.000Z",
+  );
+
   ctx.scenario("Pause avec données invalides — fail-safe");
   ctx.given("date livraison invalide");
   ctx.assertNull(

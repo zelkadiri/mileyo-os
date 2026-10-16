@@ -3,7 +3,7 @@
  */
 import {
   derivePortalResumeUi,
-  isSubscriptionBillingDue,
+  isPortalRecoveryOverdue,
 } from "../../app/features/portal/portal-resume.server";
 import {
   formatScheduledDeliveryLabel,
@@ -15,6 +15,7 @@ import {
 import {
   getDeliveryCutoffStatus,
   projectActiveScheduledDeliveryDate,
+  resolveResumeDeliverySchedule,
 } from "../../app/utils/deliveryDate";
 import {
   createBusinessTestContext,
@@ -34,6 +35,11 @@ const activeSelection = () => ({
   resumeAttemptStatus: null as string | null,
   status: "active",
   subscriptionContractId: "gid://shopify/SubscriptionContract/123",
+});
+
+const thursdaySelection = () => ({
+  nextScheduledDeliveryDate: "2026-08-27" as string | null,
+  preferredDeliveryWeekday: 4,
 });
 
 const runSuite = () => {
@@ -123,33 +129,179 @@ const runSuite = () => {
     "cutoff_passed",
   );
 
-  ctx.scenario("Reprise UI — paiement requis si billing dû");
-  ctx.given("nextBillingDate dans le passé");
-  ctx.when("derivePortalResumeUi évalue le mode");
-  const resumeUi = derivePortalResumeUi({
-    freshNextBillingDate: new Date("2026-07-01T00:00:00.000Z"),
-    localNextBillingDate: new Date("2026-07-01T00:00:00.000Z"),
+  ctx.scenario("Reprise UI — pause volontaire + NBD stale ne force pas pay_now");
+  ctx.given("pause 3 semaines, nextBillingDate passée, recovery=null");
+  const stalePast = new Date("2026-07-01T00:00:00.000Z");
+  const voluntaryStale = derivePortalResumeUi({
+    freshNextBillingDate: stalePast,
+    localNextBillingDate: stalePast,
+    now: new Date("2026-08-21T10:00:00.000Z"),
     recovery: null,
+    selection: thursdaySelection(),
   });
-  ctx.assertTrue("resume requires payment when billing due", resumeUi.resumeRequiresPayment);
+  ctx.assertFalse(
+    "voluntary pause with past NBD does not require payment",
+    voluntaryStale.resumeRequiresPayment,
+  );
   ctx.assertTrue(
-    "billing due helper matches resume UI",
-    isSubscriptionBillingDue(
-      new Date("2026-07-01T00:00:00.000Z"),
-      new Date("2026-07-01T00:00:00.000Z"),
-    ),
+    "display next billing is future after schedule resolve",
+    (voluntaryStale.resumeDisplayNextBillingDate?.getTime() ?? 0) >
+      new Date("2026-08-21T10:00:00.000Z").getTime(),
   );
 
-  ctx.scenario("Reprise UI — reprise simple si billing futur");
+  ctx.scenario("Reprise UI — locale past + Shopify future → schedule_only UI");
+  ctx.given("DB stale, Shopify futur, recovery=null");
+  const mixedDates = derivePortalResumeUi({
+    freshNextBillingDate: new Date("2099-01-01T00:00:00.000Z"),
+    localNextBillingDate: stalePast,
+    now: new Date("2026-08-21T10:00:00.000Z"),
+    recovery: null,
+    selection: thursdaySelection(),
+  });
+  ctx.assertFalse(
+    "Shopify future + local past does not require payment",
+    mixedDates.resumeRequiresPayment,
+  );
+
+  ctx.scenario("Reprise UI — Shopify + locale passées hors recovery → pas pay_now");
+  const bothPast = derivePortalResumeUi({
+    freshNextBillingDate: stalePast,
+    localNextBillingDate: stalePast,
+    now: new Date("2026-08-21T10:00:00.000Z"),
+    recovery: null,
+    selection: thursdaySelection(),
+  });
+  ctx.assertFalse(
+    "both past dates without recovery do not require payment",
+    bothPast.resumeRequiresPayment,
+  );
+
+  ctx.scenario("Reprise UI — recovery overdue + NBD future → pay_now");
+  ctx.given("failureCount > 0, nextBillingDate future");
+  const recoveryFuture = derivePortalResumeUi({
+    freshNextBillingDate: new Date("2099-01-01T00:00:00.000Z"),
+    localNextBillingDate: new Date("2099-01-01T00:00:00.000Z"),
+    recovery: { failureCount: 1, status: "retry_scheduled" },
+    selection: thursdaySelection(),
+  });
+  ctx.assertTrue(
+    "recovery overdue requires payment even with future NBD",
+    recoveryFuture.resumeRequiresPayment,
+  );
+  ctx.assertTrue(
+    "recovery overdue helper agrees",
+    isPortalRecoveryOverdue({ failureCount: 1, status: "retry_scheduled" }),
+  );
+
+  ctx.scenario("Reprise UI — recovery overdue + NBD passée → pay_now");
+  const recoveryPast = derivePortalResumeUi({
+    freshNextBillingDate: stalePast,
+    localNextBillingDate: stalePast,
+    recovery: { failureCount: 2, status: "final_failed" },
+    selection: thursdaySelection(),
+  });
+  ctx.assertTrue(
+    "recovery overdue requires payment with past NBD",
+    recoveryPast.resumeRequiresPayment,
+  );
+
+  ctx.scenario("Reprise UI — reprise simple si billing futur hors recovery");
   ctx.given("nextBillingDate dans le futur");
   const simpleResume = derivePortalResumeUi({
     freshNextBillingDate: new Date("2099-01-01T00:00:00.000Z"),
     localNextBillingDate: new Date("2099-01-01T00:00:00.000Z"),
     recovery: null,
+    selection: thursdaySelection(),
   });
   ctx.assertFalse(
     "resume does not require payment when billing future",
     simpleResume.resumeRequiresPayment,
+  );
+
+  ctx.scenario("Reprise schedule — vendredi NBD samedi lendemain conservé");
+  ctx.given("vendredi 21 août, livraison 27, NBD samedi 22");
+  const fridayNow = new Date("2026-08-21T08:00:00.000Z");
+  const saturdayBilling = new Date("2026-08-21T22:05:00.000Z");
+  const fridayResume = resolveResumeDeliverySchedule({
+    existingNextBillingDate: saturdayBilling,
+    mode: "schedule_only",
+    now: fridayNow,
+    selection: thursdaySelection(),
+  });
+  const fridayUi = derivePortalResumeUi({
+    freshNextBillingDate: saturdayBilling,
+    localNextBillingDate: saturdayBilling,
+    now: fridayNow,
+    recovery: null,
+    selection: thursdaySelection(),
+  });
+  ctx.assertFalse("friday future Saturday is schedule_only UI", fridayUi.resumeRequiresPayment);
+  ctx.assertEqual(
+    "friday keeps Saturday 22 billing",
+    fridayResume?.alignedNextBillingDate.toISOString(),
+    saturdayBilling.toISOString(),
+  );
+
+  ctx.scenario("Reprise schedule — mardi après cutoff + NBD stale");
+  ctx.given("mardi 25 août après cutoff lundi 24, NBD passé");
+  const tuesdayAfterCutoff = new Date("2026-08-25T10:00:00.000Z");
+  const afterCutoff = resolveResumeDeliverySchedule({
+    existingNextBillingDate: stalePast,
+    mode: "schedule_only",
+    now: tuesdayAfterCutoff,
+    selection: thursdaySelection(),
+  });
+  const afterCutoffUi = derivePortalResumeUi({
+    freshNextBillingDate: stalePast,
+    localNextBillingDate: stalePast,
+    now: tuesdayAfterCutoff,
+    recovery: null,
+    selection: thursdaySelection(),
+  });
+  ctx.assertFalse("after cutoff voluntary is not pay_now", afterCutoffUi.resumeRequiresPayment);
+  ctx.assertEqual(
+    "after cutoff skips to next Thursday",
+    afterCutoff?.resumeTargetDeliveryDate,
+    "2026-09-03",
+  );
+  ctx.assertTrue(
+    "after cutoff billing stays in the future",
+    (afterCutoff?.alignedNextBillingDate.getTime() ?? 0) >
+      tuesdayAfterCutoff.getTime(),
+  );
+
+  ctx.scenario("Reprise schedule — samedi avant/après 00:05 hors recovery");
+  const saturdayBefore = new Date("2026-08-21T22:00:00.000Z");
+  const saturdayAfter = new Date("2026-08-21T22:10:00.000Z");
+  const beforeUi = derivePortalResumeUi({
+    freshNextBillingDate: saturdayBilling,
+    localNextBillingDate: saturdayBilling,
+    now: saturdayBefore,
+    recovery: null,
+    selection: thursdaySelection(),
+  });
+  const afterUi = derivePortalResumeUi({
+    freshNextBillingDate: saturdayBilling,
+    localNextBillingDate: saturdayBilling,
+    now: saturdayAfter,
+    recovery: null,
+    selection: thursdaySelection(),
+  });
+  ctx.assertFalse("Saturday before 00:05 is not pay_now", beforeUi.resumeRequiresPayment);
+  ctx.assertFalse(
+    "Saturday after 00:05 voluntary pause is not pay_now solely because slot passed",
+    afterUi.resumeRequiresPayment,
+  );
+  const afterSchedule = resolveResumeDeliverySchedule({
+    existingNextBillingDate: saturdayBilling,
+    mode: "schedule_only",
+    now: saturdayAfter,
+    selection: thursdaySelection(),
+  });
+  ctx.assertTrue(
+    "Saturday after 00:05 realigns to a future billing slot",
+    (afterSchedule?.alignedNextBillingDate.getTime() ?? 0) >
+      saturdayAfter.getTime(),
   );
 
   return finishSuite("06-portal-state", ctx);
