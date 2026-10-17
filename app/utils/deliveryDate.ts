@@ -78,6 +78,32 @@ export const isUnavailableBuilderDeliveryThursday = (
   );
 
 /**
+ * Manual first-order places already occupied for a Thursday (e.g. off-Shopify
+ * shipments). Added once to the DB first-order count for capacity decisions.
+ * Separate from {@link UNAVAILABLE_BUILDER_DELIVERY_THURSDAYS} (hard block).
+ * Keys are business Thursdays (`scheduledDeliveryDate` / `thursdayDate`).
+ */
+export const BUILDER_DELIVERY_MANUAL_FIRST_ORDER_COUNTS: Readonly<
+  Record<string, number>
+> = {
+  "2026-10-22": 2,
+  "2026-10-29": 1,
+};
+
+export const getBuilderDeliveryManualFirstOrderCount = (
+  thursdayDate: string | null | undefined,
+): number => {
+  if (typeof thursdayDate !== "string") {
+    return 0;
+  }
+  const value = BUILDER_DELIVERY_MANUAL_FIRST_ORDER_COUNTS[thursdayDate];
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return Math.floor(value);
+};
+
+/**
  * Pure capacity fields for one builder Thursday.
  * Manual blocks always win: unavailable even when count &lt; capacity.
  */

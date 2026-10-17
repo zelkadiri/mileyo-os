@@ -2,6 +2,7 @@ import db from "../../db.server";
 import { KITCHEN_PREPARATION_BOX_ORDER_WHERE } from "../../constants/boxOrder";
 import {
   BUILDER_DELIVERY_FIRST_ORDER_CAPACITY,
+  getBuilderDeliveryManualFirstOrderCount,
   isUnavailableBuilderDeliveryThursday,
   resolveBuilderDeliveryWindowCapacityFields,
   type BuilderDeliveryWindowOption,
@@ -13,6 +14,24 @@ export const BUILDER_FIRST_ORDER_CAPACITY_WHERE = {
   ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
   isSubscriptionRenewal: false,
 } as const;
+
+/**
+ * Effective first-order count for capacity: DB count + per-date manual places.
+ * Apply only here — never again in UI or downstream gates.
+ */
+export const resolveEffectiveBuilderFirstOrderCount = ({
+  databaseFirstOrderCount,
+  thursdayDate,
+}: {
+  databaseFirstOrderCount: number;
+  thursdayDate: string;
+}): number => {
+  const safeDb =
+    Number.isFinite(databaseFirstOrderCount) && databaseFirstOrderCount > 0
+      ? Math.floor(databaseFirstOrderCount)
+      : 0;
+  return safeDb + getBuilderDeliveryManualFirstOrderCount(thursdayDate);
+};
 
 type CapacityBoxOrderDb = {
   boxOrder: {
@@ -97,7 +116,12 @@ export const enrichBuilderDeliveryWindowOptionsWithCapacity = async ({
   });
 
   return options.map((option) => {
-    const firstOrderCount = counts.get(option.scheduledDeliveryDate) ?? 0;
+    const databaseFirstOrderCount =
+      counts.get(option.scheduledDeliveryDate) ?? 0;
+    const firstOrderCount = resolveEffectiveBuilderFirstOrderCount({
+      databaseFirstOrderCount,
+      thursdayDate: option.scheduledDeliveryDate,
+    });
     const capacityFields = resolveBuilderDeliveryWindowCapacityFields({
       capacity: BUILDER_DELIVERY_FIRST_ORDER_CAPACITY,
       firstOrderCount,
@@ -140,11 +164,13 @@ export const isBuilderDeliveryThursdayAcceptingFirstOrders = async ({
     where.NOT = { shopifyOrderId: excludeShopifyOrderId };
   }
 
-  const firstOrderCount = await resolveDb().boxOrder.count({ where });
+  const databaseFirstOrderCount = await resolveDb().boxOrder.count({ where });
+  const firstOrderCount = resolveEffectiveBuilderFirstOrderCount({
+    databaseFirstOrderCount,
+    thursdayDate,
+  });
 
-  return (
-    firstOrderCount < BUILDER_DELIVERY_FIRST_ORDER_CAPACITY
-  );
+  return firstOrderCount < BUILDER_DELIVERY_FIRST_ORDER_CAPACITY;
 };
 
 export const applyCapacityToBuilderDeliveryDate = async ({

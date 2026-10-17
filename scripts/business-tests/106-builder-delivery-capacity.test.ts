@@ -21,10 +21,13 @@ import {
   countFirstOrdersByScheduledDeliveryDates,
   enrichBuilderDeliveryWindowOptionsWithCapacity,
   isBuilderDeliveryThursdayAcceptingFirstOrders,
+  resolveEffectiveBuilderFirstOrderCount,
 } from "../../app/features/builder/builder-delivery-capacity.server";
 import {
   BUILDER_DELIVERY_FIRST_ORDER_CAPACITY,
+  BUILDER_DELIVERY_MANUAL_FIRST_ORDER_COUNTS,
   buildBuilderDeliveryWindowOptionsFromReferenceDate,
+  getBuilderDeliveryManualFirstOrderCount,
   parseDeliveryDate,
   resolveBuilderDeliveryWindowCapacityFields,
 } from "../../app/utils/deliveryDate";
@@ -49,6 +52,7 @@ const requireDate = (value: string) => {
 
 const THURSDAY_A = "2026-10-15";
 const THURSDAY_B = "2026-10-22";
+const MANUAL_OCCUPIED = "2026-10-29";
 const MANUAL_BLOCKED = "2026-10-01";
 const SHOP = "capacity-test.myshopify.com";
 
@@ -282,7 +286,8 @@ const runSuite = async () => {
       capacity - 2,
     );
     ctx.assertEqual("enriched A available", enriched[0]?.unavailable, false);
-    ctx.assertEqual("enriched B count", enriched[1]?.firstOrderCount, 1);
+    // Thursday B (2026-10-22): 1 DB + 2 manual = 3 effective.
+    ctx.assertEqual("enriched B count", enriched[1]?.firstOrderCount, 3);
     ctx.assertEqual("other window still available", enriched[1]?.unavailable, false);
 
     ctx.scenario("D. Soft accepting gate + lead date nulling");
@@ -382,7 +387,348 @@ const runSuite = async () => {
     ctx.assertEqual("checkout allowed at 14/15", accepted.ok, true);
     ctx.assertTrue("storefront called when open", storefrontCalled);
 
-    ctx.scenario("F. No double count + source wiring / renewals untouched");
+    ctx.scenario("F. Manual first-order places (22/10 = +2, 29/10 = +1)");
+    ctx.assertEqual(
+      "manual map has 2026-10-22 => 2",
+      BUILDER_DELIVERY_MANUAL_FIRST_ORDER_COUNTS[THURSDAY_B],
+      2,
+    );
+    ctx.assertEqual(
+      "manual map has 2026-10-29 => 1",
+      BUILDER_DELIVERY_MANUAL_FIRST_ORDER_COUNTS[MANUAL_OCCUPIED],
+      1,
+    );
+    ctx.assertEqual(
+      "manual helper 2026-10-22",
+      getBuilderDeliveryManualFirstOrderCount(THURSDAY_B),
+      2,
+    );
+    ctx.assertEqual(
+      "manual helper 2026-10-29",
+      getBuilderDeliveryManualFirstOrderCount(MANUAL_OCCUPIED),
+      1,
+    );
+    ctx.assertEqual(
+      "manual helper other date is 0",
+      getBuilderDeliveryManualFirstOrderCount(THURSDAY_A),
+      0,
+    );
+    ctx.assertEqual(
+      "10 DB + 2 manual on 22/10 = 12",
+      resolveEffectiveBuilderFirstOrderCount({
+        databaseFirstOrderCount: 10,
+        thursdayDate: THURSDAY_B,
+      }),
+      12,
+    );
+    ctx.assertEqual(
+      "10 DB + 1 manual on 29/10 = 11",
+      resolveEffectiveBuilderFirstOrderCount({
+        databaseFirstOrderCount: 10,
+        thursdayDate: MANUAL_OCCUPIED,
+      }),
+      11,
+    );
+    ctx.assertEqual(
+      "10 DB + 0 manual on other date = 10",
+      resolveEffectiveBuilderFirstOrderCount({
+        databaseFirstOrderCount: 10,
+        thursdayDate: THURSDAY_A,
+      }),
+      10,
+    );
+
+    // 2026-10-22: 10 DB + 2 manual → 12/15 available, remaining 3.
+    const thursdayBTenOrders = Array.from({ length: 10 }, (_, index) =>
+      firstOrder(`thu-b-10-${index}`, THURSDAY_B),
+    );
+    __setBuilderDeliveryCapacityTestDb(createMemoryCapacityDb(thursdayBTenOrders));
+    const optionBForManual = octoberWindows.find(
+      (option) => option.thursdayDate === THURSDAY_B,
+    );
+    ctx.assertTrue("thursday B option for 12/15 check", Boolean(optionBForManual));
+    const enrichedThursdayBTwelve =
+      await enrichBuilderDeliveryWindowOptionsWithCapacity({
+        options: [optionBForManual!],
+        shop: SHOP,
+      });
+    ctx.assertEqual(
+      "22/10 10 DB + 2 manual → enriched 12",
+      enrichedThursdayBTwelve[0]?.firstOrderCount,
+      12,
+    );
+    ctx.assertEqual(
+      "22/10 12/15 remaining = 3",
+      enrichedThursdayBTwelve[0]?.remainingCapacity,
+      3,
+    );
+    ctx.assertEqual(
+      "22/10 12/15 available",
+      enrichedThursdayBTwelve[0]?.unavailable,
+      false,
+    );
+    ctx.assertEqual(
+      "22/10 12/15 still accepting",
+      await isBuilderDeliveryThursdayAcceptingFirstOrders({
+        shop: SHOP,
+        thursdayDate: THURSDAY_B,
+      }),
+      true,
+    );
+
+    const manualTenOrders = Array.from({ length: 10 }, (_, index) =>
+      firstOrder(`manual-10-${index}`, MANUAL_OCCUPIED),
+    );
+    __setBuilderDeliveryCapacityTestDb(createMemoryCapacityDb(manualTenOrders));
+
+    const dbCountsTen = await countFirstOrdersByScheduledDeliveryDates({
+      scheduledDeliveryDates: [MANUAL_OCCUPIED],
+      shop: SHOP,
+    });
+    ctx.assertEqual(
+      "DB count stays raw (no manual in groupBy)",
+      dbCountsTen.get(MANUAL_OCCUPIED),
+      10,
+    );
+
+    const lateOctoberWindows = buildBuilderDeliveryWindowOptionsFromReferenceDate(
+      requireDate("2026-10-26"),
+    );
+    const optionManual = lateOctoberWindows.find(
+      (option) => option.thursdayDate === MANUAL_OCCUPIED,
+    );
+    const optionOther = lateOctoberWindows.find(
+      (option) => option.thursdayDate === "2026-11-05",
+    );
+    ctx.assertTrue("manual-occupied window present", Boolean(optionManual));
+
+    const enrichedManualTen = await enrichBuilderDeliveryWindowOptionsWithCapacity({
+      options: optionOther
+        ? [optionManual!, optionOther]
+        : [optionManual!],
+      shop: SHOP,
+    });
+    ctx.assertEqual(
+      "10 DB + 1 manual → enriched 11",
+      enrichedManualTen[0]?.firstOrderCount,
+      11,
+    );
+    ctx.assertEqual(
+      "11/15 remaining = 4",
+      enrichedManualTen[0]?.remainingCapacity,
+      4,
+    );
+    ctx.assertEqual(
+      "11/15 available",
+      enrichedManualTen[0]?.unavailable,
+      false,
+    );
+    if (optionOther && enrichedManualTen[1]) {
+      ctx.assertEqual(
+        "other date keeps DB-only count (no accidental +1)",
+        enrichedManualTen[1].firstOrderCount,
+        0,
+      );
+    }
+
+    ctx.assertEqual(
+      "10 DB + 1 manual still accepting",
+      await isBuilderDeliveryThursdayAcceptingFirstOrders({
+        shop: SHOP,
+        thursdayDate: MANUAL_OCCUPIED,
+      }),
+      true,
+    );
+
+    const manualThirteenOrders = Array.from({ length: 13 }, (_, index) =>
+      firstOrder(`manual-13-${index}`, MANUAL_OCCUPIED),
+    );
+    __setBuilderDeliveryCapacityTestDb(
+      createMemoryCapacityDb(manualThirteenOrders),
+    );
+    const enrichedManualThirteen =
+      await enrichBuilderDeliveryWindowOptionsWithCapacity({
+        options: [optionManual!],
+        shop: SHOP,
+      });
+    ctx.assertEqual(
+      "13 DB + 1 manual → enriched 14",
+      enrichedManualThirteen[0]?.firstOrderCount,
+      14,
+    );
+    ctx.assertEqual(
+      "14/15 remaining = 1",
+      enrichedManualThirteen[0]?.remainingCapacity,
+      1,
+    );
+    ctx.assertEqual(
+      "14/15 available (Presque complet)",
+      enrichedManualThirteen[0]?.unavailable,
+      false,
+    );
+    ctx.assertEqual(
+      "13 DB + 1 manual still accepting",
+      await isBuilderDeliveryThursdayAcceptingFirstOrders({
+        shop: SHOP,
+        thursdayDate: MANUAL_OCCUPIED,
+      }),
+      true,
+    );
+
+    const manualFourteenOrders = Array.from({ length: 14 }, (_, index) =>
+      firstOrder(`manual-14-${index}`, MANUAL_OCCUPIED),
+    );
+    __setBuilderDeliveryCapacityTestDb(
+      createMemoryCapacityDb(manualFourteenOrders),
+    );
+    const enrichedManualFourteen =
+      await enrichBuilderDeliveryWindowOptionsWithCapacity({
+        options: [optionManual!],
+        shop: SHOP,
+      });
+    ctx.assertEqual(
+      "14 DB + 1 manual → enriched 15",
+      enrichedManualFourteen[0]?.firstOrderCount,
+      15,
+    );
+    ctx.assertEqual(
+      "15/15 remaining = 0",
+      enrichedManualFourteen[0]?.remainingCapacity,
+      0,
+    );
+    ctx.assertEqual(
+      "15/15 unavailable COMPLET",
+      enrichedManualFourteen[0]?.unavailable,
+      true,
+    );
+    ctx.assertEqual(
+      "14 DB + 1 manual not accepting",
+      await isBuilderDeliveryThursdayAcceptingFirstOrders({
+        shop: SHOP,
+        thursdayDate: MANUAL_OCCUPIED,
+      }),
+      false,
+    );
+    ctx.assertNull(
+      "lead helper nulls 14 DB + 1 manual",
+      await applyCapacityToBuilderDeliveryDate({
+        shop: SHOP,
+        scheduledDeliveryDate: MANUAL_OCCUPIED,
+      }),
+    );
+
+    storefrontCalled = false;
+    const rejectedManual = await createBuilderStorefrontCheckout({
+      input: checkoutInput(MANUAL_OCCUPIED),
+      shop: SHOP,
+    });
+    ctx.assertEqual(
+      "checkout refused at 14 DB + 1 manual",
+      rejectedManual.ok,
+      false,
+    );
+    ctx.assertFalse(
+      "storefront not called when manual fills capacity",
+      storefrontCalled,
+    );
+
+    // Other date with 10 DB and no manual entry → 10/15, no accidental +1.
+    const otherTenOrders = Array.from({ length: 10 }, (_, index) =>
+      firstOrder(`other-10-${index}`, THURSDAY_A),
+    );
+    __setBuilderDeliveryCapacityTestDb(createMemoryCapacityDb(otherTenOrders));
+    const optionAForOther = octoberWindows.find(
+      (option) => option.thursdayDate === THURSDAY_A,
+    );
+    ctx.assertTrue("thursday A option for other-date check", Boolean(optionAForOther));
+    const enrichedOtherTen = await enrichBuilderDeliveryWindowOptionsWithCapacity({
+      options: [optionAForOther!],
+      shop: SHOP,
+    });
+    ctx.assertEqual(
+      "other date 10 DB → effective 10 (manual 0)",
+      enrichedOtherTen[0]?.firstOrderCount,
+      10,
+    );
+    ctx.assertEqual(
+      "other date 10/15 remaining",
+      enrichedOtherTen[0]?.remainingCapacity,
+      5,
+    );
+    ctx.assertEqual(
+      "other date still accepting at 10",
+      await isBuilderDeliveryThursdayAcceptingFirstOrders({
+        shop: SHOP,
+        thursdayDate: THURSDAY_A,
+      }),
+      true,
+    );
+
+    // Renewals still excluded even on the manually occupied Thursday.
+    __setBuilderDeliveryCapacityTestDb(
+      createMemoryCapacityDb([
+        ...Array.from({ length: 10 }, (_, index) =>
+          firstOrder(`manual-ren-fo-${index}`, MANUAL_OCCUPIED),
+        ),
+        firstOrder("manual-ren-1", MANUAL_OCCUPIED, {
+          isSubscriptionRenewal: true,
+        }),
+        firstOrder("manual-ren-2", MANUAL_OCCUPIED, {
+          isSubscriptionRenewal: true,
+        }),
+      ]),
+    );
+    const countsWithRenewals = await countFirstOrdersByScheduledDeliveryDates({
+      scheduledDeliveryDates: [MANUAL_OCCUPIED],
+      shop: SHOP,
+    });
+    ctx.assertEqual(
+      "renewals excluded from DB count on manual date",
+      countsWithRenewals.get(MANUAL_OCCUPIED),
+      10,
+    );
+    const enrichedWithRenewals =
+      await enrichBuilderDeliveryWindowOptionsWithCapacity({
+        options: [optionManual!],
+        shop: SHOP,
+      });
+    ctx.assertEqual(
+      "renewals excluded; effective = 10 DB + 1 manual",
+      enrichedWithRenewals[0]?.firstOrderCount,
+      11,
+    );
+
+    // Manual UNAVAILABLE block unchanged (hard block, independent of count).
+    __setBuilderDeliveryCapacityTestDb(createMemoryCapacityDb([]));
+    ctx.assertEqual(
+      "manual blocked still not accepting at 0 DB",
+      await isBuilderDeliveryThursdayAcceptingFirstOrders({
+        shop: SHOP,
+        thursdayDate: MANUAL_BLOCKED,
+      }),
+      false,
+    );
+    ctx.assertEqual(
+      "manual blocked has no manual first-order offset",
+      getBuilderDeliveryManualFirstOrderCount(MANUAL_BLOCKED),
+      0,
+    );
+
+    // Fail-safe path: accepting gate uses effective count (same helper as checkout).
+    __setBuilderDeliveryCapacityTestDb(
+      createMemoryCapacityDb(manualFourteenOrders),
+    );
+    ctx.assertEqual(
+      "fail-safe effective count rejects at 14 DB + 1 manual",
+      await isBuilderDeliveryThursdayAcceptingFirstOrders({
+        excludeShopifyOrderId: "incoming-order",
+        shop: SHOP,
+        thursdayDate: MANUAL_OCCUPIED,
+      }),
+      false,
+    );
+
+    ctx.scenario("G. No double count + source wiring / renewals untouched");
     __setBuilderDeliveryCapacityTestDb(
       createMemoryCapacityDb([firstOrder("same-order", THURSDAY_A)]),
     );
@@ -412,6 +758,24 @@ const runSuite = async () => {
       "capacity where reuses kitchen filters",
       capacitySource.includes("KITCHEN_PREPARATION_BOX_ORDER_WHERE") &&
         capacitySource.includes("isSubscriptionRenewal: false"),
+    );
+    const deliveryDateSource = readRepoFile("app/utils/deliveryDate.ts");
+    ctx.assertTrue(
+      "manual first-order counts map exists once",
+      deliveryDateSource.includes("BUILDER_DELIVERY_MANUAL_FIRST_ORDER_COUNTS") &&
+        deliveryDateSource.includes('"2026-10-22": 2') &&
+        deliveryDateSource.includes('"2026-10-29": 1'),
+    );
+    ctx.assertTrue(
+      "effective count helper used by enrich + accepting gate",
+      capacitySource.includes("resolveEffectiveBuilderFirstOrderCount") &&
+        (capacitySource.match(/resolveEffectiveBuilderFirstOrderCount/g) ?? [])
+          .length >= 3,
+    );
+    ctx.assertFalse(
+      "client does not hardcode manual date offset",
+      clientSource.includes("2026-10-29") ||
+        clientSource.includes("2026-10-22"),
     );
     ctx.assertEqual(
       "kitchen filter shape unchanged",
