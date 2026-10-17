@@ -315,7 +315,7 @@ export const createBuilderStorefrontCheckout = async ({
   }
 
   // Soft capacity gate (manual block OR first-order count >= capacity).
-  // Rare double-checkout oversell at 9/10 is accepted — no reservation.
+  // Rare double-checkout oversell at capacity-1 is accepted — no reservation.
   const acceptingDelivery =
     await isBuilderDeliveryThursdayAcceptingFirstOrders({
       shop,

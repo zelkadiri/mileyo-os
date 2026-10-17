@@ -32,7 +32,7 @@ const DELIVERY_WINDOW_DISPLAY_END_OFFSET_DAYS = 2;
 const DELIVERY_WINDOW_SKIP_WEEKDAYS = [2, 3] as const;
 
 /** Max first-order / new-subscription orders per builder delivery Thursday. */
-export const BUILDER_DELIVERY_FIRST_ORDER_CAPACITY = 10;
+export const BUILDER_DELIVERY_FIRST_ORDER_CAPACITY = 15;
 
 export type BuilderDeliveryWindowOption = {
   /** Legacy field kept for payload shape; builder UI shows `rangeLabel` only. */

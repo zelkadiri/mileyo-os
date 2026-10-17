@@ -1,5 +1,6 @@
 import { FIRST_BOX_LAUNCH_DISCOUNT_EUR } from "../../constants/firstBoxLaunchDiscount";
 import { mealNutritionFormatRuntimeScript } from "../../utils/mealNutritionFormat";
+import { BUILDER_DELIVERY_FIRST_ORDER_CAPACITY } from "../../utils/deliveryDate";
 import { mealFilterRuntimeScript } from "./builder-filter-runtime";
 import {
   BUILDER_CART_PREPARE_ERROR,
@@ -209,12 +210,12 @@ export const builderClientScript = `
       var capacity =
         typeof option.capacity === "number" && option.capacity > 0
           ? option.capacity
-          : 10;
+          : ${BUILDER_DELIVERY_FIRST_ORDER_CAPACITY};
       var firstOrderCount =
         typeof option.firstOrderCount === "number" && option.firstOrderCount > 0
           ? Math.floor(option.firstOrderCount)
           : 0;
-      // UI only: never show more reserved places than capacity (e.g. 12 → 10/10).
+      // UI only: never show more reserved places than capacity (e.g. 17 → 15/15).
       // Real firstOrderCount from the server is left untouched for business logic.
       var displayCount = Math.min(firstOrderCount, capacity);
       // Manual UNAVAILABLE_BUILDER_DELIVERY_THURSDAYS: present as full gauge

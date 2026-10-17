@@ -170,54 +170,57 @@ const checkoutInput = (scheduledDeliveryDate: string) => ({
 const runSuite = async () => {
   const ctx = createBusinessTestContext("106-builder-delivery-capacity");
 
+  const capacity = BUILDER_DELIVERY_FIRST_ORDER_CAPACITY;
+  const almostFullCount = capacity - 1;
+
   ctx.scenario("A. Pure capacity fields");
   ctx.assertEqual(
-    "capacity constant is 10",
+    "capacity constant is 15",
     BUILDER_DELIVERY_FIRST_ORDER_CAPACITY,
-    10,
+    15,
   );
 
   const zero = resolveBuilderDeliveryWindowCapacityFields({
     firstOrderCount: 0,
     manualUnavailable: false,
   });
-  ctx.assertEqual("0/10 available", zero.unavailable, false);
-  ctx.assertEqual("0/10 remaining", zero.remainingCapacity, 10);
+  ctx.assertEqual("0/15 available", zero.unavailable, false);
+  ctx.assertEqual("0/15 remaining", zero.remainingCapacity, capacity);
 
   const one = resolveBuilderDeliveryWindowCapacityFields({
     firstOrderCount: 1,
     manualUnavailable: false,
   });
-  ctx.assertEqual("1/10 available", one.unavailable, false);
-  ctx.assertEqual("1/10 remaining", one.remainingCapacity, 9);
+  ctx.assertEqual("1/15 available", one.unavailable, false);
+  ctx.assertEqual("1/15 remaining", one.remainingCapacity, capacity - 1);
 
-  const nine = resolveBuilderDeliveryWindowCapacityFields({
-    firstOrderCount: 9,
+  const almostFull = resolveBuilderDeliveryWindowCapacityFields({
+    firstOrderCount: almostFullCount,
     manualUnavailable: false,
   });
-  ctx.assertEqual("9/10 available", nine.unavailable, false);
-  ctx.assertEqual("9/10 remaining", nine.remainingCapacity, 1);
+  ctx.assertEqual("14/15 available", almostFull.unavailable, false);
+  ctx.assertEqual("14/15 remaining", almostFull.remainingCapacity, 1);
 
-  const ten = resolveBuilderDeliveryWindowCapacityFields({
-    firstOrderCount: 10,
+  const full = resolveBuilderDeliveryWindowCapacityFields({
+    firstOrderCount: capacity,
     manualUnavailable: false,
   });
-  ctx.assertEqual("10/10 unavailable", ten.unavailable, true);
-  ctx.assertEqual("10/10 remaining", ten.remainingCapacity, 0);
+  ctx.assertEqual("15/15 unavailable", full.unavailable, true);
+  ctx.assertEqual("15/15 remaining", full.remainingCapacity, 0);
 
   const over = resolveBuilderDeliveryWindowCapacityFields({
-    firstOrderCount: 12,
+    firstOrderCount: capacity + 2,
     manualUnavailable: false,
   });
-  ctx.assertEqual(">10 unavailable", over.unavailable, true);
-  ctx.assertEqual(">10 remaining clamped", over.remainingCapacity, 0);
-  ctx.assertEqual(">10 keeps real count", over.firstOrderCount, 12);
+  ctx.assertEqual(">15 unavailable", over.unavailable, true);
+  ctx.assertEqual(">15 remaining clamped", over.remainingCapacity, 0);
+  ctx.assertEqual(">15 keeps real count", over.firstOrderCount, capacity + 2);
 
   const manualEmpty = resolveBuilderDeliveryWindowCapacityFields({
     firstOrderCount: 0,
     manualUnavailable: true,
   });
-  ctx.assertEqual("manual 0/10 still unavailable", manualEmpty.unavailable, true);
+  ctx.assertEqual("manual 0/15 still unavailable", manualEmpty.unavailable, true);
 
   ctx.scenario("B. Four windows always generated with capacity shape");
   const windows = buildBuilderDeliveryWindowOptionsFromReferenceDate(
@@ -273,14 +276,18 @@ const runSuite = async () => {
       shop: SHOP,
     });
     ctx.assertEqual("enriched A count", enriched[0]?.firstOrderCount, 2);
-    ctx.assertEqual("enriched A remaining", enriched[0]?.remainingCapacity, 8);
+    ctx.assertEqual(
+      "enriched A remaining",
+      enriched[0]?.remainingCapacity,
+      capacity - 2,
+    );
     ctx.assertEqual("enriched A available", enriched[0]?.unavailable, false);
     ctx.assertEqual("enriched B count", enriched[1]?.firstOrderCount, 1);
     ctx.assertEqual("other window still available", enriched[1]?.unavailable, false);
 
     ctx.scenario("D. Soft accepting gate + lead date nulling");
     ctx.assertEqual(
-      "2/10 accepting",
+      "2/15 accepting",
       await isBuilderDeliveryThursdayAcceptingFirstOrders({
         shop: SHOP,
         thursdayDate: THURSDAY_A,
@@ -288,14 +295,14 @@ const runSuite = async () => {
       true,
     );
 
-    const fullOrders = Array.from({ length: 10 }, (_, index) =>
+    const fullOrders = Array.from({ length: capacity }, (_, index) =>
       firstOrder(`full-${index}`, THURSDAY_A),
     );
-    const nineOrders = fullOrders.slice(0, 9);
+    const almostFullOrders = fullOrders.slice(0, almostFullCount);
 
     __setBuilderDeliveryCapacityTestDb(createMemoryCapacityDb(fullOrders));
     ctx.assertEqual(
-      "10/10 not accepting",
+      "15/15 not accepting",
       await isBuilderDeliveryThursdayAcceptingFirstOrders({
         shop: SHOP,
         thursdayDate: THURSDAY_A,
@@ -318,9 +325,9 @@ const runSuite = async () => {
       }),
     );
 
-    __setBuilderDeliveryCapacityTestDb(createMemoryCapacityDb(nineOrders));
+    __setBuilderDeliveryCapacityTestDb(createMemoryCapacityDb(almostFullOrders));
     ctx.assertEqual(
-      "9/10 still accepting",
+      "14/15 still accepting",
       await isBuilderDeliveryThursdayAcceptingFirstOrders({
         shop: SHOP,
         thursdayDate: THURSDAY_A,
@@ -363,16 +370,16 @@ const runSuite = async () => {
       input: checkoutInput(THURSDAY_A),
       shop: SHOP,
     });
-    ctx.assertEqual("checkout refused at 10/10", rejected.ok, false);
+    ctx.assertEqual("checkout refused at 15/15", rejected.ok, false);
     ctx.assertFalse("storefront not called when full", storefrontCalled);
 
-    __setBuilderDeliveryCapacityTestDb(createMemoryCapacityDb(nineOrders));
+    __setBuilderDeliveryCapacityTestDb(createMemoryCapacityDb(almostFullOrders));
     storefrontCalled = false;
     const accepted = await createBuilderStorefrontCheckout({
       input: checkoutInput(THURSDAY_A),
       shop: SHOP,
     });
-    ctx.assertEqual("checkout allowed at 9/10", accepted.ok, true);
+    ctx.assertEqual("checkout allowed at 14/15", accepted.ok, true);
     ctx.assertTrue("storefront called when open", storefrontCalled);
 
     ctx.scenario("F. No double count + source wiring / renewals untouched");
@@ -435,6 +442,15 @@ const runSuite = async () => {
         clientSource.includes("delivery-window-capacity"),
     );
     ctx.assertTrue(
+      "client almost-full hint uses capacity - 1",
+      clientSource.includes("firstOrderCount === capacity - 1"),
+    );
+    ctx.assertTrue(
+      "client fallback capacity uses shared constant",
+      clientSource.includes(`: ${capacity};`) ||
+        clientSource.includes(String(capacity)),
+    );
+    ctx.assertTrue(
       "client clamps gauge display to capacity",
       clientSource.includes("displayCount = Math.min(firstOrderCount, capacity)"),
     );
@@ -446,39 +462,52 @@ const runSuite = async () => {
     // Pure display helper mirror — does not mutate server firstOrderCount.
     const displayReservedPlaces = (
       firstOrderCount: number,
-      capacity: number,
+      displayCapacity: number,
       unavailable = false,
     ) => {
-      let displayCount = Math.min(firstOrderCount, capacity);
-      if (unavailable && displayCount < capacity) {
-        displayCount = capacity;
+      let displayCount = Math.min(firstOrderCount, displayCapacity);
+      if (unavailable && displayCount < displayCapacity) {
+        displayCount = displayCapacity;
       }
       return displayCount;
     };
-    ctx.assertEqual("UI 9/10 → 9", displayReservedPlaces(9, 10), 9);
-    ctx.assertEqual("UI 10/10 → 10", displayReservedPlaces(10, 10), 10);
     ctx.assertEqual(
-      "UI 12/10 réel → affiche 10",
-      displayReservedPlaces(12, 10),
-      10,
+      "UI 14/15 → 14",
+      displayReservedPlaces(almostFullCount, capacity),
+      almostFullCount,
     );
     ctx.assertEqual(
-      "vrai count serveur reste 12 (métier)",
+      "UI 15/15 → 15",
+      displayReservedPlaces(capacity, capacity),
+      capacity,
+    );
+    ctx.assertEqual(
+      "UI over-capacity réel → affiche capacity",
+      displayReservedPlaces(capacity + 2, capacity),
+      capacity,
+    );
+    ctx.assertEqual(
+      "vrai count serveur reste over-capacity (métier)",
       resolveBuilderDeliveryWindowCapacityFields({
-        firstOrderCount: 12,
+        firstOrderCount: capacity + 2,
         manualUnavailable: false,
       }).firstOrderCount,
-      12,
+      capacity + 2,
     );
     ctx.assertEqual(
-      "UI 12/10 + unavailable → encore 10",
-      displayReservedPlaces(12, 10, true),
-      10,
+      "UI over-capacity + unavailable → encore capacity",
+      displayReservedPlaces(capacity + 2, capacity, true),
+      capacity,
     );
     ctx.assertEqual(
-      "UI manual 0 + unavailable → 10 (plein)",
-      displayReservedPlaces(0, 10, true),
-      10,
+      "UI manual 0 + unavailable → capacity (plein)",
+      displayReservedPlaces(0, capacity, true),
+      capacity,
+    );
+    ctx.assertEqual(
+      "Presque complet threshold is capacity - 1",
+      almostFullCount,
+      14,
     );
     ctx.assertTrue(
       "client keeps existing COMPLET badge",
