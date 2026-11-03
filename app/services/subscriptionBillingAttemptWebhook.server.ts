@@ -11,6 +11,7 @@ import { RECOVERY_STATUS } from "../constants/subscriptionPaymentRecovery";
 import { findCanonicalSubscriptionMealSelectionByContractId } from "./subscriptionMealSelection.server";
 import {
   completeResumeRenewalFromWebhook,
+  ensureNextBillingDateAdvancedAfterSuccessfulPayment,
   fetchShopifyBillingAttempt,
   handleResumeBillingFailure,
   isResumeRenewalOrder,
@@ -18,6 +19,8 @@ import {
   resolveBillingAttemptStatus,
   type ShopifyAdminGraphql,
 } from "./subscriptionBillingWorker.server";
+import { reconcileBillingCycleClaimOnWebhookSuccess } from "./subscriptionBillingCycleClaim.server";
+import { isSubscriptionBillingIncidentHeld } from "../constants/subscriptionBillingIncidentHold";
 import { resetSubscriptionPausedEmailSentAt } from "./email/email.server";
 
 export type SubscriptionBillingAttemptWebhookPayload = {
@@ -351,6 +354,13 @@ export const handleSubscriptionBillingAttemptSuccessWebhook = async ({
       selection,
     })
   ) {
+    // Selection already shows success — still converge the cycle claim.
+    await reconcileBillingCycleClaimOnWebhookSuccess({
+      billingAttemptId: resolved.attemptId,
+      idempotencyKey: resolved.idempotencyKey,
+      selectionId: selection.id,
+      shopifyOrderId: resolved.orderId,
+    });
     logBillingEvent("duplicate_webhook_ignored", {
       attemptId: resolved.attemptId,
       orderId: resolved.orderId,
@@ -366,11 +376,71 @@ export const handleSubscriptionBillingAttemptSuccessWebhook = async ({
     status: "success",
   });
 
+  // Persist cycle claim success even when worker crashed after Shopify charge.
+  const claim = await reconcileBillingCycleClaimOnWebhookSuccess({
+    billingAttemptId: resolved.attemptId,
+    idempotencyKey: resolved.idempotencyKey,
+    selectionId: selection.id,
+    shopifyOrderId: resolved.orderId,
+  });
+
+  if (claim) {
+    console.log("[BILLING] webhook reconciled billing cycle claim", {
+      billingCycleKey: claim.billingCycleKey,
+      claimId: claim.id,
+      selectionId: selection.id,
+      status: claim.status,
+    });
+  }
+
   if (!isResumeRenewalOrder(selection)) {
     await closeRecoveryOnSuccessfulOrder({
       orderId: resolved.orderId,
       selectionId: selection.id,
     });
+
+    // Async billing success: advance NBD even if orders/create / BoxOrder fails.
+    // Incident-held contracts stay ACTIVE but must not get a new due scheduled
+    // until ops clears deliveries / refunds.
+    if (
+      selection.subscriptionContractId &&
+      !isSubscriptionBillingIncidentHeld(selection.subscriptionContractId)
+    ) {
+      const attempt = resolved.attemptId
+        ? await fetchShopifyBillingAttempt(admin, resolved.attemptId)
+        : null;
+      const paymentAt =
+        (attempt?.completedAt ? new Date(attempt.completedAt) : null) ??
+        new Date();
+      const dueBillingDate = selection.nextBillingDate;
+
+      const advance = await ensureNextBillingDateAdvancedAfterSuccessfulPayment({
+        admin,
+        dueBillingDate,
+        paymentAt,
+        selectionId: selection.id,
+        subscriptionContractId: selection.subscriptionContractId,
+      });
+
+      if (!advance.ok) {
+        console.log("[BILLING] success webhook — NBD advance failed", {
+          error: advance.error,
+          selectionId: selection.id,
+          topic,
+        });
+      }
+    } else if (
+      isSubscriptionBillingIncidentHeld(selection.subscriptionContractId)
+    ) {
+      console.log(
+        "[BILLING] success webhook — NBD advance skipped (incident hold)",
+        {
+          selectionId: selection.id,
+          subscriptionContractId: selection.subscriptionContractId,
+          topic,
+        },
+      );
+    }
   }
 
   const recovery = await db.subscriptionPaymentRecovery.findFirst({

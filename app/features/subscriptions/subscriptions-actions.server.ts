@@ -17,6 +17,10 @@ import {
   getSelectionSkipReason,
   triggerSubscriptionBillingAttempt,
 } from "../../services/subscriptionBillingWorker.server";
+import {
+  BILLING_CYCLE_CLAIM_SOURCE,
+  prepareCanonicalCycleBilling,
+} from "../../services/subscriptionBillingGate.server";
 import { processDueRecoveryRetries } from "../../services/subscriptionPaymentRecovery.server";
 import { getSelectedMealsFromJson } from "../../utils/mealSelection";
 
@@ -189,13 +193,37 @@ export const handleSubscriptionsAction = async (request: Request) => {
       return redirectWithBillingError(ADMIN_BILLING_NOT_READY_MESSAGE);
     }
 
-    const idempotencyKey = `mileyo_admin_${billableSelection.id}_${Date.now()}`;
+    // Admin shares the same cycle claim + Shopify idempotency key as cron.
+    const dueBillingDate = billableSelection.nextBillingDate;
+
+    if (!dueBillingDate) {
+      return redirectWithBillingError(ADMIN_BILLING_NOT_READY_MESSAGE);
+    }
 
     try {
+      const prepared = await prepareCanonicalCycleBilling({
+        admin,
+        nextBillingDate: dueBillingDate,
+        selectionId: billableSelection.id,
+        shop,
+        source: BILLING_CYCLE_CLAIM_SOURCE.ADMIN,
+        subscriptionContractId: billableSelection.subscriptionContractId!,
+      });
+
+      if (prepared.action !== "proceed") {
+        return redirectWithBillingError(
+          prepared.reason ||
+            "Ce cycle est déjà réservé ou payé (ou le paiement est incertain). Réconciliation requise — nouvelle facturation refusée.",
+        );
+      }
+
       const billingResult = await triggerSubscriptionBillingAttempt({
         admin,
-        idempotencyKey,
+        billingCycleClaimId: prepared.claim.id,
+        dueBillingDate,
+        idempotencyKey: prepared.claim.idempotencyKey,
         selectionId: billableSelection.id,
+        shopifyCycleIndex: prepared.shopifyCycleIndex,
         subscriptionContractId: billableSelection.subscriptionContractId!,
       });
 

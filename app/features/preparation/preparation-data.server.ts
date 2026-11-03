@@ -298,6 +298,20 @@ export const getVisiblePreparationDates = async (
   return filterVisiblePreparationDates(allDates, archivedDates);
 };
 
+/** Paid non-simulated orders invisible to day chips because delivery date is null. */
+export const countPaidBoxOrdersMissingScheduledDelivery = async (
+  shop: string,
+): Promise<number> =>
+  db.boxOrder.count({
+    where: {
+      cancelledAt: null,
+      financialStatus: "paid",
+      scheduledDeliveryDate: null,
+      shop,
+      simulated: false,
+    },
+  });
+
 type PreparationAdminGraphql = {
   graphql: (
     query: string,
@@ -322,10 +336,12 @@ export const loadPreparationPageDataForShop = async ({
 }): Promise<PreparationPageData> => {
   const url = new URL(requestUrl);
   const dateParam = url.searchParams.get("date");
-  const [allDates, archivedDates] = await Promise.all([
-    getUpcomingPreparationDates(shop),
-    getArchivedPreparationDeliveryDateSet(shop),
-  ]);
+  const [allDates, archivedDates, paidOrdersMissingDeliveryCount] =
+    await Promise.all([
+      getUpcomingPreparationDates(shop),
+      getArchivedPreparationDeliveryDateSet(shop),
+      countPaidBoxOrdersMissingScheduledDelivery(shop),
+    ]);
   const upcomingDates = filterVisiblePreparationDates(allDates, archivedDates);
 
   let selectedDate: DeliveryDateString | null = null;
@@ -375,6 +391,7 @@ export const loadPreparationPageDataForShop = async ({
     canArchiveSelectedDate,
     dateQueryInvalid,
     dayData,
+    paidOrdersMissingDeliveryCount,
     selectedDate: dateQueryInvalid ? null : selectedDate,
     selectedCutoff:
       selectedDate && !dateQueryInvalid

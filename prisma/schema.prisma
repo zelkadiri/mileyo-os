@@ -156,6 +156,7 @@ model SubscriptionMealSelection {
 
   paymentRecoveries SubscriptionPaymentRecovery[]
   boxChanges        SubscriptionBoxChange[]
+  billingCycleClaims SubscriptionBillingCycleClaim[]
 
   @@unique([shop, shopifyOrderId])
   @@unique([shop, subscriptionContractId])
@@ -218,6 +219,36 @@ model SubscriptionPaymentRecovery {
 
   @@unique([subscriptionMealSelectionId, billingCycleKey])
   @@index([shop, status, nextRetryAt])
+}
+
+/// Durable reservation of one billing cycle per selection (P0 anti-double-charge).
+/// Claim BEFORE Shopify subscriptionBillingAttemptCreate. UNIQUE blocks concurrent workers.
+/// UNCERTAIN = external payment may exist — reconcile Shopify, never invent a new charge key.
+model SubscriptionBillingCycleClaim {
+  id                          String    @id @default(cuid())
+  shop                        String
+  subscriptionMealSelectionId String
+  subscriptionContractId      String?
+  /// Canonical: mileyo_cycle_${selectionId}_c${shopifyCycleIndex}
+  billingCycleKey             String
+  /// Stable Shopify idempotency key for this cycle (shared cron/admin/resume/recovery).
+  idempotencyKey              String
+  status                      String
+  source                      String
+  billingAttemptId            String?
+  shopifyOrderId              String?
+  lastErrorMessage            String?
+  claimedAt                   DateTime  @default(now())
+  succeededAt                 DateTime?
+  lastReconciledAt            DateTime?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  subscriptionMealSelection SubscriptionMealSelection @relation(fields: [subscriptionMealSelectionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionMealSelectionId, billingCycleKey])
+  @@unique([idempotencyKey])
+  @@index([shop, status])
 }
 
 // Pre-checkout prospect capture. convertedAt is reserved for a later order-webhook

@@ -364,9 +364,13 @@ const runSuite = async () => {
               },
               skipped: 0,
               skipReasons: {
+                billing_cycle_claimed: 0,
+                billing_cycle_uncertain: 0,
                 contract_sync_error: 0,
+                cycle_already_paid_unadvanced: 0,
                 delivery_billing_not_ready: 0,
                 missing_contract_id: 0,
+                missing_delivery_context: 0,
                 missing_next_billing_date: 0,
                 next_billing_date_in_future: 0,
                 paused_or_inactive: 0,
@@ -423,8 +427,8 @@ const runSuite = async () => {
             throw new Error("email cron exploded");
           },
           startEmailCronRun: async () => ({ id: "run_test_1" }) as never,
-          completeEmailCronRunFailure: async () => undefined,
-          completeEmailCronRunSuccess: async () => undefined,
+          completeEmailCronRunFailure: async () => null,
+          completeEmailCronRunSuccess: async () => null,
         },
       );
       ctx.assertEqual("email cron_exception → 500", emailResponse.status, 500);

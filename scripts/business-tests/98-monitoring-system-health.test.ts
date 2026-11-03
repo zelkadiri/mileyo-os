@@ -131,9 +131,13 @@ const emptyBillingSummary = () =>
     },
     skipped: 5,
     skipReasons: {
+      billing_cycle_claimed: 0,
+      billing_cycle_uncertain: 0,
       contract_sync_error: 0,
+      cycle_already_paid_unadvanced: 0,
       delivery_billing_not_ready: 0,
       missing_contract_id: 0,
+      missing_delivery_context: 0,
       missing_next_billing_date: 0,
       next_billing_date_in_future: 1,
       paused_or_inactive: 0,

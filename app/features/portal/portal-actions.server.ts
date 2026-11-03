@@ -25,8 +25,20 @@ import {
   markMealSelectionExplicitForCurrentDelivery,
   resolveMealSelectionCycle,
 } from "../../services/email/meal-selection-email.server";
-import { applyCurrentDeliveryMealSelectionUpdate } from "../../services/subscriptionCurrentDeliveryMeals.server";
+import {
+  applyCurrentDeliveryMealSelectionUpdate,
+  type CurrentDeliveryMealsDb,
+} from "../../services/subscriptionCurrentDeliveryMeals.server";
 import { EMAIL_EVENT_TYPE } from "../../constants/emailEvent";
+import { isSubscriptionBillingIncidentHeld } from "../../constants/subscriptionBillingIncidentHold";
+import {
+  BILLING_CYCLE_CLAIM_SOURCE,
+  prepareCanonicalCycleBilling,
+} from "../../services/subscriptionBillingGate.server";
+import {
+  markBillingCycleClaimSucceeded,
+  rotateClaimIdempotencyKeyAfterConfirmedFailure,
+} from "../../services/subscriptionBillingCycleClaim.server";
 import {
   backfillMealSelectionConfirmedStampFromSentEvent,
   backfillSubscriptionPausedStampFromSentEvent,
@@ -815,6 +827,16 @@ const handleResumeSubscriptionAndPayAction = async ({
       return renderMessage("Contrat d’abonnement Shopify manquant.");
     }
 
+    if (isSubscriptionBillingIncidentHeld(selection.subscriptionContractId)) {
+      console.log("[resumeBilling] blocked — incident billing hold", {
+        selectionId: selection.id,
+        subscriptionContractId: selection.subscriptionContractId,
+      });
+      return renderMessage(
+        "La reprise automatique du paiement est temporairement suspendue pour cet abonnement. Contactez le support Mileyo — le contrat reste actif.",
+      );
+    }
+
     const recoveryRecord = await getPortalRecoveryForSelection(selection.id);
     const blockedResponse = await getPortalModificationBlockResponse({
       actionKind: "subscription_control",
@@ -1093,6 +1115,71 @@ const handleResumeSubscriptionAndPayAction = async ({
         });
       }
 
+      if (!selection.nextBillingDate) {
+        return renderMessage(
+          "Impossible de reprendre le paiement : date de facturation manquante. Contactez le support.",
+        );
+      }
+
+      const prepared = await prepareCanonicalCycleBilling({
+        admin,
+        nextBillingDate: selection.nextBillingDate,
+        selectionId: selection.id,
+        shop,
+        source: BILLING_CYCLE_CLAIM_SOURCE.RESUME,
+        subscriptionContractId: selection.subscriptionContractId,
+      });
+
+      if (prepared.action === "already_paid") {
+        const paidOrderId =
+          prepared.cycle.successfulAttempts[0]?.orderId ??
+          prepared.claim?.shopifyOrderId;
+        const paidAttemptId =
+          prepared.cycle.successfulAttempts[0]?.id ??
+          prepared.claim?.billingAttemptId;
+        if (prepared.claim) {
+          await markBillingCycleClaimSucceeded({
+            billingAttemptId: paidAttemptId ?? null,
+            claimId: prepared.claim.id,
+            shopifyOrderId: paidOrderId ?? null,
+          });
+        }
+        if (paidOrderId && paidAttemptId) {
+          return completeResumeWithSchedule({
+            attemptId: paidAttemptId,
+            orderId: paidOrderId,
+            paymentAt: new Date(
+              prepared.cycle.successfulAttempts[0]?.completedAt ?? Date.now(),
+            ),
+          });
+        }
+        return renderMessage(
+          "Ce cycle est déjà payé. Aucun nouveau prélèvement. Contactez le support si la reprise reste bloquée.",
+        );
+      }
+
+      if (prepared.action === "block") {
+        return renderMessage(
+          prepared.reason ||
+            "Reprise impossible pour ce cycle (paiement en cours ou à réconcilier).",
+        );
+      }
+
+      let shopifyIdempotencyKey = prepared.claim.idempotencyKey;
+      let billingCycleClaimId = prepared.claim.id;
+      if (prepared.claim.status === "failed") {
+        const rotated = await rotateClaimIdempotencyKeyAfterConfirmedFailure({
+          attemptNumber: Math.max(effectiveRetryNumber, 2),
+          claimId: prepared.claim.id,
+          selectionId: selection.id,
+        });
+        shopifyIdempotencyKey = rotated.idempotencyKey;
+        billingCycleClaimId = rotated.id;
+      }
+
+      // Local resumeAttemptKey remains for UI lock; Shopify key is the cycle claim.
+      idempotencyKey = shopifyIdempotencyKey;
+
       await setResumeBillingProcessingLock({
         resumeAttemptKey,
         selectionId: selection.id,
@@ -1117,19 +1204,23 @@ const handleResumeSubscriptionAndPayAction = async ({
 
       console.log("[resumeBilling] creating billing attempt", {
         createdNewAttempt: isNewCycle || isFreshRetry,
-        idempotencyKey,
+        idempotencyKey: shopifyIdempotencyKey,
         isFreshRetry,
         isNewCycle,
         isRetry,
         resumeAttemptKey,
         retryNumber: effectiveRetryNumber,
         selectionId: selection.id,
+        shopifyCycleIndex: prepared.shopifyCycleIndex,
       });
 
       const billingResult = await triggerSubscriptionBillingAttempt({
         admin,
-        idempotencyKey,
+        billingCycleClaimId,
+        dueBillingDate: selection.nextBillingDate,
+        idempotencyKey: shopifyIdempotencyKey,
         selectionId: selection.id,
+        shopifyCycleIndex: prepared.shopifyCycleIndex,
         subscriptionContractId: selection.subscriptionContractId,
         syncNextBillingDateFromShopify: false,
       });
@@ -1372,6 +1463,7 @@ const handleChangeSubscriptionBoxAction = async ({
         blockReason,
         customerShopifyId,
         intent: "changeSubscriptionBox",
+        requestUrl,
         selectionId: selection.id,
         shop,
       });
@@ -1651,7 +1743,8 @@ const handleUpdateFutureMealSelectionAction = async ({
   // transaction. Fail closed on BoxOrder mealsCount mismatch (no false success).
   // No BoxOrder (unpaid cycle) → Selection-only. Never mutates mealsCount.
   const syncResult = await applyCurrentDeliveryMealSelectionUpdate({
-    db: prisma,
+    // PrismaClient structurally covers the CurrentDeliveryMealsDb facade used in tests.
+    db: prisma as unknown as CurrentDeliveryMealsDb,
     effectiveDeliveryDate,
     mealsCount: selection.mealsCount,
     selectedMeals: validation.titles,

@@ -49,7 +49,10 @@ import {
   type FirstOrderDeliveryScheduleResolution,
   type RenewalDeliveryScheduleResolution,
 } from "../../services/deliverySchedule.server";
-import type { DeliveryRescheduleReason } from "../../constants/deliverySchedule";
+import {
+  DELIVERY_RESCHEDULE_REASON,
+  type DeliveryRescheduleReason,
+} from "../../constants/deliverySchedule";
 import type { DeliveryDateString } from "../../utils/deliveryDate";
 import { classifyOrdersCreateCycle } from "./orders-create-cycle-classification.server";
 import {
@@ -333,8 +336,10 @@ export const handleOrdersCreateWebhook = async ({
       })
     : null;
 
-  // Soft capacity fail-closed for NEW first orders only — never renewals,
+  // Soft capacity gate for NEW first orders only — never renewals,
   // never same-order replay. Do not auto-reschedule to another Thursday.
+  // Paid orders must keep scheduledDeliveryDate for kitchen prep; mark an
+  // explicit exception instead of wiping the date (P0 billing/prep incident).
   if (
     !isRenewal &&
     !isSameOrderReplay &&
@@ -346,11 +351,22 @@ export const handleOrdersCreateWebhook = async ({
       thursdayDate: firstOrderDeliverySchedule.scheduledDeliveryDate,
     });
     if (!accepting) {
-      console.log("[ORDERS_CREATE] first-order capacity full — schedule skipped", {
+      console.log("[ORDERS_CREATE] first-order capacity full — schedule kept with exception", {
+        deliveryRescheduleReason:
+          DELIVERY_RESCHEDULE_REASON.CAPACITY_FULL_NEEDS_RESOLUTION,
         scheduledDeliveryDate: firstOrderDeliverySchedule.scheduledDeliveryDate,
         shopifyOrderId,
       });
-      firstOrderDeliverySchedule = null;
+      // Keep log token "first-order capacity full" for existing observability tests.
+      console.log("[ORDERS_CREATE] first-order capacity full", {
+        scheduledDeliveryDate: firstOrderDeliverySchedule.scheduledDeliveryDate,
+        shopifyOrderId,
+      });
+      firstOrderDeliverySchedule = {
+        ...firstOrderDeliverySchedule,
+        deliveryRescheduleReason:
+          DELIVERY_RESCHEDULE_REASON.CAPACITY_FULL_NEEDS_RESOLUTION,
+      };
     }
   }
 

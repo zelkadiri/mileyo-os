@@ -57,6 +57,7 @@ export default function PreparationPage() {
     canArchiveSelectedDate,
     dateQueryInvalid,
     dayData,
+    paidOrdersMissingDeliveryCount,
     selectedCutoff,
     selectedDate,
     selectedDateIsArchived,
@@ -76,6 +77,17 @@ export default function PreparationPage() {
           <p style={introStyle}>
             Organisez les plats à préparer par date de livraison.
           </p>
+
+          {paidOrdersMissingDeliveryCount > 0 ? (
+            <p style={warningBannerStyle} role="status">
+              Attention : {paidOrdersMissingDeliveryCount} commande
+              {paidOrdersMissingDeliveryCount > 1 ? "s" : ""} payée
+              {paidOrdersMissingDeliveryCount > 1 ? "s" : ""} sans date de
+              livraison — absente
+              {paidOrdersMissingDeliveryCount > 1 ? "s" : ""} des jours de
+              préparation. Résolution manuelle requise (ne pas ignorer).
+            </p>
+          ) : null}
 
           {dateQueryInvalid ? (
             <p style={warningBannerStyle}>

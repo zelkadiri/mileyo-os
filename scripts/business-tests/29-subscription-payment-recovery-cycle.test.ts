@@ -17,6 +17,7 @@ import {
   buildBillingCycleKey,
   resolvePaymentRecoveryNextRetryAt,
 } from "../../app/services/subscriptionPaymentRecovery.server";
+import { buildBillingCycleKeyFromShopifyCycle } from "../../app/utils/subscriptionBillingCycleKeys";
 import {
   parseDeliveryDate,
   parisWallClockToInstant,
@@ -116,15 +117,15 @@ const runSuite = () => {
     RECOVERY_STATUS.FINAL_FAILED,
   );
 
-  ctx.scenario("billingCycleKey inchangé");
-  ctx.given("nextBillingDate samedi 22 août 00:05");
+  ctx.scenario("billingCycleKey canonique = Shopify cycleIndex");
+  ctx.given("cycleIndex Shopify 3");
   ctx.assertEqual(
-    "billingCycleKey still uses selection id + ISO nextBillingDate",
-    buildBillingCycleKey(selectionId, saturdayAugust22),
-    `mileyo_cycle_${selectionId}_${saturdayAugust22.toISOString()}`,
+    "billingCycleKey uses selection id + Shopify cycleIndex",
+    buildBillingCycleKeyFromShopifyCycle(selectionId, 3),
+    `mileyo_cycle_${selectionId}_c3`,
   );
   ctx.assertEqual(
-    "missing nextBillingDate still uses unknown suffix",
+    "missing nextBillingDate legacy helper still uses unknown suffix",
     buildBillingCycleKey(selectionId, null),
     `mileyo_cycle_${selectionId}_unknown`,
   );

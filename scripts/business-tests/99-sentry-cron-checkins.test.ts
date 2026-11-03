@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import type { CheckIn, MonitorConfig } from "@sentry/node";
+import type { CheckIn, MonitorConfig } from "@sentry/core";
 
 import {
   SENTRY_CRON_CHECKIN_MARGIN_MINUTES,
@@ -18,6 +18,7 @@ import {
   SENTRY_CRON_MONITOR_SLUG,
   SENTRY_CRON_SCHEDULE,
   SENTRY_CRON_TIMEZONE,
+  type SentryCronMonitorSlug,
 } from "../../app/constants/sentryCron";
 import {
   completeEmailCronRunFailure,
@@ -87,9 +88,13 @@ const emptyBillingSummary = () =>
     },
     skipped: 3,
     skipReasons: {
+      billing_cycle_claimed: 0,
+      billing_cycle_uncertain: 0,
       contract_sync_error: 0,
+      cycle_already_paid_unadvanced: 0,
       delivery_billing_not_ready: 0,
       missing_contract_id: 0,
+      missing_delivery_context: 0,
       missing_next_billing_date: 0,
       next_billing_date_in_future: 3,
       paused_or_inactive: 0,
@@ -540,20 +545,22 @@ const runSuite = async () => {
       }> = [];
 
       const trackCheckInDeps = {
-        startCronCheckIn: (slug: typeof SENTRY_CRON_MONITOR_SLUG.PROCESS_SUBSCRIPTIONS) => {
+        startCronCheckIn: (slug: SentryCronMonitorSlug) => {
           const id = "billing_checkin_1";
           checkInCalls.push({ kind: "start", slug, id });
           return id;
         },
-        completeCronCheckInSuccess: (
-          slug: typeof SENTRY_CRON_MONITOR_SLUG.PROCESS_SUBSCRIPTIONS,
+        completeCronCheckInSuccess: async (
+          slug: SentryCronMonitorSlug,
           id: string | null | undefined,
+          _startedAtMs?: number | null,
         ) => {
           checkInCalls.push({ kind: "ok", slug, id });
         },
-        completeCronCheckInFailure: (
-          slug: typeof SENTRY_CRON_MONITOR_SLUG.PROCESS_SUBSCRIPTIONS,
+        completeCronCheckInFailure: async (
+          slug: SentryCronMonitorSlug,
           id: string | null | undefined,
+          _startedAtMs?: number | null,
         ) => {
           checkInCalls.push({ kind: "error", slug, id });
         },
@@ -654,22 +661,22 @@ const runSuite = async () => {
       }> = [];
 
       const trackCheckInDeps = {
-        startCronCheckIn: (
-          slug: typeof SENTRY_CRON_MONITOR_SLUG.PROCESS_EMAIL_RETRIES,
-        ) => {
+        startCronCheckIn: (slug: SentryCronMonitorSlug) => {
           const id = "email_checkin_1";
           checkInCalls.push({ kind: "start", slug, id });
           return id;
         },
-        completeCronCheckInSuccess: (
-          slug: typeof SENTRY_CRON_MONITOR_SLUG.PROCESS_EMAIL_RETRIES,
+        completeCronCheckInSuccess: async (
+          slug: SentryCronMonitorSlug,
           id: string | null | undefined,
+          _startedAtMs?: number | null,
         ) => {
           checkInCalls.push({ kind: "ok", slug, id });
         },
-        completeCronCheckInFailure: (
-          slug: typeof SENTRY_CRON_MONITOR_SLUG.PROCESS_EMAIL_RETRIES,
+        completeCronCheckInFailure: async (
+          slug: SentryCronMonitorSlug,
           id: string | null | undefined,
+          _startedAtMs?: number | null,
         ) => {
           checkInCalls.push({ kind: "error", slug, id });
         },

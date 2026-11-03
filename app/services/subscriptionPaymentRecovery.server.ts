@@ -39,6 +39,17 @@ import {
 } from "./email/email-outbox-event-driven.server";
 import { computeNextSubscriptionCycleRetryAt } from "../utils/subscriptionCycleBilling";
 import { captureTechnicalError } from "./observability/captureTechnicalError.server";
+import { isSubscriptionBillingIncidentHeld } from "../constants/subscriptionBillingIncidentHold";
+import { rotateClaimIdempotencyKeyAfterConfirmedFailure } from "./subscriptionBillingCycleClaim.server";
+import {
+  BILLING_CYCLE_CLAIM_SOURCE,
+  prepareCanonicalCycleBilling,
+} from "./subscriptionBillingGate.server";
+import { resolveBillableShopifyCycle } from "./shopifySubscriptionBillingCycle.server";
+import {
+  buildBillingCycleKeyFromShopifyCycle,
+  buildRecoveryBillingIdempotencyKey,
+} from "../utils/subscriptionBillingCycleKeys";
 import {
   fetchShopifyBillingAttempt,
   isResumeRenewalOrder,
@@ -139,22 +150,10 @@ type PaymentEmailMutationResponse = {
 export const isShopifyPaymentUpdateEmailEnabled = () =>
   process.env.ENABLE_SHOPIFY_PAYMENT_UPDATE_EMAIL === "true";
 
-export const buildBillingCycleKey = (
-  selectionId: string,
-  dueBillingDate: Date | null,
-) => {
-  if (!dueBillingDate) {
-    return `mileyo_cycle_${selectionId}_unknown`;
-  }
-
-  return `mileyo_cycle_${selectionId}_${dueBillingDate.toISOString()}`;
-};
-
-export const buildRecoveryBillingIdempotencyKey = (
-  selectionId: string,
-  billingCycleKey: string,
-  attemptNumber: number,
-) => `mileyo_recovery_${selectionId}_${billingCycleKey}_a${attemptNumber}`;
+export {
+  buildBillingCycleKey,
+  buildRecoveryBillingIdempotencyKey,
+} from "../utils/subscriptionBillingCycleKeys";
 
 export const getActiveRecoveryForSelection = async (selectionId: string) =>
   db.subscriptionPaymentRecovery.findFirst({
@@ -741,9 +740,49 @@ export const processBillingAttemptFailure = async ({
     return { action: "ignored_resume" };
   }
 
-  const billingCycleKey = buildBillingCycleKey(
+  if (!selection.nextBillingDate || !selection.subscriptionContractId) {
+    console.log("[BILLING] recovery skipped — missing NBD or contract", {
+      billingAttemptId,
+      selectionId: selection.id,
+      source,
+    });
+    return { action: "ignored_resume" };
+  }
+
+  const resolvedCycle = await resolveBillableShopifyCycle({
+    admin,
+    nextBillingDate: selection.nextBillingDate,
+    subscriptionContractId: selection.subscriptionContractId,
+  });
+
+  if (resolvedCycle.action === "block_unresolvable") {
+    console.log("[BILLING] recovery skipped — Shopify cycle unresolvable", {
+      billingAttemptId,
+      reason: resolvedCycle.reason,
+      selectionId: selection.id,
+      source,
+    });
+    return { action: "ignored_resume" };
+  }
+
+  if (resolvedCycle.action === "already_paid") {
+    console.log("[BILLING] recovery skipped — cycle already paid on Shopify", {
+      billingAttemptId,
+      selectionId: selection.id,
+      shopifyCycleIndex: resolvedCycle.shopifyCycleIndex,
+      source,
+    });
+    return { action: "ignored_resume" };
+  }
+
+  const shopifyCycleIndex = resolvedCycle.shopifyCycleIndex;
+  if (shopifyCycleIndex == null) {
+    return { action: "ignored_resume" };
+  }
+
+  const billingCycleKey = buildBillingCycleKeyFromShopifyCycle(
     selection.id,
-    selection.nextBillingDate,
+    shopifyCycleIndex,
   );
 
   const existing = await db.subscriptionPaymentRecovery.findUnique({
@@ -807,8 +846,11 @@ export const processBillingAttemptFailure = async ({
 
 export type RecoveryDiagnosticBranch =
   | "contract_sync_error"
+  | "cycle_claim_blocks_retry"
+  | "incident_billing_hold"
   | "normal_skip"
   | "pending"
+  | "prior_payment_unconfirmed"
   | "recovered"
   | "retry_start"
   | "skipped_inactive"
@@ -1757,15 +1799,125 @@ export const processDueRecoveryRetries = async (
         continue;
       }
 
+      if (
+        isSubscriptionBillingIncidentHeld(
+          billableSelection.subscriptionContractId,
+        )
+      ) {
+        console.log("[paymentRecovery] skipped — incident billing hold", {
+          recoveryId: workingRecovery.id,
+          selectionId: billableSelection.id,
+          subscriptionContractId: billableSelection.subscriptionContractId,
+        });
+        pushRecoveryDiagnostic(summary, {
+          ...diagnosticBase,
+          branch: "incident_billing_hold",
+        });
+        summary.skipped += 1;
+        continue;
+      }
+
+      // Fail-closed: never mint a parallel Shopify key while a prior attempt may
+      // still have succeeded (unknown / in-flight / paid).
+      if (
+        previousAttemptStatus === "unknown" ||
+        previousAttemptStatus === "submitted" ||
+        billableSelection.lastBillingAttemptStatus === "unknown" ||
+        billableSelection.lastBillingAttemptStatus === "success"
+      ) {
+        console.log(
+          "[paymentRecovery] skipped — prior payment not confirmed failed",
+          {
+            lastBillingAttemptStatus:
+              billableSelection.lastBillingAttemptStatus,
+            previousAttemptStatus,
+            recoveryId: workingRecovery.id,
+            selectionId: billableSelection.id,
+          },
+        );
+        pushRecoveryDiagnostic(summary, {
+          ...diagnosticBase,
+          branch: "prior_payment_unconfirmed",
+        });
+        summary.skipped += 1;
+        continue;
+      }
+
+      if (!billableSelection.nextBillingDate) {
+        summary.skipped += 1;
+        continue;
+      }
+
+      const prepared = await prepareCanonicalCycleBilling({
+        admin,
+        nextBillingDate: billableSelection.nextBillingDate,
+        selectionId: billableSelection.id,
+        shop,
+        source: BILLING_CYCLE_CLAIM_SOURCE.RECOVERY,
+        subscriptionContractId: billableSelection.subscriptionContractId,
+      });
+
+      if (prepared.action === "already_paid") {
+        console.log("[paymentRecovery] skipped — cycle already paid", {
+          reason: prepared.reason,
+          recoveryId: workingRecovery.id,
+          selectionId: billableSelection.id,
+          shopifyCycleIndex: prepared.shopifyCycleIndex,
+        });
+        if (prepared.cycle.successfulAttempts[0]?.orderId) {
+          await closeRecoveryOnSuccessfulOrder({
+            orderId: prepared.cycle.successfulAttempts[0].orderId,
+            selectionId: selection.id,
+          });
+          summary.recovered += 1;
+        } else {
+          summary.skipped += 1;
+        }
+        pushRecoveryDiagnostic(summary, {
+          ...diagnosticBase,
+          branch: "cycle_claim_blocks_retry",
+        });
+        continue;
+      }
+
+      if (prepared.action === "block") {
+        console.log("[paymentRecovery] skipped — canonical gate block", {
+          reason: prepared.reason,
+          recoveryId: workingRecovery.id,
+          selectionId: billableSelection.id,
+        });
+        pushRecoveryDiagnostic(summary, {
+          ...diagnosticBase,
+          branch: "cycle_claim_blocks_retry",
+        });
+        summary.skipped += 1;
+        continue;
+      }
+
+      let retryIdempotencyKey = prepared.claim.idempotencyKey;
+      let billingCycleClaimId = prepared.claim.id;
+      let shopifyCycleIndex = prepared.shopifyCycleIndex;
+
+      if (prepared.claim.status === "failed") {
+        const rotated = await rotateClaimIdempotencyKeyAfterConfirmedFailure({
+          attemptNumber: nextAttemptNumber,
+          claimId: prepared.claim.id,
+          selectionId: billableSelection.id,
+        });
+        retryIdempotencyKey = rotated.idempotencyKey;
+        billingCycleClaimId = rotated.id;
+      }
+
       console.log("[paymentRecovery] retry starting", {
         failureCount: workingRecovery.failureCount,
         localStatus: billableSelection.status,
         newAttemptNumber: nextAttemptNumber,
-        newIdempotencyKey: nextIdempotencyKey,
+        newIdempotencyKey: retryIdempotencyKey,
         previousAttemptId,
         previousAttemptStatus,
         recoveryId: workingRecovery.id,
         selectionId: billableSelection.id,
+        shopifyCycleIndex,
       });
       pushRecoveryDiagnostic(summary, {
         ...diagnosticBase,
@@ -1782,9 +1934,12 @@ export const processDueRecoveryRetries = async (
 
       const billingResult = await triggerSubscriptionBillingAttempt({
         admin,
-        idempotencyKey: nextIdempotencyKey,
+        billingCycleClaimId,
+        dueBillingDate: billableSelection.nextBillingDate,
+        idempotencyKey: retryIdempotencyKey,
         selectionId: billableSelection.id,
         shop,
+        shopifyCycleIndex,
         subscriptionContractId: billableSelection.subscriptionContractId,
       });
 

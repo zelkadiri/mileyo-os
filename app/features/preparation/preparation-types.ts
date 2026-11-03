@@ -82,6 +82,11 @@ export type PreparationPageData = {
   selectedDateIsArchived: boolean;
   dateQueryInvalid: boolean;
   dayData: PreparationDayData | null;
+  /**
+   * Paid kitchen-eligible BoxOrders with null scheduledDeliveryDate.
+   * They never appear in day chips — ops must resolve explicitly.
+   */
+  paidOrdersMissingDeliveryCount: number;
   selectedDate: DeliveryDateString | null;
   /** Non-archived delivery dates for chip navigation only. */
   upcomingDates: UpcomingPreparationDate[];

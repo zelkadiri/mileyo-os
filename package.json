@@ -29,6 +29,7 @@
     "@prisma/client": "^6.16.3",
     "@react-router/node": "^7.12.0",
     "@react-router/serve": "^7.12.0",
+    "@sentry/core": "^10.72.0",
     "@sentry/node": "^10.72.0",
     "@shopify/app-bridge-react": "^4.2.4",
     "@shopify/shopify-app-react-router": "^1.1.0",
@@ -52,6 +53,7 @@
     "@types/react-dom": "^18.3.7",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
+    "embedded-postgres": "^18.6.0-beta.19",
     "eslint": "^8.57.1",
     "eslint-import-resolver-typescript": "^3.10.1",
     "eslint-plugin-import": "^2.32.0",
@@ -74,5 +76,8 @@
   "overrides": {
     "p-map": "^4.0.0"
   },
-  "author": "zohra"
+  "author": "zohra",
+  "allowScripts": {
+    "@embedded-postgres/darwin-arm64@18.6.0-beta.19": true
+  }
 }

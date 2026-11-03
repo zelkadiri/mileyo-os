@@ -966,7 +966,7 @@ const runSuite = async () => {
     // - After successful billing, worker syncs selection.nextBillingDate from Shopify
     //   (already advanced to the *next* unpaid cycle).
     // - orders/create aligns nextBillingDate to the following delivery schedule.
-    // - recovery billingCycleKey is selectionId + ISO nextBillingDate of the failed cycle.
+    // - recovery billingCycleKey is selectionId + Paris Saturday anchor of the failed cycle.
     // Therefore at request time, selection.nextBillingDate is the next unpaid cycle
     // the pending must target — including when the current delivery is already paid.
     ctx.assertTrue(
@@ -986,10 +986,10 @@ const runSuite = async () => {
         ).includes("nextBillingDate is the source of truth"),
     );
     ctx.assertTrue(
-      "recovery cycle key uses nextBillingDate ISO",
+      "recovery cycle key uses Shopify cycleIndex",
       readRepoFile(
         "scripts/business-tests/29-subscription-payment-recovery-cycle.test.ts",
-      ).includes("billingCycleKey still uses selection id + ISO nextBillingDate"),
+      ).includes("billingCycleKey uses selection id + Shopify cycleIndex"),
     );
 
     const mem = createMemoryDb();

@@ -27,6 +27,11 @@ export const DELIVERY_RESCHEDULE_REASON = {
   OUT_OF_WINDOW: "out_of_window",
   PAYMENT_TOO_LATE: "payment_too_late",
   SUNDAY_EXCLUDED: "sunday_excluded",
+  /**
+   * Paid first order kept its chosen Thursday but kitchen capacity was already
+   * full. Visible exception for ops — never wipe scheduledDeliveryDate.
+   */
+  CAPACITY_FULL_NEEDS_RESOLUTION: "capacity_full_needs_resolution",
 } as const;
 
 export type DeliveryRescheduleReason =
@@ -42,6 +47,8 @@ export const DELIVERY_RESCHEDULE_REASON_LABELS: Record<
   [DELIVERY_RESCHEDULE_REASON.PAYMENT_TOO_LATE]:
     "paiement validé trop tard pour la date choisie",
   [DELIVERY_RESCHEDULE_REASON.SUNDAY_EXCLUDED]: "dimanche non disponible",
+  [DELIVERY_RESCHEDULE_REASON.CAPACITY_FULL_NEEDS_RESOLUTION]:
+    "capacité cuisine atteinte — résolution manuelle requise",
 };
 
 export type DeliveryScheduleConfig = {

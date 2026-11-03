@@ -8,7 +8,7 @@
  * monitor error without duplicating the exception payload.
  */
 import * as Sentry from "@sentry/node";
-import type { CheckIn, MonitorConfig } from "@sentry/node";
+import type { CheckIn, MonitorConfig } from "@sentry/core";
 
 import {
   SENTRY_CRON_FLUSH_TIMEOUT_MS,

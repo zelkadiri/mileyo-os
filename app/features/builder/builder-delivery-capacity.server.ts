@@ -60,7 +60,8 @@ export const __resetBuilderDeliveryCapacityTestDb = (): void => {
   capacityTestDb = null;
 };
 
-const resolveDb = (): CapacityBoxOrderDb => capacityTestDb ?? db;
+const resolveDb = (): CapacityBoxOrderDb =>
+  capacityTestDb ?? (db as unknown as CapacityBoxOrderDb);
 
 /**
  * One groupBy for all requested Thursdays — first orders only.

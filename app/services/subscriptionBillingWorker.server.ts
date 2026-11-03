@@ -16,8 +16,29 @@ import {
 } from "./subscriptionPaymentRecovery.server";
 import { alignImmediatePaymentResumeWithDeliverySchedule } from "./deliverySchedule.server";
 import { evaluateDeliveryBillingReadiness } from "../utils/deliveryDate";
+import { buildAutoBillingIdempotencyKey } from "../utils/subscriptionBillingCycleKeys";
+import { computeNextSubscriptionCycleBillingAt } from "../utils/subscriptionCycleBilling";
 import { markMealSelectionExplicitForCurrentDelivery } from "./email/meal-selection-email.server";
 import { captureTechnicalError } from "./observability/captureTechnicalError.server";
+import { isSubscriptionBillingIncidentHeld } from "../constants/subscriptionBillingIncidentHold";
+import {
+  markBillingCycleClaimFailed,
+  markBillingCycleClaimSucceeded,
+  markBillingCycleClaimSubmitted,
+  markBillingCycleClaimUncertain,
+  type BillingCycleClaimRow,
+} from "./subscriptionBillingCycleClaim.server";
+import {
+  BILLING_CYCLE_CLAIM_SOURCE,
+  prepareCanonicalCycleBilling,
+} from "./subscriptionBillingGate.server";
+import { extractShopifyCycleIndexFromBillingKey } from "../utils/subscriptionBillingCycleKeys";
+
+export { buildAutoBillingIdempotencyKey };
+export {
+  buildAutoBillingIdempotencyKeyFromShopifyCycle,
+  buildBillingCycleKeyFromShopifyCycle,
+} from "../utils/subscriptionBillingCycleKeys";
 
 const billingAttemptCreateMutation = `#graphql
   mutation SubscriptionBillingAttemptCreate(
@@ -276,7 +297,12 @@ export type BillingSkipReason =
   | "terminal_contract"
   | "contract_sync_error"
   | "delivery_billing_not_ready"
-  | "pending_box_change";
+  | "pending_box_change"
+  | "missing_delivery_context"
+  | "cycle_already_paid_unadvanced"
+  | "billing_cycle_claimed"
+  | "billing_cycle_uncertain"
+  | "incident_billing_hold";
 
 export type BillingAttemptStatus =
   | "success"
@@ -308,6 +334,12 @@ export type { ShopifyAdminGraphql };
 /** Skip re-billing if an attempt was made within this window (cron dedup). */
 export const RECENT_BILLING_ATTEMPT_WINDOW_MS = 30 * 60 * 1000;
 
+/**
+ * @deprecated No time window — while status=success and NBD is still due, always
+ * block new charges and repair NBD (fail-closed). Kept as alias for older tests.
+ */
+export const SUCCESSFUL_CYCLE_UNADVANCED_GUARD_MS = Number.POSITIVE_INFINITY;
+
 /** Resume UI lock — only block the customer briefly while billing is in flight. */
 export const RESUME_PROCESSING_TIMEOUT_MS = 3 * 60 * 1000;
 
@@ -323,9 +355,14 @@ export type ResumeLockStatus =
   (typeof RESUME_LOCK_STATUS)[keyof typeof RESUME_LOCK_STATUS];
 
 const EMPTY_SKIP_REASONS = (): Record<BillingSkipReason, number> => ({
+  billing_cycle_claimed: 0,
+  billing_cycle_uncertain: 0,
   contract_sync_error: 0,
+  cycle_already_paid_unadvanced: 0,
   delivery_billing_not_ready: 0,
+  incident_billing_hold: 0,
   missing_contract_id: 0,
+  missing_delivery_context: 0,
   missing_next_billing_date: 0,
   next_billing_date_in_future: 0,
   paused_or_inactive: 0,
@@ -773,10 +810,180 @@ export const scheduleNextBillingDateAfterResumePayment = async ({
   return { error, ok: false };
 };
 
-const getTodayIsoDate = () => new Date().toISOString().slice(0, 10);
+export const hasUsableDeliveryBillingContext = (selection: {
+  nextScheduledDeliveryDate?: string | null;
+  preferredDeliveryWeekday?: number | null;
+}) =>
+  typeof selection.nextScheduledDeliveryDate === "string" &&
+  selection.nextScheduledDeliveryDate.length > 0 &&
+  selection.preferredDeliveryWeekday != null &&
+  Number.isInteger(selection.preferredDeliveryWeekday) &&
+  selection.preferredDeliveryWeekday >= 0 &&
+  selection.preferredDeliveryWeekday <= 6;
 
-const buildAutoBillingIdempotencyKey = (selectionId: string) =>
-  `mileyo_auto_${selectionId}_${getTodayIsoDate()}`;
+/**
+ * Success recorded but nextBillingDate still due — do not create a new charge.
+ * No expiry window: fail-closed until NBD advances (or ops intervenes).
+ */
+export const isSuccessfulBillingAwaitingNextBillingAdvance = (
+  selection: {
+    lastBillingAttemptAt: Date | null;
+    lastBillingAttemptStatus: string | null;
+    nextBillingDate: Date | null;
+  },
+  now: Date = new Date(),
+) => {
+  if (selection.lastBillingAttemptStatus !== "success") {
+    return false;
+  }
+
+  if (!selection.lastBillingAttemptAt || !selection.nextBillingDate) {
+    return false;
+  }
+
+  return selection.nextBillingDate.getTime() <= now.getTime();
+};
+
+/**
+ * Next cycle after a paid due date. Prefers Shopify billing policy; falls back
+ * to the next Saturday 00:05 Paris slot after the payment.
+ */
+export const resolveAutoBillingNextBillingDate = ({
+  billingPolicy,
+  dueBillingDate,
+  paymentAt,
+}: {
+  billingPolicy: SubscriptionBillingPolicy | null;
+  dueBillingDate: Date | null;
+  paymentAt: Date;
+}): Date => {
+  const anchor =
+    dueBillingDate && !Number.isNaN(dueBillingDate.getTime())
+      ? dueBillingDate
+      : paymentAt;
+
+  if (billingPolicy) {
+    const fromPolicy = calculateNextBillingDateFromPolicy(anchor, billingPolicy);
+
+    if (fromPolicy.getTime() > paymentAt.getTime()) {
+      return fromPolicy;
+    }
+  }
+
+  return computeNextSubscriptionCycleBillingAt(
+    new Date(Math.max(anchor.getTime(), paymentAt.getTime())),
+  );
+};
+
+/**
+ * After a successful (or reconciled-successful) auto charge, advance Shopify +
+ * local nextBillingDate. Independent of BoxOrder / kitchen prep success.
+ */
+export const ensureNextBillingDateAdvancedAfterSuccessfulPayment = async ({
+  admin,
+  dueBillingDate,
+  paymentAt,
+  selectionId,
+  subscriptionContractId,
+}: {
+  admin: ShopifyAdminGraphql;
+  dueBillingDate: Date | null;
+  paymentAt: Date;
+  selectionId: string;
+  subscriptionContractId: string;
+}): Promise<
+  { ok: true; nextBillingDate: Date } | { ok: false; error: string }
+> => {
+  let currentShopify: Date | null = null;
+
+  try {
+    currentShopify = await fetchSubscriptionContractNextBillingDate(
+      admin,
+      subscriptionContractId,
+    );
+  } catch (error) {
+    console.log("[BILLING] post-payment nextBillingDate fetch failed", {
+      error: error instanceof Error ? error.message : error,
+      selectionId,
+      subscriptionContractId,
+    });
+  }
+
+  const minAdvancedMs =
+    (dueBillingDate?.getTime() ?? paymentAt.getTime()) + 5 * 24 * 60 * 60 * 1000;
+
+  if (currentShopify && currentShopify.getTime() >= minAdvancedMs) {
+    await db.subscriptionMealSelection.update({
+      data: { nextBillingDate: currentShopify },
+      where: { id: selectionId },
+    });
+
+    console.log("[BILLING] nextBillingDate already advanced on Shopify — synced", {
+      nextBillingDate: currentShopify.toISOString(),
+      selectionId,
+      subscriptionContractId,
+    });
+
+    return { ok: true, nextBillingDate: currentShopify };
+  }
+
+  let billingPolicy: SubscriptionBillingPolicy | null = null;
+
+  try {
+    billingPolicy = await fetchSubscriptionContractBillingPolicy(
+      admin,
+      subscriptionContractId,
+    );
+  } catch (error) {
+    console.log("[BILLING] billingPolicy fetch failed during NBD advance", {
+      error: error instanceof Error ? error.message : error,
+      selectionId,
+      subscriptionContractId,
+    });
+  }
+
+  let target = resolveAutoBillingNextBillingDate({
+    billingPolicy,
+    dueBillingDate,
+    paymentAt,
+  });
+
+  if (target.getTime() <= Date.now()) {
+    target = computeNextSubscriptionCycleBillingAt(new Date());
+  }
+
+  const shopifyUpdate = await setSubscriptionContractNextBillingDate(
+    admin,
+    subscriptionContractId,
+    target,
+  );
+
+  if (!shopifyUpdate.ok) {
+    console.log("[BILLING] post-payment nextBillingDate advance failed", {
+      error: shopifyUpdate.error,
+      selectionId,
+      subscriptionContractId,
+      targetNextBillingDate: target.toISOString(),
+    });
+
+    return { ok: false, error: shopifyUpdate.error };
+  }
+
+  await db.subscriptionMealSelection.update({
+    data: { nextBillingDate: shopifyUpdate.nextBillingDate },
+    where: { id: selectionId },
+  });
+
+  console.log("[BILLING] nextBillingDate advanced after successful payment", {
+    dueBillingDate: dueBillingDate?.toISOString() ?? null,
+    nextBillingDate: shopifyUpdate.nextBillingDate.toISOString(),
+    paymentAt: paymentAt.toISOString(),
+    selectionId,
+    subscriptionContractId,
+  });
+
+  return { ok: true, nextBillingDate: shopifyUpdate.nextBillingDate };
+};
 
 export const buildResumeBillingIdempotencyKey = (
   selectionId: string,
@@ -1199,16 +1406,19 @@ export const fetchShopifyBillingAttempt = async (
 export const reconcileBillingAttemptByIdempotencyKey = async ({
   admin,
   idempotencyKey,
+  shopifyCycleIndex = null,
   subscriptionContractId,
 }: {
   admin: ShopifyAdminGraphql;
   idempotencyKey: string;
+  shopifyCycleIndex?: number | null;
   subscriptionContractId: string;
 }) => {
   const json = await createBillingAttempt(
     admin,
     subscriptionContractId,
     idempotencyKey,
+    shopifyCycleIndex,
   );
 
   if (json.errors?.length) {
@@ -1669,6 +1879,8 @@ export const getSelectionSkipReason = (
     lastBillingAttemptAt: Date | null;
     lastBillingAttemptStatus: string | null;
     nextBillingDate: Date | null;
+    nextScheduledDeliveryDate?: string | null;
+    preferredDeliveryWeekday?: number | null;
     resumeAttemptKey: string | null;
     resumeAttemptOrderId: string | null;
     resumeAttemptStartedAt: Date | null;
@@ -1681,9 +1893,14 @@ export const getSelectionSkipReason = (
     nextRetryAt: Date | null;
     status: string;
   } | null,
+  now: Date = new Date(),
 ): BillingSkipReason | null => {
   if (!selection.subscriptionContractId) {
     return "missing_contract_id";
+  }
+
+  if (isSubscriptionBillingIncidentHeld(selection.subscriptionContractId)) {
+    return "incident_billing_hold";
   }
 
   if (isTerminalSubscriptionSelectionStatus(selection.status)) {
@@ -1725,7 +1942,7 @@ export const getSelectionSkipReason = (
         return "payment_recovery";
       }
 
-      if (recovery.nextRetryAt && recovery.nextRetryAt.getTime() > Date.now()) {
+      if (recovery.nextRetryAt && recovery.nextRetryAt.getTime() > now.getTime()) {
         return "payment_recovery";
       }
 
@@ -1739,8 +1956,24 @@ export const getSelectionSkipReason = (
     return "missing_next_billing_date";
   }
 
-  if (selection.nextBillingDate.getTime() > Date.now()) {
+  if (selection.nextBillingDate.getTime() > now.getTime()) {
     return "next_billing_date_in_future";
+  }
+
+  // Prefer NBD repair over delivery gate so a paid-but-stuck cycle cannot
+  // keep billing daily while ops restores kitchen dates.
+  if (isSuccessfulBillingAwaitingNextBillingAdvance(selection, now)) {
+    return "cycle_already_paid_unadvanced";
+  }
+
+  // Only enforce when delivery fields are present on the object (Prisma rows).
+  // Unit fixtures that omit both keys keep prior eligibility behaviour.
+  if (
+    ("nextScheduledDeliveryDate" in selection ||
+      "preferredDeliveryWeekday" in selection) &&
+    !hasUsableDeliveryBillingContext(selection)
+  ) {
+    return "missing_delivery_context";
   }
 
   if (isRecentBillingAttempt(selection.lastBillingAttemptAt)) {
@@ -1837,10 +2070,24 @@ const createBillingAttempt = async (
   admin: ShopifyAdminGraphql,
   subscriptionContractId: string,
   idempotencyKey: string,
+  shopifyCycleIndex?: number | null,
 ) => {
+  const subscriptionBillingAttemptInput: Record<string, unknown> = {
+    idempotencyKey,
+  };
+  if (
+    typeof shopifyCycleIndex === "number" &&
+    Number.isInteger(shopifyCycleIndex) &&
+    shopifyCycleIndex >= 1
+  ) {
+    subscriptionBillingAttemptInput.billingCycleSelector = {
+      index: shopifyCycleIndex,
+    };
+  }
+
   const response = await admin.graphql(billingAttemptCreateMutation, {
     variables: {
-      subscriptionBillingAttemptInput: { idempotencyKey },
+      subscriptionBillingAttemptInput,
       subscriptionContractId: toSubscriptionContractGid(subscriptionContractId),
     },
   });
@@ -1859,26 +2106,78 @@ export type TriggerBillingAttemptResult = {
 
 export const triggerSubscriptionBillingAttempt = async ({
   admin,
+  billingCycleClaimId = null,
+  dueBillingDate = null,
   idempotencyKey,
   selectionId,
   shop,
+  shopifyCycleIndex = null,
   subscriptionContractId,
   syncNextBillingDateFromShopify = true,
 }: {
   admin: ShopifyAdminGraphql;
+  /** Durable cycle claim row — marked uncertain on transport crash after create. */
+  billingCycleClaimId?: string | null;
+  /** Cycle due date used to advance NBD after success (auto/admin/recovery). */
+  dueBillingDate?: Date | null;
   idempotencyKey: string;
   selectionId: string;
   shop?: string;
+  /** Shopify SubscriptionBillingCycle.cycleIndex — required for new charges. */
+  shopifyCycleIndex?: number | null;
   subscriptionContractId: string;
+  /**
+   * When true (default), a successful attempt advances nextBillingDate on
+   * Shopify + DB. Resume billing sets false — it schedules via its own path.
+   */
   syncNextBillingDateFromShopify?: boolean;
 }): Promise<TriggerBillingAttemptResult> => {
   const attemptedAt = new Date();
+  let shopifyCreateStarted = false;
+
+  if (isSubscriptionBillingIncidentHeld(subscriptionContractId)) {
+    console.log("[BILLING] trigger blocked — incident billing hold", {
+      selectionId,
+      subscriptionContractId,
+    });
+    return {
+      attemptId: null,
+      errorCode: "incident_billing_hold",
+      errorMessage:
+        "Facturation bloquée par un hold d’incident — contrat ACTIVE conservé.",
+      orderId: null,
+      paymentAt: null,
+      status: "failure",
+    };
+  }
+
+  if (
+    shopifyCycleIndex == null ||
+    !Number.isInteger(shopifyCycleIndex) ||
+    shopifyCycleIndex < 1
+  ) {
+    console.log("[BILLING] trigger blocked — missing Shopify cycleIndex", {
+      selectionId,
+      subscriptionContractId,
+    });
+    return {
+      attemptId: null,
+      errorCode: "missing_shopify_cycle_index",
+      errorMessage:
+        "cycleIndex Shopify manquant — facturation refusée (fail-closed).",
+      orderId: null,
+      paymentAt: null,
+      status: "failure",
+    };
+  }
 
   try {
+    shopifyCreateStarted = true;
     const json = await createBillingAttempt(
       admin,
       subscriptionContractId,
       idempotencyKey,
+      shopifyCycleIndex,
     );
 
     if (json.errors?.length) {
@@ -1897,6 +2196,13 @@ export const triggerSubscriptionBillingAttempt = async ({
         },
         where: { id: selectionId },
       });
+
+      if (billingCycleClaimId) {
+        await markBillingCycleClaimFailed({
+          claimId: billingCycleClaimId,
+          errorMessage,
+        });
+      }
 
       return {
         attemptId: null,
@@ -1932,6 +2238,21 @@ export const triggerSubscriptionBillingAttempt = async ({
         where: { id: selectionId },
       });
 
+      if (billingCycleClaimId) {
+        if (status === "unknown") {
+          await markBillingCycleClaimUncertain({
+            billingAttemptId: attemptId,
+            claimId: billingCycleClaimId,
+            errorMessage: errorMessage ?? "État de facturation indéterminé.",
+          });
+        } else {
+          await markBillingCycleClaimFailed({
+            claimId: billingCycleClaimId,
+            errorMessage,
+          });
+        }
+      }
+
       return {
         attemptId,
         errorCode,
@@ -1942,24 +2263,52 @@ export const triggerSubscriptionBillingAttempt = async ({
       };
     }
 
-    const nextBillingDate =
-      syncNextBillingDateFromShopify && status === "success"
-        ? await fetchSubscriptionContractNextBillingDate(
-            admin,
-            subscriptionContractId,
-          )
-        : null;
+    if (billingCycleClaimId && status === "submitted") {
+      await markBillingCycleClaimSubmitted({
+        billingAttemptId: attemptId,
+        claimId: billingCycleClaimId,
+      });
+    }
 
+    // Persist attempt outcome first so a later NBD-advance failure cannot look
+    // like "never paid" on the next cron tick.
     await db.subscriptionMealSelection.update({
       data: {
         lastBillingAttemptAt: attemptedAt,
         lastBillingAttemptError: null,
         lastBillingAttemptId: attemptId,
         lastBillingAttemptStatus: status,
-        ...(nextBillingDate ? { nextBillingDate } : {}),
       },
       where: { id: selectionId },
     });
+
+    if (status === "success") {
+      if (billingCycleClaimId) {
+        await markBillingCycleClaimSucceeded({
+          billingAttemptId: attemptId,
+          claimId: billingCycleClaimId,
+          shopifyOrderId: orderId,
+        });
+      }
+
+      if (syncNextBillingDateFromShopify && paymentAt) {
+        const advance = await ensureNextBillingDateAdvancedAfterSuccessfulPayment({
+          admin,
+          dueBillingDate,
+          paymentAt,
+          selectionId,
+          subscriptionContractId,
+        });
+
+        if (!advance.ok) {
+          console.log("[BILLING] success recorded; NBD advance deferred to next cron", {
+            error: advance.error,
+            selectionId,
+            subscriptionContractId,
+          });
+        }
+      }
+    }
 
     return {
       attemptId,
@@ -1983,15 +2332,30 @@ export const triggerSubscriptionBillingAttempt = async ({
       subscriptionContractId,
     });
 
+    // Fail-closed: after create was attempted, payment may exist at Shopify.
+    const localStatus = shopifyCreateStarted ? "unknown" : "failure";
+
     await db.subscriptionMealSelection.update({
       data: {
         lastBillingAttemptAt: attemptedAt,
         lastBillingAttemptError: errorMessage,
         lastBillingAttemptId: null,
-        lastBillingAttemptStatus: "failure",
+        lastBillingAttemptStatus: localStatus,
       },
       where: { id: selectionId },
     });
+
+    if (billingCycleClaimId && shopifyCreateStarted) {
+      await markBillingCycleClaimUncertain({
+        claimId: billingCycleClaimId,
+        errorMessage,
+      });
+    } else if (billingCycleClaimId) {
+      await markBillingCycleClaimFailed({
+        claimId: billingCycleClaimId,
+        errorMessage,
+      });
+    }
 
     return {
       attemptId: null,
@@ -1999,7 +2363,7 @@ export const triggerSubscriptionBillingAttempt = async ({
       errorMessage,
       orderId: null,
       paymentAt: null,
-      status: "failure",
+      status: localStatus === "unknown" ? "unknown" : "failure",
     };
   }
 };
@@ -2228,13 +2592,25 @@ export const processDueSubscriptionBillings = async (
       recoveryBySelectionId.get(currentSelection.id) ?? null,
     );
 
-    if (preSyncSkipReason) {
+    if (preSyncSkipReason === "cycle_already_paid_unadvanced") {
+      // Fall through to post-sync repair path — do not create a new attempt.
+    } else if (preSyncSkipReason) {
       if (preSyncSkipReason === "terminal_contract") {
         console.log("[SUBSCRIPTION_CONTRACT_SYNC] cron skipped terminal contract", {
           selectionId: currentSelection.id,
           skipReason: preSyncSkipReason,
           status: currentSelection.status,
           subscriptionContractId: currentSelection.subscriptionContractId,
+        });
+      }
+
+      if (preSyncSkipReason === "missing_delivery_context") {
+        console.log("[BILLING] skipped — missing delivery context", {
+          nextScheduledDeliveryDate:
+            currentSelection.nextScheduledDeliveryDate,
+          preferredDeliveryWeekday: currentSelection.preferredDeliveryWeekday,
+          selectionId: currentSelection.id,
+          source: "cron_pre_sync",
         });
       }
 
@@ -2300,6 +2676,55 @@ export const processDueSubscriptionBillings = async (
       recoveryBySelectionId.get(currentSelection.id) ?? null,
     );
 
+    if (skipReason === "incident_billing_hold") {
+      console.log("[BILLING] skipped — incident billing hold (ACTIVE preserved)", {
+        selectionId: currentSelection.id,
+        subscriptionContractId: currentSelection.subscriptionContractId,
+      });
+      summary.skipped += 1;
+      summary.skipReasons.incident_billing_hold += 1;
+      continue;
+    }
+
+    if (skipReason === "cycle_already_paid_unadvanced") {
+      const dueBillingDate = currentSelection.nextBillingDate;
+      const paymentAt =
+        currentSelection.lastBillingAttemptAt ?? new Date();
+      const autoRepairEnabled =
+        process.env.ENABLE_STUCK_NBD_AUTO_REPAIR === "true";
+
+      console.log("[BILLING] paid cycle still due — skip charge; NBD repair gated", {
+        autoRepairEnabled,
+        dueBillingDate: dueBillingDate?.toISOString() ?? null,
+        lastBillingAttemptId: currentSelection.lastBillingAttemptId,
+        selectionId: currentSelection.id,
+        source: "cron",
+      });
+
+      // Never auto-advance NBD for incident-held contracts, and never by default
+      // until ops enables ENABLE_STUCK_NBD_AUTO_REPAIR after reconciliation.
+      if (
+        autoRepairEnabled &&
+        !isSubscriptionBillingIncidentHeld(
+          currentSelection.subscriptionContractId,
+        ) &&
+        currentSelection.subscriptionContractId &&
+        dueBillingDate
+      ) {
+        await ensureNextBillingDateAdvancedAfterSuccessfulPayment({
+          admin,
+          dueBillingDate,
+          paymentAt,
+          selectionId: currentSelection.id,
+          subscriptionContractId: currentSelection.subscriptionContractId,
+        });
+      }
+
+      summary.skipped += 1;
+      summary.skipReasons.cycle_already_paid_unadvanced += 1;
+      continue;
+    }
+
     if (skipReason) {
       if (skipReason === "terminal_contract") {
         console.log("[SUBSCRIPTION_CONTRACT_SYNC] cron skipped terminal contract", {
@@ -2307,6 +2732,16 @@ export const processDueSubscriptionBillings = async (
           skipReason,
           status: currentSelection.status,
           subscriptionContractId: currentSelection.subscriptionContractId,
+        });
+      }
+
+      if (skipReason === "missing_delivery_context") {
+        console.log("[BILLING] skipped — missing delivery context", {
+          nextScheduledDeliveryDate:
+            currentSelection.nextScheduledDeliveryDate,
+          preferredDeliveryWeekday: currentSelection.preferredDeliveryWeekday,
+          selectionId: currentSelection.id,
+          source: "cron",
         });
       }
 
@@ -2357,15 +2792,158 @@ export const processDueSubscriptionBillings = async (
       currentSelection = boxChangeApply.selection;
     }
 
+    const dueBillingDate = currentSelection.nextBillingDate!;
+    const contractId = currentSelection.subscriptionContractId!;
+
+    const prepared = await prepareCanonicalCycleBilling({
+      admin,
+      nextBillingDate: dueBillingDate,
+      selectionId: currentSelection.id,
+      shop,
+      source: BILLING_CYCLE_CLAIM_SOURCE.CRON,
+      subscriptionContractId: contractId,
+    });
+
+    const reconcileExistingCyclePayment = async (
+      claim: BillingCycleClaimRow,
+      skipReason: BillingSkipReason,
+    ) => {
+      const cycleIndex =
+        extractShopifyCycleIndexFromBillingKey(claim.billingCycleKey) ??
+        prepared.shopifyCycleIndex;
+      const reconciled = await reconcileBillingAttemptByIdempotencyKey({
+        admin,
+        idempotencyKey: claim.idempotencyKey,
+        shopifyCycleIndex: cycleIndex,
+        subscriptionContractId: contractId,
+      });
+
+      if (reconciled.status === "success") {
+        const paymentAt =
+          parseShopifyDateTime(reconciled.attempt?.completedAt) ?? new Date();
+        await markBillingCycleClaimSucceeded({
+          billingAttemptId: reconciled.attempt?.id ?? null,
+          claimId: claim.id,
+          shopifyOrderId: reconciled.attempt?.order?.id ?? null,
+        });
+        await db.subscriptionMealSelection.update({
+          data: {
+            lastBillingAttemptAt: new Date(),
+            lastBillingAttemptError: null,
+            lastBillingAttemptId: reconciled.attempt?.id ?? null,
+            lastBillingAttemptStatus: "success",
+          },
+          where: { id: currentSelection.id },
+        });
+        if (
+          !isSubscriptionBillingIncidentHeld(contractId) &&
+          process.env.ENABLE_STUCK_NBD_AUTO_REPAIR === "true"
+        ) {
+          await ensureNextBillingDateAdvancedAfterSuccessfulPayment({
+            admin,
+            dueBillingDate,
+            paymentAt,
+            selectionId: currentSelection.id,
+            subscriptionContractId: contractId,
+          });
+        }
+        summary.skipped += 1;
+        summary.skipReasons[skipReason] += 1;
+        return;
+      }
+
+      if (reconciled.status === "submitted") {
+        await markBillingCycleClaimSubmitted({
+          billingAttemptId: reconciled.attempt?.id ?? null,
+          claimId: claim.id,
+        });
+        summary.skipped += 1;
+        summary.skipReasons.billing_cycle_claimed += 1;
+        return;
+      }
+
+      if (reconciled.status === "failure") {
+        await markBillingCycleClaimFailed({
+          claimId: claim.id,
+          errorMessage: reconciled.errorMessage,
+        });
+        summary.skipped += 1;
+        summary.skipReasons.billing_cycle_uncertain += 1;
+        return;
+      }
+
+      await markBillingCycleClaimUncertain({
+        billingAttemptId: reconciled.attempt?.id ?? null,
+        claimId: claim.id,
+        errorMessage:
+          reconciled.errorMessage ??
+          "Réconciliation Shopify incertaine — nouvelle facturation bloquée.",
+      });
+      summary.skipped += 1;
+      summary.skipReasons.billing_cycle_uncertain += 1;
+    };
+
+    if (prepared.action === "already_paid") {
+      console.log("[BILLING] Shopify cycle already paid — no new charge", {
+        reason: prepared.reason,
+        selectionId: currentSelection.id,
+        shopifyCycleIndex: prepared.shopifyCycleIndex,
+      });
+      if (prepared.claim) {
+        await markBillingCycleClaimSucceeded({
+          billingAttemptId: prepared.claim.billingAttemptId,
+          claimId: prepared.claim.id,
+          shopifyOrderId:
+            prepared.cycle.successfulAttempts[0]?.orderId ??
+            prepared.claim.shopifyOrderId,
+        });
+        await reconcileExistingCyclePayment(
+          prepared.claim,
+          "billing_cycle_claimed",
+        );
+      } else {
+        summary.skipped += 1;
+        summary.skipReasons.billing_cycle_claimed += 1;
+      }
+      continue;
+    }
+
+    if (prepared.action === "block") {
+      console.log("[BILLING] canonical cycle gate blocked charge", {
+        claimAction: prepared.claimAction ?? null,
+        reason: prepared.reason,
+        selectionId: currentSelection.id,
+        shopifyCycleIndex: prepared.shopifyCycleIndex,
+      });
+      if (
+        prepared.claim &&
+        (prepared.claimAction === "block_uncertain" ||
+          prepared.claimAction === "reconcile_in_flight")
+      ) {
+        await reconcileExistingCyclePayment(
+          prepared.claim,
+          prepared.claimAction === "block_uncertain"
+            ? "billing_cycle_uncertain"
+            : "billing_cycle_claimed",
+        );
+      } else {
+        summary.skipped += 1;
+        summary.skipReasons.billing_cycle_uncertain += 1;
+      }
+      continue;
+    }
+
     summary.processed += 1;
-    const idempotencyKey = buildAutoBillingIdempotencyKey(currentSelection.id);
 
     const billingResult = await triggerSubscriptionBillingAttempt({
       admin,
-      idempotencyKey,
+      billingCycleClaimId: prepared.claim.id,
+      dueBillingDate,
+      idempotencyKey: prepared.claim.idempotencyKey,
       selectionId: currentSelection.id,
       shop,
-      subscriptionContractId: currentSelection.subscriptionContractId!,
+      shopifyCycleIndex: prepared.shopifyCycleIndex,
+      subscriptionContractId: contractId,
     });
 
     if (billingResult.status === "failure" || billingResult.status === "unknown") {
