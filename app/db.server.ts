@@ -8,6 +8,43 @@ declare global {
 }
 
 /**
+ * Serverless-safe datasource URL.
+ *
+ * Prisma default pool size is `num_physical_cpus * 2 + 1` (often 5 on Vercel).
+ * Each isolate owns its own pool; with Supabase transaction pooler (:6543) that
+ * multiplies client connections and surfaces as P2024 / pool timeout — which
+ * Shopify then wraps as MissingSessionTableError during session.count().
+ *
+ * Official Prisma 6 / Supabase serverless guidance: start at connection_limit=1
+ * when using an external pooler. Never raise the limit here; never touch
+ * pool_timeout. Do not override an explicit operator-set connection_limit.
+ */
+export const resolvePrismaDatasourceUrl = (
+  rawUrl: string | undefined = process.env.DATABASE_URL,
+  nodeEnv: string | undefined = process.env.NODE_ENV,
+): string | undefined => {
+  if (!rawUrl) {
+    return undefined;
+  }
+
+  if (nodeEnv !== "production") {
+    return rawUrl;
+  }
+
+  try {
+    const url = new URL(rawUrl);
+
+    if (!url.searchParams.has("connection_limit")) {
+      url.searchParams.set("connection_limit", "1");
+    }
+
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+};
+
+/**
  * PrismaClient with a request-scoped timing extension.
  *
  * NOTE: Prisma `$on("query")` does NOT see AsyncLocalStorage in this runtime
@@ -17,7 +54,10 @@ declare global {
  * Cast back to PrismaClient so call sites keep the existing type surface.
  */
 const createPrismaClient = (): PrismaClient => {
-  const client = new PrismaClient().$extends({
+  const url = resolvePrismaDatasourceUrl();
+  const client = new PrismaClient(
+    url ? { datasources: { db: { url } } } : undefined,
+  ).$extends({
     query: {
       async $allOperations({ model, operation, args, query }) {
         const start = performance.now();
@@ -41,6 +81,9 @@ const prismaModelDelegateKey = (modelName: string) =>
  * After `prisma generate`, Vite HMR can keep a stale `global.prismaGlobal`
  * whose delegates predate new models — `db.foo` is then `undefined` and
  * `db.foo.findMany()` throws TypeError. Recreate when out of sync with DMMF.
+ *
+ * Also reuse the same client in production: Vercel isolates may evaluate the
+ * module more than once; skipping globalThis creates extra pools per isolate.
  */
 const isPrismaClientInSyncWithGeneratedSchema = (
   client: PrismaClient,
@@ -59,10 +102,6 @@ const isPrismaClientInSyncWithGeneratedSchema = (
 };
 
 const resolvePrismaClient = (): PrismaClient => {
-  if (process.env.NODE_ENV === "production") {
-    return createPrismaClient();
-  }
-
   const existing = global.prismaGlobal;
 
   if (existing && isPrismaClientInSyncWithGeneratedSchema(existing)) {

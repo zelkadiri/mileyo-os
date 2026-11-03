@@ -133,6 +133,7 @@ const BUSINESS_SUITES = [
   "108-portal-pause-shopify-status.test.ts",
   "113-billing-cycle-idempotency-guards.test.ts",
   "114-billing-cycle-claim-pg-integration.test.ts",
+  "115-prisma-serverless-pool.test.ts",
 ];
 
 const LEGACY_SUITES = [
