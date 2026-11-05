@@ -216,19 +216,52 @@ const runSuite = () => {
     );
   }
 
-  ctx.scenario("4. Paid unadvanced + incident hold");
+  ctx.scenario("4. Paid unadvanced + incident hold + healthy prior success");
   {
     const now = new Date("2026-12-01T12:00:00.000Z");
-    const selection = dueSelection({
+    const stuck = dueSelection({
       lastBillingAttemptAt: new Date("2026-11-03T00:00:30.000Z"),
       lastBillingAttemptStatus: "success",
       nextBillingDate: new Date("2026-10-30T16:00:00.000Z"),
     });
     ctx.assertEqual(
-      "cycle_already_paid_unadvanced",
-      getSelectionSkipReason(selection, null, now),
+      "stuck: success at/after still-due NBD",
+      getSelectionSkipReason(stuck, null, now),
       "cycle_already_paid_unadvanced",
     );
+    ctx.assertTrue(
+      "helper stuck",
+      isSuccessfulBillingAwaitingNextBillingAdvance(stuck, now),
+    );
+
+    // Prior-cycle success (Aug) then NBD advanced to Nov — must NOT block.
+    const healthy = dueSelection({
+      lastBillingAttemptAt: new Date("2026-08-18T11:49:36.000Z"),
+      lastBillingAttemptStatus: "success",
+      nextBillingDate: new Date("2026-11-06T23:05:00.000Z"),
+    });
+    const satNow = new Date("2026-11-07T00:10:00.000Z");
+    ctx.assertNull(
+      "healthy prior success allows new due cycle",
+      getSelectionSkipReason(healthy, null, satNow),
+    );
+    ctx.assertFalse(
+      "helper allows advanced NBD",
+      isSuccessfulBillingAwaitingNextBillingAdvance(healthy, satNow),
+    );
+
+    // Early payment same due slot without NBD advance: local helper may miss
+    // (lastAt < NBD); charge-time cycle/claim guards remain mandatory.
+    const earlyPayStuck = dueSelection({
+      lastBillingAttemptAt: new Date("2026-11-06T20:00:00.000Z"),
+      lastBillingAttemptStatus: "success",
+      nextBillingDate: new Date("2026-11-06T23:05:00.000Z"),
+    });
+    ctx.assertFalse(
+      "early-pay stuck not caught by lastAt>=NBD alone",
+      isSuccessfulBillingAwaitingNextBillingAdvance(earlyPayStuck, satNow),
+    );
+
     ctx.assertTrue(
       "Hossam held",
       isSubscriptionBillingIncidentHeld("26652508488"),

@@ -335,8 +335,8 @@ export type { ShopifyAdminGraphql };
 export const RECENT_BILLING_ATTEMPT_WINDOW_MS = 30 * 60 * 1000;
 
 /**
- * @deprecated No time window — while status=success and NBD is still due, always
- * block new charges and repair NBD (fail-closed). Kept as alias for older tests.
+ * @deprecated Legacy alias — stuck detection is no longer time-window based.
+ * See isSuccessfulBillingAwaitingNextBillingAdvance.
  */
 export const SUCCESSFUL_CYCLE_UNADVANCED_GUARD_MS = Number.POSITIVE_INFINITY;
 
@@ -822,8 +822,19 @@ export const hasUsableDeliveryBillingContext = (selection: {
   selection.preferredDeliveryWeekday <= 6;
 
 /**
- * Success recorded but nextBillingDate still due — do not create a new charge.
- * No expiry window: fail-closed until NBD advances (or ops intervenes).
+ * Local pre-charge guard for the Hossam "paid but NBD never advanced" pattern.
+ *
+ * Stuck (block): status=success, NBD is due, and the success timestamp is at/after
+ * that still-due NBD → payment landed on this due slot without NBD moving forward.
+ *
+ * Healthy renewal (allow): prior-cycle success then NBD advanced to the next slot
+ * → lastBillingAttemptAt < nextBillingDate. The new due cycle must remain billable
+ * once; Shopify cycleIndex + SubscriptionBillingCycleClaim enforce anti-double at
+ * charge time.
+ *
+ * Residual (fail-open locally, fail-closed at charge): early payment for the current
+ * due NBD with lastAt < NBD and NBD not advanced — prepareCanonicalCycleBilling /
+ * already_paid / claim must stop a duplicate before create.
  */
 export const isSuccessfulBillingAwaitingNextBillingAdvance = (
   selection: {
@@ -841,7 +852,14 @@ export const isSuccessfulBillingAwaitingNextBillingAdvance = (
     return false;
   }
 
-  return selection.nextBillingDate.getTime() <= now.getTime();
+  if (selection.nextBillingDate.getTime() > now.getTime()) {
+    return false;
+  }
+
+  return (
+    selection.lastBillingAttemptAt.getTime() >=
+    selection.nextBillingDate.getTime()
+  );
 };
 
 /**
