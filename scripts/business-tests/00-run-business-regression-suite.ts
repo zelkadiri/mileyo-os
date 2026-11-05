@@ -134,6 +134,8 @@ const BUSINESS_SUITES = [
   "113-billing-cycle-idempotency-guards.test.ts",
   "114-billing-cycle-claim-pg-integration.test.ts",
   "115-prisma-serverless-pool.test.ts",
+  "116-anti-double-billing-p7-scenarios.test.ts",
+  "117-billing-validation-matrix-preprod.test.ts",
 ];
 
 const LEGACY_SUITES = [

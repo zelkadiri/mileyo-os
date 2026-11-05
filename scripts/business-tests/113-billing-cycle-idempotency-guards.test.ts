@@ -190,6 +190,16 @@ const runSuite = () => {
         portalSource.includes("prepareCanonicalCycleBilling"),
     );
     ctx.assertTrue(
+      "P0-1 first-checkout guard before claim",
+      gateSource.includes("evaluateFirstCheckoutDeliveryBillingGuard") &&
+        gateSource.includes("checkoutShopifyOrderId"),
+    );
+    ctx.assertTrue(
+      "P0-2 charge window before claim",
+      cycleSource.includes("block_too_early") &&
+        gateSource.includes("shopify_charge_window_closed"),
+    );
+    ctx.assertTrue(
       "resolveBillableShopifyCycle",
       cycleSource.includes("resolveBillableShopifyCycle"),
     );

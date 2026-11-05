@@ -89,6 +89,62 @@ export const resolveNextBillingCycleAfterDelivery = (
   );
 };
 
+/**
+ * P0-1 fail-closed: after a paid first checkout, local/Shopify NBD must not be
+ * earlier than the Saturday that pays the *second* box (first legitimate renewal).
+ *
+ * Uses the first-checkout scheduled delivery date (BoxOrder for selection.shopifyOrderId,
+ * isSubscriptionRenewal=false) — not an arbitrary BoxOrder and not delivery-day alone.
+ * Misaligned residual NBD stays blocked until reconciliation advances NBD.
+ */
+export const evaluateFirstCheckoutDeliveryBillingGuard = ({
+  firstCheckoutScheduledDeliveryDate,
+  nextBillingDate,
+  timezone = SUBSCRIPTION_CYCLE_TIMEZONE,
+}: {
+  firstCheckoutScheduledDeliveryDate: string;
+  nextBillingDate: Date;
+  timezone?: string;
+}):
+  | { ok: true; earliestLegitimateRenewalAt: Date }
+  | {
+      ok: false;
+      reason: string;
+      earliestLegitimateRenewalAt: Date | null;
+    } => {
+  if (Number.isNaN(nextBillingDate.getTime())) {
+    return {
+      earliestLegitimateRenewalAt: null,
+      ok: false,
+      reason: "nextBillingDate invalide — facturation bloquée (garde 1ère livraison).",
+    };
+  }
+
+  const earliestLegitimateRenewalAt = resolveNextBillingCycleAfterDelivery(
+    firstCheckoutScheduledDeliveryDate,
+    timezone,
+  );
+
+  if (!earliestLegitimateRenewalAt) {
+    return {
+      earliestLegitimateRenewalAt: null,
+      ok: false,
+      reason:
+        "Impossible de dériver le premier renouvellement légitime depuis la 1ère livraison — réconciliation requise.",
+    };
+  }
+
+  if (nextBillingDate.getTime() < earliestLegitimateRenewalAt.getTime()) {
+    return {
+      earliestLegitimateRenewalAt,
+      ok: false,
+      reason: `NBD ${nextBillingDate.toISOString()} antérieure au premier renouvellement légitime ${earliestLegitimateRenewalAt.toISOString()} (1ère livraison payée ${firstCheckoutScheduledDeliveryDate}) — alignement/réconciliation requis, pas de débit.`,
+    };
+  }
+
+  return { earliestLegitimateRenewalAt, ok: true };
+};
+
 const isSameInstant = (left: Date, right: Date) =>
   left.getTime() === right.getTime();
 

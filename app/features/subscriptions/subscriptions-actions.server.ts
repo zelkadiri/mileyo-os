@@ -203,6 +203,7 @@ export const handleSubscriptionsAction = async (request: Request) => {
     try {
       const prepared = await prepareCanonicalCycleBilling({
         admin,
+        checkoutShopifyOrderId: billableSelection.shopifyOrderId,
         nextBillingDate: dueBillingDate,
         selectionId: billableSelection.id,
         shop,

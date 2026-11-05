@@ -302,7 +302,10 @@ export type BillingSkipReason =
   | "cycle_already_paid_unadvanced"
   | "billing_cycle_claimed"
   | "billing_cycle_uncertain"
-  | "incident_billing_hold";
+  | "incident_billing_hold"
+  | "first_checkout_delivery_unaligned"
+  | "missing_first_checkout_delivery_proof"
+  | "shopify_charge_window_closed";
 
 export type BillingAttemptStatus =
   | "success"
@@ -360,15 +363,18 @@ const EMPTY_SKIP_REASONS = (): Record<BillingSkipReason, number> => ({
   contract_sync_error: 0,
   cycle_already_paid_unadvanced: 0,
   delivery_billing_not_ready: 0,
+  first_checkout_delivery_unaligned: 0,
   incident_billing_hold: 0,
   missing_contract_id: 0,
   missing_delivery_context: 0,
+  missing_first_checkout_delivery_proof: 0,
   missing_next_billing_date: 0,
   next_billing_date_in_future: 0,
   paused_or_inactive: 0,
   payment_recovery: 0,
   pending_box_change: 0,
   recent_attempt: 0,
+  shopify_charge_window_closed: 0,
   terminal_contract: 0,
 });
 
@@ -2815,6 +2821,7 @@ export const processDueSubscriptionBillings = async (
 
     const prepared = await prepareCanonicalCycleBilling({
       admin,
+      checkoutShopifyOrderId: currentSelection.shopifyOrderId,
       nextBillingDate: dueBillingDate,
       selectionId: currentSelection.id,
       shop,
@@ -2928,6 +2935,7 @@ export const processDueSubscriptionBillings = async (
 
     if (prepared.action === "block") {
       console.log("[BILLING] canonical cycle gate blocked charge", {
+        blockCode: prepared.blockCode ?? null,
         claimAction: prepared.claimAction ?? null,
         reason: prepared.reason,
         selectionId: currentSelection.id,
@@ -2945,8 +2953,14 @@ export const processDueSubscriptionBillings = async (
             : "billing_cycle_claimed",
         );
       } else {
+        const blockSkipReason: BillingSkipReason =
+          prepared.blockCode === "first_checkout_delivery_unaligned" ||
+          prepared.blockCode === "missing_first_checkout_delivery_proof" ||
+          prepared.blockCode === "shopify_charge_window_closed"
+            ? prepared.blockCode
+            : "billing_cycle_uncertain";
         summary.skipped += 1;
-        summary.skipReasons.billing_cycle_uncertain += 1;
+        summary.skipReasons[blockSkipReason] += 1;
       }
       continue;
     }

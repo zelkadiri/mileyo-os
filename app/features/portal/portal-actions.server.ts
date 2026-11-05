@@ -1123,6 +1123,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 
       const prepared = await prepareCanonicalCycleBilling({
         admin,
+        checkoutShopifyOrderId: selection.shopifyOrderId,
         nextBillingDate: selection.nextBillingDate,
         selectionId: selection.id,
         shop,

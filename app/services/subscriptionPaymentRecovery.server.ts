@@ -1850,6 +1850,7 @@ export const processDueRecoveryRetries = async (
 
       const prepared = await prepareCanonicalCycleBilling({
         admin,
+        checkoutShopifyOrderId: billableSelection.shopifyOrderId,
         nextBillingDate: billableSelection.nextBillingDate,
         selectionId: billableSelection.id,
         shop,

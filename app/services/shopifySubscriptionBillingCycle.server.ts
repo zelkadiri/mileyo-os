@@ -38,6 +38,42 @@ export type ShopifyBillingCycleSnapshot = {
   attempts: ShopifyBillingCycleAttemptSummary[];
 };
 
+/**
+ * Shopify Admin rejects subscriptionBillingAttemptCreate with
+ * billingCycleSelector.index when now < billingAttemptExpectedDate − 24h
+ * (BILLING_CYCLE_CHARGE_BEFORE_EXPECTED_DATE). Same-calendar-day expected
+ * (e.g. Sat 07h–16h) remains chargeable at Mileyo NBD Sat 00:05.
+ */
+export const SHOPIFY_BILLING_ATTEMPT_EARLIEST_OFFSET_MS =
+  24 * 60 * 60 * 1000;
+
+export const getShopifyBillingCycleEarliestChargeAt = (
+  billingAttemptExpectedDate: string | Date,
+): Date | null => {
+  const expectedMs = new Date(billingAttemptExpectedDate).getTime();
+  if (Number.isNaN(expectedMs)) {
+    return null;
+  }
+  return new Date(expectedMs - SHOPIFY_BILLING_ATTEMPT_EARLIEST_OFFSET_MS);
+};
+
+/** Authorization only — does not identify which cycle to bill. */
+export const isShopifyBillingCycleChargeWindowOpen = ({
+  billingAttemptExpectedDate,
+  now = new Date(),
+}: {
+  billingAttemptExpectedDate: string | Date;
+  now?: Date;
+}): boolean => {
+  const earliest = getShopifyBillingCycleEarliestChargeAt(
+    billingAttemptExpectedDate,
+  );
+  if (!earliest) {
+    return false;
+  }
+  return now.getTime() >= earliest.getTime();
+};
+
 export type ResolveBillableShopifyCycleResult =
   | {
       action: "billable";
@@ -55,6 +91,13 @@ export type ResolveBillableShopifyCycleResult =
       shopifyCycleIndex: number | null;
       reason: string;
       cycles: ShopifyBillingCycleSnapshot[];
+    }
+  | {
+      action: "block_too_early";
+      cycle: ShopifyBillingCycleSnapshot;
+      shopifyCycleIndex: number;
+      earliestChargeAt: Date;
+      reason: string;
     }
   | {
       action: "block_unresolvable";
@@ -171,10 +214,47 @@ const sameInstant = (left: string, right: Date) =>
   new Date(left).getTime() === right.getTime();
 
 /**
+ * Identify the Shopify cycle for a due NBD (byExpected, else byWindow).
+ * Does not authorize create — callers must still apply paid/ambiguous/window checks.
+ */
+export const identifyShopifyBillingCycleCandidate = ({
+  cycles,
+  nextBillingDate,
+}: {
+  cycles: ShopifyBillingCycleSnapshot[];
+  nextBillingDate: Date;
+}): ShopifyBillingCycleSnapshot | null => {
+  if (Number.isNaN(nextBillingDate.getTime()) || cycles.length === 0) {
+    return null;
+  }
+
+  const byExpected =
+    cycles.find((cycle) =>
+      sameInstant(cycle.billingAttemptExpectedDate, nextBillingDate),
+    ) ?? null;
+
+  if (byExpected) {
+    return byExpected;
+  }
+
+  const dueMs = nextBillingDate.getTime();
+  return (
+    cycles.find((cycle) => {
+      const start = new Date(cycle.cycleStartAt).getTime();
+      const end = new Date(cycle.cycleEndAt).getTime();
+      return dueMs >= start && dueMs <= end;
+    }) ?? null
+  );
+};
+
+/**
  * Pure classifier (testable). Previous cycles BILLED are normal.
  * Ambiguous only when a *later* cycle already has successful payments while
  * the due NBD still points at an unpaid earlier candidate (Hossam pattern),
  * or when the candidate has in-flight attempts without an order.
+ *
+ * Identification (byExpected / byWindow) is separate from charge authorization
+ * (NBD within cycle bounds + Shopify expected−24h window).
  */
 export const classifyBillableShopifyCycle = ({
   cycles,
@@ -199,20 +279,11 @@ export const classifyBillableShopifyCycle = ({
     };
   }
 
-  const byExpected =
-    cycles.find((cycle) =>
-      sameInstant(cycle.billingAttemptExpectedDate, nextBillingDate),
-    ) ?? null;
-
   const dueMs = nextBillingDate.getTime();
-  const byWindow =
-    cycles.find((cycle) => {
-      const start = new Date(cycle.cycleStartAt).getTime();
-      const end = new Date(cycle.cycleEndAt).getTime();
-      return dueMs >= start && dueMs <= end;
-    }) ?? null;
-
-  const candidate = byExpected ?? byWindow;
+  const candidate = identifyShopifyBillingCycleCandidate({
+    cycles,
+    nextBillingDate,
+  });
 
   if (!candidate) {
     return {
@@ -259,6 +330,41 @@ export const classifyBillableShopifyCycle = ({
       action: "block_ambiguous",
       cycles,
       reason: `Cycle c${candidate.cycleIndex} a ${openAttempts.length} attempt(s) sans order — réconciliation Shopify avant nouvelle charge.`,
+      shopifyCycleIndex: candidate.cycleIndex,
+    };
+  }
+
+  const startMs = new Date(candidate.cycleStartAt).getTime();
+  const endMs = new Date(candidate.cycleEndAt).getTime();
+  if (
+    Number.isNaN(startMs) ||
+    Number.isNaN(endMs) ||
+    dueMs < startMs ||
+    dueMs > endMs
+  ) {
+    return {
+      action: "block_unresolvable",
+      reason: `nextBillingDate=${nextBillingDate.toISOString()} hors bornes du cycle c${candidate.cycleIndex} [${candidate.cycleStartAt} → ${candidate.cycleEndAt}].`,
+    };
+  }
+
+  const earliestChargeAt = getShopifyBillingCycleEarliestChargeAt(
+    candidate.billingAttemptExpectedDate,
+  );
+  if (
+    !earliestChargeAt ||
+    !isShopifyBillingCycleChargeWindowOpen({
+      billingAttemptExpectedDate: candidate.billingAttemptExpectedDate,
+      now,
+    })
+  ) {
+    return {
+      action: "block_too_early",
+      cycle: candidate,
+      earliestChargeAt:
+        earliestChargeAt ??
+        new Date(Number.NaN),
+      reason: `Fenêtre Shopify expected−24h fermée pour c${candidate.cycleIndex} (expected=${candidate.billingAttemptExpectedDate}, earliest=${earliestChargeAt?.toISOString() ?? "invalid"}, now=${now.toISOString()}). Identification byWindow conservée — pas de claim/create.`,
       shopifyCycleIndex: candidate.cycleIndex,
     };
   }
