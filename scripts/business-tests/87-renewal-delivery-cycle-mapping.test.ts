@@ -78,6 +78,7 @@ const runSuite = () => {
     },
     selectionId: "sel_premature",
     shopifyOrderId: "6078475075724",
+    storedDeliveryHasPaidBoxOrder: true,
   });
   ctx.when("le scheduledDeliveryDate renewal est résolu");
   ctx.assertEqual(
@@ -98,6 +99,7 @@ const runSuite = () => {
       nextScheduledDeliveryDate: "2026-09-03",
       preferredDeliveryWeekday: 4,
     },
+    storedDeliveryHasPaidBoxOrder: true,
   });
   ctx.assertEqual(
     "normal renewal after past current cycle targets 2026-09-10",
@@ -117,6 +119,9 @@ const runSuite = () => {
       nextScheduledDeliveryDate: "2026-09-10",
       preferredDeliveryWeekday: 4,
     },
+    // Unpaid target already stored — keep even if paid-flag were wrong post-cutoff;
+    // paid=false is the unpaid-upcoming path; paid=true post-cutoff also keeps.
+    storedDeliveryHasPaidBoxOrder: false,
   });
   ctx.assertEqual(
     "aligned target after cutoff keeps 2026-09-10 (no extra +7)",
@@ -136,11 +141,64 @@ const runSuite = () => {
       nextScheduledDeliveryDate: "2026-09-04",
       preferredDeliveryWeekday: 5,
     },
+    storedDeliveryHasPaidBoxOrder: true,
   });
   ctx.assertEqual(
     "friday premature renewal targets 2026-09-11",
     fridayPremature?.scheduledDeliveryDate,
     "2026-09-11",
+  );
+
+  ctx.scenario("P7 — unpaid upcoming nextScheduled must not +7 before cutoff");
+  ctx.given("nextScheduledDeliveryDate=12 nov unpaid; billing samedi 7 nov pre-cutoff");
+  const unpaidUpcoming = resolveRenewalDeliveryScheduleFromSelection({
+    orderCreatedAt: new Date("2026-11-07T00:10:00+01:00"),
+    selection: {
+      nextScheduledDeliveryDate: "2026-11-12",
+      preferredDeliveryWeekday: 4,
+    },
+    storedDeliveryHasPaidBoxOrder: false,
+  });
+  ctx.assertEqual(
+    "unpaid upcoming keeps 2026-11-12 (no skip to 19)",
+    unpaidUpcoming?.scheduledDeliveryDate,
+    "2026-11-12",
+  );
+  ctx.assertTrue(
+    "unpaid upcoming never jumps to 2026-11-19",
+    unpaidUpcoming?.scheduledDeliveryDate !== "2026-11-19",
+  );
+
+  ctx.scenario("P7 — paid upcoming nextScheduled still billing-targets +7");
+  ctx.given("12 nov already has BoxOrder; premature/renewal before cutoff");
+  const paidUpcoming = resolveRenewalDeliveryScheduleFromSelection({
+    orderCreatedAt: new Date("2026-11-07T00:10:00+01:00"),
+    selection: {
+      nextScheduledDeliveryDate: "2026-11-12",
+      preferredDeliveryWeekday: 4,
+    },
+    storedDeliveryHasPaidBoxOrder: true,
+  });
+  ctx.assertEqual(
+    "paid upcoming before cutoff advances to 2026-11-19",
+    paidUpcoming?.scheduledDeliveryDate,
+    "2026-11-19",
+  );
+
+  ctx.scenario("P7 — deferred first delivery unpaid keeps 19 nov");
+  ctx.given("checkout paid for first delivery 19 nov; no premature +7 when unpaid proof");
+  const deferredFirst = resolveRenewalDeliveryScheduleFromSelection({
+    orderCreatedAt: new Date("2026-11-07T00:10:00+01:00"),
+    selection: {
+      nextScheduledDeliveryDate: "2026-11-19",
+      preferredDeliveryWeekday: 4,
+    },
+    storedDeliveryHasPaidBoxOrder: false,
+  });
+  ctx.assertEqual(
+    "deferred unpaid first delivery date kept at 19 nov",
+    deferredFirst?.scheduledDeliveryDate,
+    "2026-11-19",
   );
 
   ctx.scenario("Collision guard — orchestrator fail-closed");
@@ -151,6 +209,11 @@ const runSuite = () => {
   ctx.assertTrue(
     "orchestrator imports findRenewalDeliveryCycleCollision",
     orchestratorSource.includes("findRenewalDeliveryCycleCollision"),
+  );
+  ctx.assertTrue(
+    "orchestrator proves paid vs unpaid via findPaidBoxOrderForDeliveryDate",
+    orchestratorSource.includes("findPaidBoxOrderForDeliveryDate") &&
+      orchestratorSource.includes("storedDeliveryHasPaidBoxOrder"),
   );
   ctx.assertTrue(
     "orchestrator logs renewal_cycle_collision fail-closed",

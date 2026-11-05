@@ -592,17 +592,26 @@ export const logDeliveryProjection = ({
 /**
  * BOX-CHANGE-7H — renewal delivery date for a paid billing cycle.
  *
- * - Stored nextScheduledDeliveryDate still upcoming (≥ today Paris):
- *   use resolveBillingTargetDeliveryDate so a premature renewal pays the
- *   *next* unpaid cycle (e.g. 3 Sept current → 10 Sept), not a duplicate 3 Sept.
- * - Stored date already past: projectActive catch-up only (do NOT apply
- *   billing-target again — that would double-advance on Saturday billing).
+ * Semantics of selection.nextScheduledDeliveryDate (not always "next unpaid"):
+ * - May still point at a cycle already paid (first checkout / last renewal) while
+ *   that delivery date remains upcoming → premature path must +7 via billing-target.
+ * - May already point at the next unpaid week after a prior payment advanced it →
+ *   must KEEP that date (do not +7 again before meal cutoff).
+ * - May be past → projectActive catch-up only (never billing-target again).
+ *
+ * `storedDeliveryHasPaidBoxOrder` is required when the stored date is still
+ * upcoming: true = paid current cycle (billing-target), false = unpaid target
+ * (keep). Callers that cannot prove paid vs unpaid must not invent a date —
+ * pass an explicit boolean from BoxOrder evidence, or the resolver returns null
+ * only when the upcoming branch would otherwise be ambiguous (missing proof is
+ * a caller bug: always pass the boolean).
  */
 export const resolveRenewalDeliveryScheduleFromSelection = ({
   orderCreatedAt,
   selection,
   selectionId,
   shopifyOrderId,
+  storedDeliveryHasPaidBoxOrder,
 }: {
   orderCreatedAt: Date | null | undefined;
   selection: {
@@ -611,6 +620,13 @@ export const resolveRenewalDeliveryScheduleFromSelection = ({
   };
   selectionId?: string;
   shopifyOrderId?: string;
+  /**
+   * Whether a non-cancelled, non-simulated BoxOrder already exists for
+   * `selection.nextScheduledDeliveryDate`. Required to distinguish premature
+   * (paid upcoming → +7) from unpaid upcoming target (keep). Ignored when the
+   * stored date is past (catch-up path).
+   */
+  storedDeliveryHasPaidBoxOrder: boolean;
 }): RenewalDeliveryScheduleResolution | null => {
   const referenceInstant =
     orderCreatedAt && !Number.isNaN(orderCreatedAt.getTime())
@@ -636,12 +652,17 @@ export const resolveRenewalDeliveryScheduleFromSelection = ({
   let usedBillingTarget = false;
 
   if (storedDate && storedDate >= todayParis) {
-    // Current cycle still upcoming — renewal pays the billing-target cycle.
-    scheduledDeliveryDate = resolveBillingTargetDeliveryDate({
-      now: referenceInstant,
-      projectedActiveDeliveryDate: storedDate,
-    });
-    usedBillingTarget = true;
+    if (storedDeliveryHasPaidBoxOrder) {
+      // Paid cycle still upcoming — renewal pays the next unpaid (billing-target).
+      scheduledDeliveryDate = resolveBillingTargetDeliveryDate({
+        now: referenceInstant,
+        projectedActiveDeliveryDate: storedDate,
+      });
+      usedBillingTarget = true;
+    } else {
+      // Unpaid upcoming target already stored — keep it (no pre-cutoff +7 skip).
+      scheduledDeliveryDate = storedDate;
+    }
   } else if (projection.effectiveDeliveryDate) {
     // Stored date past (or missing with weekday fallback) — catch-up only.
     scheduledDeliveryDate = projection.effectiveDeliveryDate;
@@ -667,6 +688,30 @@ export const resolveRenewalDeliveryScheduleFromSelection = ({
     scheduledDeliveryDate,
   };
 };
+
+/** Kitchen BoxOrder already exists for this selection + delivery date (paid cycle proof). */
+export const findPaidBoxOrderForDeliveryDate = async ({
+  scheduledDeliveryDate,
+  shop,
+  subscriptionSelectionId,
+}: {
+  scheduledDeliveryDate: string;
+  shop: string;
+  subscriptionSelectionId: string;
+}) =>
+  db.boxOrder.findFirst({
+    select: {
+      id: true,
+      shopifyOrderId: true,
+      shopifyOrderName: true,
+    },
+    where: {
+      scheduledDeliveryDate,
+      shop,
+      subscriptionSelectionId,
+      ...KITCHEN_PREPARATION_BOX_ORDER_WHERE,
+    },
+  });
 
 /** Another non-simulated BoxOrder already owns this selection+delivery cycle. */
 export const findRenewalDeliveryCycleCollision = async ({

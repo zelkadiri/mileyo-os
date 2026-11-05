@@ -26,6 +26,7 @@ const runSuite = () => {
       nextScheduledDeliveryDate: "2026-07-16",
       preferredDeliveryWeekday: 4,
     },
+    storedDeliveryHasPaidBoxOrder: true,
   });
   ctx.when("le renouvellement est calculé");
   ctx.assertEqual(
@@ -42,6 +43,7 @@ const runSuite = () => {
       nextScheduledDeliveryDate: "2026-09-03",
       preferredDeliveryWeekday: 4,
     },
+    storedDeliveryHasPaidBoxOrder: true,
   });
   ctx.assertEqual(
     "premature renewal targets next unpaid cycle 10 sept",
@@ -95,6 +97,7 @@ const runSuite = () => {
       nextScheduledDeliveryDate: "2026-07-16",
       preferredDeliveryWeekday: null,
     },
+    storedDeliveryHasPaidBoxOrder: false,
   });
   ctx.assertEqual(
     "renewal without weekday still projects from stored date",
@@ -112,6 +115,7 @@ const runSuite = () => {
         nextScheduledDeliveryDate: null,
         preferredDeliveryWeekday: null,
       },
+      storedDeliveryHasPaidBoxOrder: false,
     }),
   );
 

@@ -123,6 +123,13 @@ const applyOrdersCreateCycle = ({
         },
         selectionId: matchedSelection.id,
         shopifyOrderId: incomingShopifyOrderId,
+        // Replay harness: treat stored upcoming as unpaid unless a prior box exists
+        // on that date in this in-memory fixture (none → keep / catch-up paths).
+        storedDeliveryHasPaidBoxOrder: Boolean(
+          existingBoxOrder &&
+            existingBoxOrder.scheduledDeliveryDate ===
+              matchedSelection.nextScheduledDeliveryDate,
+        ),
       });
       scheduledDeliveryDate = renewalSchedule?.scheduledDeliveryDate ?? null;
       desiredDeliveryDate = renewalSchedule?.desiredDeliveryDate ?? null;

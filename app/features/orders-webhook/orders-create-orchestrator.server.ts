@@ -42,6 +42,7 @@ import { unauthenticated } from "../../shopify.server";
 import {
   alignFirstOrderBillingWithDeliverySchedule,
   alignRenewalBillingWithDeliverySchedule,
+  findPaidBoxOrderForDeliveryDate,
   findRenewalDeliveryCycleCollision,
   logDeliveryScheduleEvent,
   resolveFirstOrderDeliverySchedule,
@@ -396,6 +397,15 @@ export const handleOrdersCreateWebhook = async ({
         shopifyOrderId,
       });
     } else {
+      const storedDeliveryDate = matchedSelection.nextScheduledDeliveryDate;
+      const paidBoxForStoredDelivery = storedDeliveryDate
+        ? await findPaidBoxOrderForDeliveryDate({
+            scheduledDeliveryDate: storedDeliveryDate,
+            shop,
+            subscriptionSelectionId: matchedSelection.id,
+          })
+        : null;
+
       renewalDeliverySchedule = resolveRenewalDeliveryScheduleFromSelection({
         orderCreatedAt,
         selection: {
@@ -405,6 +415,7 @@ export const handleOrdersCreateWebhook = async ({
         },
         selectionId: matchedSelection.id,
         shopifyOrderId,
+        storedDeliveryHasPaidBoxOrder: Boolean(paidBoxForStoredDelivery),
       });
 
       // BOX-CHANGE-7H: distinct Shopify order must not steal an already-paid cycle.

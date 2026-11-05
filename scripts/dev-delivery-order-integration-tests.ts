@@ -241,6 +241,9 @@ const persistRenewalDelivery = async ({
         },
         selectionId: selection.id,
         shopifyOrderId,
+        // Integration helper creates the first box separately; renewal path uses
+        // catch-up from past stored dates or unpaid upcoming keep.
+        storedDeliveryHasPaidBoxOrder: false,
       })
     : null;
   const deliveryData = buildBoxOrderDeliveryData(schedule);
@@ -573,6 +576,7 @@ async function main() {
           nextScheduledDeliveryDate: "2026-07-16",
           preferredDeliveryWeekday: 4,
         },
+        storedDeliveryHasPaidBoxOrder: true,
       })?.scheduledDeliveryDate,
       "2026-07-23",
     );
