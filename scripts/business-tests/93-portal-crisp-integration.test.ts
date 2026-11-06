@@ -1,11 +1,12 @@
 /**
- * Business regression — portal Crisp widget (CRISP-1).
+ * Business regression — Crisp widget on portal + box builder (CRISP-1).
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { SUBSCRIPTION_OBJECTIVE } from "../../app/constants/subscriptionObjective";
+import { renderBuilder } from "../../app/features/builder/builder-render";
 import {
   renderPortalCrispScript,
   resolvePortalCrispConfig,
@@ -15,6 +16,10 @@ import type {
   PortalBoxProduct,
   PortalSelection,
 } from "../../app/features/portal/portal-types";
+import {
+  renderCrispScript,
+  resolveCrispConfig,
+} from "../../app/utils/crisp";
 import { createBusinessTestContext, finishSuite } from "./_framework";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -275,6 +280,10 @@ const runSuite = async () => {
     enabledHtml.includes("window.$crisp=[]"),
   );
   ctx.assertTrue(
+    "garde anti double-init",
+    enabledHtml.includes("__MILEYO_CRISP_LOADED__"),
+  );
+  ctx.assertTrue(
     "CRISP_WEBSITE_ID injecté",
     enabledHtml.includes("CRISP_WEBSITE_ID"),
   );
@@ -284,7 +293,12 @@ const runSuite = async () => {
   );
   ctx.assertTrue(
     "loader async Crisp",
-    enabledHtml.includes("https://client.crisp.chat/l.js"),
+    enabledHtml.includes("https://client.crisp.chat/l.js") &&
+      enabledHtml.includes("s.async=1"),
+  );
+  ctx.assertTrue(
+    "une seule occurrence du loader Crisp",
+    (enabledHtml.match(/client\.crisp\.chat\/l\.js/g) ?? []).length === 1,
   );
 
   ctx.scenario("C. CTAs Crisp — diététicienne et changement d'objectif");
@@ -338,38 +352,127 @@ const runSuite = async () => {
   );
 
   ctx.scenario("E. Sécurité");
+  const sharedCrisp = readSource("app/utils/crisp.ts");
+  const builderRender = readSource("app/features/builder/builder-render.ts");
+  const builderStyles = readSource("app/features/builder/builder-styles.ts");
   ctx.assertFalse(
     "aucun user:email Crisp",
-    portalCrisp.includes("user:email") || portalClient.includes("user:email"),
+    sharedCrisp.includes("user:email") ||
+      portalCrisp.includes("user:email") ||
+      portalClient.includes("user:email") ||
+      builderRender.includes("user:email"),
   );
   ctx.assertFalse(
     "aucun user:nickname Crisp",
-    portalCrisp.includes("user:nickname") ||
-      portalClient.includes("user:nickname"),
+    sharedCrisp.includes("user:nickname") ||
+      portalCrisp.includes("user:nickname") ||
+      portalClient.includes("user:nickname") ||
+      builderRender.includes("user:nickname"),
   );
   ctx.assertFalse(
     "aucun session:data Crisp",
-    portalCrisp.includes("session:data") ||
-      portalClient.includes("session:data"),
+    sharedCrisp.includes("session:data") ||
+      portalCrisp.includes("session:data") ||
+      portalClient.includes("session:data") ||
+      builderRender.includes("session:data"),
   );
   ctx.assertFalse(
     "Website ID DEV non hardcodé",
-    portalCrisp.includes("55aab303-5098-4b68-b5cb-436055ed4ee5") ||
-      portalRender.includes("55aab303-5098-4b68-b5cb-436055ed4ee5"),
+    sharedCrisp.includes("55aab303-5098-4b68-b5cb-436055ed4ee5") ||
+      portalCrisp.includes("55aab303-5098-4b68-b5cb-436055ed4ee5") ||
+      portalRender.includes("55aab303-5098-4b68-b5cb-436055ed4ee5") ||
+      builderRender.includes("55aab303-5098-4b68-b5cb-436055ed4ee5"),
   );
   ctx.assertTrue(
     "Website ID sérialisé via JSON.stringify",
     renderPortalCrispScript(TEST_CRISP_WEBSITE_ID).includes(
       `"${TEST_CRISP_WEBSITE_ID}"`,
-    ),
+    ) &&
+      renderCrispScript(TEST_CRISP_WEBSITE_ID).includes(
+        `"${TEST_CRISP_WEBSITE_ID}"`,
+      ),
   );
 
-  ctx.scenario("F. Wiring render");
+  ctx.scenario("F. Wiring render partagé");
   ctx.assertTrue(
-    "portal-render importe portal-crisp",
-    portalRender.includes('from "./portal-crisp"') &&
-      portalRender.includes("resolvePortalCrispConfig") &&
-      portalRender.includes("renderPortalCrispScript"),
+    "portal-render utilise utils/crisp + config portal",
+    portalRender.includes('from "../../utils/crisp"') &&
+      portalRender.includes("renderCrispScriptTag") &&
+      portalRender.includes('from "./portal-crisp"') &&
+      portalRender.includes("resolvePortalCrispConfig"),
+  );
+  ctx.assertTrue(
+    "portal-crisp re-exporte utils/crisp",
+    portalCrisp.includes('from "../../utils/crisp"') &&
+      portalCrisp.includes("resolveCrispConfig") &&
+      portalCrisp.includes("renderCrispScript"),
+  );
+  ctx.assertTrue(
+    "builder-render importe renderCrispScriptTag",
+    builderRender.includes('from "../../utils/crisp"') &&
+      builderRender.includes("renderCrispScriptTag"),
+  );
+  ctx.assertTrue(
+    "builder CSS relève Crisp au-dessus des footers",
+    builderStyles.includes(".tunnel-body .crisp-client") &&
+      builderStyles.includes("--tunnel-footer-height"),
+  );
+
+  ctx.scenario("G. Box Builder — même Website ID / flag");
+  const disabledBuilderHtml = await withEnv(
+    {
+      CRISP_WEBSITE_ID: "",
+      ENABLE_PORTAL_CRISP: "false",
+    },
+    async () =>
+      renderBuilder({
+        boxes: [],
+        deliveryConfig: { deliveryWindowOptions: [], timezone: "Europe/Paris" },
+        meals: [],
+      }).text(),
+  );
+  ctx.assertFalse(
+    "builder sans loader Crisp quand désactivé",
+    disabledBuilderHtml.includes("client.crisp.chat/l.js"),
+  );
+
+  const enabledBuilderHtml = await withEnv(
+    {
+      CRISP_WEBSITE_ID: TEST_CRISP_WEBSITE_ID,
+      ENABLE_PORTAL_CRISP: "true",
+    },
+    async () =>
+      renderBuilder({
+        boxes: [],
+        deliveryConfig: { deliveryWindowOptions: [], timezone: "Europe/Paris" },
+        meals: [],
+      }).text(),
+  );
+  ctx.assertTrue(
+    "builder initialise $crisp",
+    enabledBuilderHtml.includes("window.$crisp=[]"),
+  );
+  ctx.assertTrue(
+    "builder injecte le même Website ID",
+    enabledBuilderHtml.includes(TEST_CRISP_WEBSITE_ID),
+  );
+  ctx.assertTrue(
+    "builder loader async unique",
+    enabledBuilderHtml.includes("https://client.crisp.chat/l.js") &&
+      enabledBuilderHtml.includes("s.async=1") &&
+      (enabledBuilderHtml.match(/client\.crisp\.chat\/l\.js/g) ?? []).length ===
+        1,
+  );
+  ctx.assertTrue(
+    "resolveCrispConfig ≡ resolvePortalCrispConfig",
+    resolveCrispConfig({
+      crispWebsiteId: TEST_CRISP_WEBSITE_ID,
+      enablePortalCrisp: "true",
+    }).enabled ===
+      resolvePortalCrispConfig({
+        crispWebsiteId: TEST_CRISP_WEBSITE_ID,
+        enablePortalCrisp: "true",
+      }).enabled,
   );
 
   return finishSuite("93-portal-crisp-integration", ctx);

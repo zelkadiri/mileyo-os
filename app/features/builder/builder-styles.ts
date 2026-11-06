@@ -2372,6 +2372,16 @@ body {
   z-index: 30;
 }
 
+/* Lift Crisp launcher above fixed CTAs; drawers (z 84+) stay above. */
+.tunnel-body .crisp-client {
+  bottom: calc(var(--tunnel-footer-height) + env(safe-area-inset-bottom, 0px)) !important;
+  z-index: 40 !important;
+}
+
+.tunnel-body.is-step-meals .crisp-client {
+  bottom: calc(var(--meals-gauge-footer-height) + 16px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
 .tunnel-footer-inner {
   margin: 0 auto;
   max-width: 520px;

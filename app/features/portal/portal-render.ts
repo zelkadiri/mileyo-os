@@ -35,10 +35,8 @@ import {
   titlesToQuantities,
 } from "./portal-formatters";
 import { portalClientScript } from "./portal-client";
-import {
-  renderPortalCrispScript,
-  resolvePortalCrispConfig,
-} from "./portal-crisp";
+import { renderCrispScriptTag } from "../../utils/crisp";
+import { resolvePortalCrispConfig } from "./portal-crisp";
 import {
   buildPortalSubscriptionHref,
   formatPortalSubscriptionSelectorLabel,
@@ -293,6 +291,7 @@ export const renderMessage = (message: string, options?: { loginLink?: boolean }
       }
     </section>
   </main>
+  ${renderCrispScriptTag()}
 </body>
 </html>`);
 
@@ -1127,10 +1126,7 @@ export const renderPortal = ({
   const hasTerminal = terminalSelections.length > 0;
   const hasAnySubscription = hasManageable || hasLegacy || hasTerminal;
   const portalCrispConfig = resolvePortalCrispConfig();
-  const portalCrispScript =
-    portalCrispConfig.enabled && portalCrispConfig.websiteId
-      ? renderPortalCrispScript(portalCrispConfig.websiteId)
-      : null;
+  const portalCrispScriptTag = renderCrispScriptTag(portalCrispConfig);
 
   const headerFlash = [
     selectionNotice
@@ -1328,7 +1324,7 @@ export const renderPortal = ({
   </div>
 
   <script>window.__MILEYO_PORTAL__ = ${scriptJson({ boxes, initialQuantities, meals, selections: visibleSelections })};</script>
-  ${portalCrispScript ? `<script>${portalCrispScript}</script>` : ""}
+  ${portalCrispScriptTag}
   <script>${portalClientScript}</script>
 </body>
 </html>`);

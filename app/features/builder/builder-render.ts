@@ -5,6 +5,7 @@ import { escapeHtml, scriptJson } from "./builder-formatters";
 import { BUILDER_OBJECTIVE_OPTIONS } from "./builder-objective-options";
 import { builderStyles } from "./builder-styles";
 import type { BuilderBoxOption, BuilderDeliveryConfig, BuilderMealOption } from "./builder-types";
+import { renderCrispScriptTag } from "../../utils/crisp";
 import { getMileyoPublicAssetUrl, renderMileyoLogoImg } from "../../utils/mileyoLogo";
 
 const htmlResponse = (html: string) =>
@@ -33,6 +34,7 @@ export const renderMessage = (message: string, shop?: string) =>
       ${shop ? `<p class="muted">Shop : ${escapeHtml(shop)}</p>` : ""}
     </section>
   </main>
+  ${renderCrispScriptTag()}
 </body>
 </html>`);
 
@@ -408,6 +410,7 @@ export const renderBuilder = ({
       detailImageUrl: getMileyoPublicAssetUrl(option.detailImagePath),
     })),
   })};</script>
+  ${renderCrispScriptTag()}
   <script>${builderClientScript}</script>
 </body>
 </html>`);
