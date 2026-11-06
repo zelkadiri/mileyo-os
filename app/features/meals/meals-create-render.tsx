@@ -25,6 +25,7 @@ import {
   MEAL_IMAGE_SCOPE_DECLINED_MESSAGE,
   MEAL_IMAGE_SCOPE_UNAVAILABLE_MESSAGE,
   getShopifyAppBridgeScopesApi,
+  reloadEmbeddedAdminAfterScopeChange,
   requestMealImageWriteFilesScope,
 } from "./meals-create-image-scopes";
 import type {
@@ -199,8 +200,9 @@ export default function MealsCreatePage() {
         getShopifyAppBridgeScopesApi(),
       );
       if (outcome.kind === "granted" || outcome.kind === "already_granted") {
-        // Confirm via server scopes.query on reload — never trust client alone.
-        revalidator.revalidate();
+        // Document reload → bounce / token exchange. Soft revalidate after
+        // scopes.request can surface HTTP 401 Unauthorized (stale ID token).
+        reloadEmbeddedAdminAfterScopeChange();
         return;
       }
       if (outcome.kind === "declined") {

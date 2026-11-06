@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Form, useActionData, useLoaderData } from "react-router";
 
 import { downloadMealNutritionCsv } from "../../utils/mealNutritionExport";
@@ -15,6 +15,13 @@ import {
 } from "../../utils/mealNutritionFormat";
 import type { MealNutritionMacroSnapshot } from "../../utils/mealNutritionCsv";
 import type { loadSettingsPageData } from "./settings-catalog.server";
+import {
+  SETTINGS_PUBLICATION_SCOPE_DECLINED_MESSAGE,
+  SETTINGS_PUBLICATION_SCOPE_UNAVAILABLE_MESSAGE,
+  getShopifyAppBridgeScopesApi,
+  reloadEmbeddedAdminAfterScopeChange,
+  requestSettingsPublicationScope,
+} from "./settings-publication-scopes";
 import {
   fieldStyle,
   maintenanceDetailsStyle,
@@ -58,6 +65,10 @@ export default function Settings() {
   const { collections, hasWritePublications, settings } =
     useLoaderData<SettingsPageData>();
   const lastNutritionDownloadTokenRef = useRef<string | null>(null);
+  const [publicationScopeBusy, setPublicationScopeBusy] = useState(false);
+  const [publicationScopeNotice, setPublicationScopeNotice] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     if (!actionData?.ok || !actionData.csv || !actionData.downloadToken) {
@@ -70,6 +81,36 @@ export default function Settings() {
     lastNutritionDownloadTokenRef.current = actionData.downloadToken;
     downloadMealNutritionCsv(actionData.csv, actionData.filename);
   }, [actionData]);
+
+  const handleRequestPublicationScope = async () => {
+    if (publicationScopeBusy) return;
+    setPublicationScopeBusy(true);
+    setPublicationScopeNotice(null);
+    try {
+      const outcome = await requestSettingsPublicationScope(
+        getShopifyAppBridgeScopesApi(),
+      );
+      if (outcome.kind === "granted" || outcome.kind === "already_granted") {
+        // Document reload → fresh session token. Soft revalidate after
+        // scopes.request can surface HTTP 401 Unauthorized (stale ID token).
+        reloadEmbeddedAdminAfterScopeChange();
+        return;
+      }
+      if (outcome.kind === "declined") {
+        setPublicationScopeNotice(SETTINGS_PUBLICATION_SCOPE_DECLINED_MESSAGE);
+        return;
+      }
+      if (outcome.kind === "unavailable") {
+        setPublicationScopeNotice(
+          SETTINGS_PUBLICATION_SCOPE_UNAVAILABLE_MESSAGE,
+        );
+        return;
+      }
+      setPublicationScopeNotice(outcome.message);
+    } finally {
+      setPublicationScopeBusy(false);
+    }
+  };
 
   return (
     <s-page heading="Réglages">
@@ -133,16 +174,20 @@ export default function Settings() {
                   pas encore accordé. Le reste de Mileyo fonctionne sans ce
                   scope. Autorisez-le uniquement pour utiliser cette protection.
                 </s-text>
-                <Form method="post">
-                  <input
-                    type="hidden"
-                    name="intent"
-                    value="requestMealPublicationScopes"
-                  />
-                  <s-button type="submit">
-                    Autoriser l’accès publications
-                  </s-button>
-                </Form>
+                {publicationScopeNotice ? (
+                  <s-banner tone="warning">
+                    <s-text>{publicationScopeNotice}</s-text>
+                  </s-banner>
+                ) : null}
+                <s-button
+                  disabled={publicationScopeBusy || undefined}
+                  onClick={handleRequestPublicationScope}
+                  type="button"
+                >
+                  {publicationScopeBusy
+                    ? "Autorisation en cours…"
+                    : "Autoriser l’accès publications"}
+                </s-button>
               </s-stack>
             ) : null}
             {settings.mealCollectionId ? (

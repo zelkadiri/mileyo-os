@@ -47,7 +47,6 @@ import {
 } from "./settings-selling-plans-v2.server";
 import {
   CONFIRM_UNPUBLISH_MEALS_ONLINE_STORE_FIELD,
-  MEAL_PUBLICATION_OPTIONAL_SCOPE,
   PUBLICATION_SCOPES_MISSING_MESSAGE,
   REQUEST_MEAL_PUBLICATION_SCOPES_INTENT,
   UNPUBLISH_MEALS_ONLINE_STORE_INTENT,
@@ -107,20 +106,26 @@ export const handleSettingsAction = async ({
   const intent = getFormString(formData, "intent");
 
   if (intent === REQUEST_MEAL_PUBLICATION_SCOPES_INTENT) {
-    if (!scopes) {
-      return {
-        errors: [PUBLICATION_SCOPES_MISSING_MESSAGE],
-        message: "Impossible de demander le scope publications.",
-        needsPublicationScopes: true,
-        ok: false,
-      };
+    // Optional scopes must be requested via App Bridge client
+    // (shopify.scopes.request). Server scopes.request does a full-page
+    // redirect that breaks the embedded admin session (HTTP 401).
+    if (scopes) {
+      const detail = await scopes.query();
+      if (hasWritePublicationsScope(detail.granted)) {
+        return {
+          message: "Accès publications déjà accordé.",
+          ok: true,
+        };
+      }
     }
 
-    // Server-side redirect when consent is still required (Shopify Scopes API).
-    await scopes.request([MEAL_PUBLICATION_OPTIONAL_SCOPE]);
     return {
-      message: "Accès publications déjà accordé.",
-      ok: true,
+      errors: [
+        "Utilisez le bouton « Autoriser l’accès publications » (App Bridge). La demande serveur n’est plus supportée dans l’admin embarqué.",
+      ],
+      message: "Demande de scope publications refusée côté serveur.",
+      needsPublicationScopes: true,
+      ok: false,
     };
   }
 

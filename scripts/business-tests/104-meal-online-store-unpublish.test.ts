@@ -610,10 +610,31 @@ const runSuite = async () => {
     "actions request intent wired",
     actionsSource.includes("REQUEST_MEAL_PUBLICATION_SCOPES_INTENT"),
   );
+  ctx.assertFalse(
+    "actions must not call server scopes.request (embedded 401)",
+    /scopes\.request\s*\(/.test(actionsSource),
+  );
   ctx.assertTrue(
     "actions gate on write_publications",
     actionsSource.includes("ensureWritePublicationsOrExplain") ||
       actionsSource.includes("hasWritePublicationsScope"),
+  );
+  const settingsRenderSource = readRepoFile(
+    "app/features/settings/settings-render.tsx",
+  );
+  ctx.assertTrue(
+    "settings publications uses App Bridge client request",
+    settingsRenderSource.includes("requestSettingsPublicationScope") &&
+      settingsRenderSource.includes("getShopifyAppBridgeScopesApi"),
+  );
+  ctx.assertTrue(
+    "settings publications reloads after grant (no soft revalidate 401)",
+    settingsRenderSource.includes("reloadEmbeddedAdminAfterScopeChange"),
+  );
+  ctx.assertTrue(
+    "settings publications button is type=button (no Form POST redirect)",
+    settingsRenderSource.includes("handleRequestPublicationScope") &&
+      settingsRenderSource.includes('type="button"'),
   );
 
   ctx.scenario("L. Safety + wiring");

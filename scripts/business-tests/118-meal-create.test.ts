@@ -52,8 +52,13 @@ import {
   MEAL_IMAGE_SCOPE_UNAVAILABLE_MESSAGE,
   hasMealImageWriteFilesScope,
   interpretMealImageScopeRequestResult,
+  reloadEmbeddedAdminAfterScopeChange,
   requestMealImageWriteFilesScope,
 } from "../../app/features/meals/meals-create-image-scopes";
+import {
+  interpretOptionalScopeRequestResult,
+  reloadEmbeddedAdminAfterScopeChange as reloadShared,
+} from "../../app/utils/shopify-optional-scope-consent";
 import {
   MEAL_PRODUCT_METAFIELD_TYPES,
   buildMealProductMetafieldValues,
@@ -1343,6 +1348,11 @@ const run = async () => {
       render.includes("getShopifyAppBridgeScopesApi"),
   );
   ctx.assertTrue(
+    "photo scope reloads document after grant (no soft revalidate 401)",
+    render.includes("reloadEmbeddedAdminAfterScopeChange") &&
+      !render.includes("revalidator.revalidate()"),
+  );
+  ctx.assertTrue(
     "photo scope button is type=button (no Form POST redirect)",
     render.includes('type="button"') &&
       render.includes("handleRequestPhotoScope"),
@@ -1569,6 +1579,26 @@ const run = async () => {
   if (networkFail.kind === "error") {
     ctx.assertEqual("network error message kept", networkFail.message, "network down");
   }
+
+  ctx.assertEqual(
+    "reload helper re-exported",
+    typeof reloadEmbeddedAdminAfterScopeChange,
+    "function",
+  );
+  ctx.assertEqual(
+    "shared reload helper available",
+    typeof reloadShared,
+    "function",
+  );
+  const sharedGranted = interpretOptionalScopeRequestResult("write_files", {
+    result: "granted-all",
+    detail: { granted: ["write_files"] },
+  });
+  ctx.assertEqual(
+    "shared helper granted-all",
+    sharedGranted.kind,
+    "granted",
+  );
 
   ctx.scenario("I2. Image upload + validation + failures");
   const badMime = validateMealImageFile({
