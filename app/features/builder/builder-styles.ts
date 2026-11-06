@@ -2372,16 +2372,6 @@ body {
   z-index: 30;
 }
 
-/* Lift Crisp launcher above fixed CTAs; drawers (z 84+) stay above. */
-.tunnel-body .crisp-client {
-  bottom: calc(var(--tunnel-footer-height) + env(safe-area-inset-bottom, 0px)) !important;
-  z-index: 40 !important;
-}
-
-.tunnel-body.is-step-meals .crisp-client {
-  bottom: calc(var(--meals-gauge-footer-height) + 16px + env(safe-area-inset-bottom, 0px)) !important;
-}
-
 .tunnel-footer-inner {
   margin: 0 auto;
   max-width: 520px;
@@ -2474,6 +2464,12 @@ button:disabled {
   :root {
     --meals-gauge-footer-height: 72px;
     --meals-toolbar-sticky-top: 6px;
+  }
+
+  /* Leave room for the native Crisp launcher without offsetting .crisp-client
+     (offsetting the host clips the open chatbox: header cut + empty bottom). */
+  .tunnel-footer-inner {
+    padding-right: 72px;
   }
 
   .tunnel-header {

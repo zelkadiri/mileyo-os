@@ -412,10 +412,16 @@ const runSuite = async () => {
     builderRender.includes('from "../../utils/crisp"') &&
       builderRender.includes("renderCrispScriptTag"),
   );
+  ctx.assertFalse(
+    "builder n’offsette pas .crisp-client (évite chat coupé)",
+    builderStyles.includes(".tunnel-body .crisp-client") ||
+      /crisp-client\s*\{[^}]*bottom\s*:/.test(builderStyles),
+  );
   ctx.assertTrue(
-    "builder CSS relève Crisp au-dessus des footers",
-    builderStyles.includes(".tunnel-body .crisp-client") &&
-      builderStyles.includes("--tunnel-footer-height"),
+    "builder laisse de la place au launcher via padding footer mobile",
+    builderStyles.includes(".tunnel-footer-inner") &&
+      builderStyles.includes("padding-right: 72px") &&
+      builderStyles.includes("native Crisp launcher"),
   );
 
   ctx.scenario("G. Box Builder — même Website ID / flag");
