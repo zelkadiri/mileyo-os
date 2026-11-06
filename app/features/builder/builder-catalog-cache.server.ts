@@ -157,6 +157,26 @@ export const getOrFetchBuilderCatalog = async <T>({
   }
 };
 
+/** Drop a cached Builder meals entry after catalog mutations (create meal, etc.). */
+export const invalidateBuilderMealsCatalogCache = (
+  shop: string,
+  mealCollectionId: string,
+): void => {
+  const key = builderMealsCacheKey(shop, mealCollectionId);
+  buckets.meals.entries.delete(key);
+  buckets.meals.inFlight.delete(key);
+};
+
+/** Drop a cached public meals entry after catalog mutations. */
+export const invalidatePublicMealsCatalogCache = (
+  shop: string,
+  mealCollectionId: string,
+): void => {
+  const key = publicMealsCacheKey(shop, mealCollectionId);
+  buckets.publicMeals.entries.delete(key);
+  buckets.publicMeals.inFlight.delete(key);
+};
+
 /** @internal Mileyo business regression tests only. */
 export const __resetBuilderCatalogCacheForTests = (): void => {
   for (const bucket of Object.values(buckets)) {

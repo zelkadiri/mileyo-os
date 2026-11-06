@@ -136,6 +136,7 @@ const BUSINESS_SUITES = [
   "115-prisma-serverless-pool.test.ts",
   "116-anti-double-billing-p7-scenarios.test.ts",
   "117-billing-validation-matrix-preprod.test.ts",
+  "118-meal-create.test.ts",
 ];
 
 const LEGACY_SUITES = [

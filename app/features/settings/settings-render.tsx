@@ -526,12 +526,17 @@ export default function Settings() {
                   <strong>custom.proteins</strong>,{" "}
                   <strong>custom.carbs</strong>,{" "}
                   <strong>custom.fat</strong>,{" "}
+                  <strong>custom.saturated_fat</strong>,{" "}
+                  <strong>custom.sugars</strong>,{" "}
+                  <strong>custom.fiber</strong>,{" "}
+                  <strong>custom.salt</strong>,{" "}
                   <strong>custom.portion_grams</strong>.
                 </s-text>
                 <s-text>
-                  Aucune valeur n’est écrite sur les variantes. La définition
-                  PRODUCT legacy <strong>custom.calories</strong> n’est pas
-                  touchée.
+                  Aucune valeur n’est écrite sur les variantes. Idempotent :
+                  crée les absentes, signale les types incompatibles. La
+                  définition PRODUCT legacy <strong>custom.calories</strong>{" "}
+                  n’est pas touchée.
                 </s-text>
                 <Form method="post">
                   <input

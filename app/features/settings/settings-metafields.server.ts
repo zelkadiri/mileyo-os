@@ -432,10 +432,185 @@ export const ensureMetafieldDefinition = async (
   };
 };
 
+export type MealV2MetafieldDefinitionStatus =
+  | "present"
+  | "missing"
+  | "incompatible"
+  | "error";
+
+export type MealV2MetafieldDefinitionCheckItem = {
+  expectedType: string;
+  foundType: string | null;
+  key: string;
+  namespace: string;
+  ownerType: string;
+  status: MealV2MetafieldDefinitionStatus;
+  errors: string[];
+};
+
+export type VerifyMealV2MetafieldDefinitionsResult = {
+  errors: string[];
+  incompatible: MealV2MetafieldDefinitionCheckItem[];
+  items: MealV2MetafieldDefinitionCheckItem[];
+  message: string;
+  missing: MealV2MetafieldDefinitionCheckItem[];
+  ok: boolean;
+  present: number;
+};
+
+const definitionLabel = (definition: {
+  namespace: string;
+  key: string;
+}): string => `${definition.namespace}.${definition.key}`;
+
 export const formatMealV2MetafieldDefinitionsMessage = (
   result: Omit<SetupMealV2MetafieldDefinitionsResult, "message">,
-): string =>
-  `Définitions Repas V2 : ${result.created} créées, ${result.alreadyPresent} déjà présentes, ${result.blocked} bloquées.`;
+): string => {
+  const createdKeys = result.items
+    .filter((item) => item.created)
+    .map((item) => definitionLabel(item));
+  const presentKeys = result.items
+    .filter((item) => item.alreadyExisted)
+    .map((item) => definitionLabel(item));
+  const blockedKeys = result.items
+    .filter((item) => item.blocked)
+    .map((item) => definitionLabel(item));
+
+  const parts = [
+    `Définitions Repas V2 : ${result.created} créées, ${result.alreadyPresent} déjà présentes, ${result.blocked} bloquées.`,
+  ];
+  if (createdKeys.length > 0) {
+    parts.push(`Créées : ${createdKeys.join(", ")}.`);
+  }
+  if (presentKeys.length > 0) {
+    parts.push(`Déjà présentes : ${presentKeys.join(", ")}.`);
+  }
+  if (blockedKeys.length > 0) {
+    parts.push(`Incompatibles / erreurs : ${blockedKeys.join(", ")}.`);
+  }
+  if (result.errors.length > 0) {
+    parts.push(result.errors.join(" "));
+  }
+  return parts.join(" ");
+};
+
+export const formatVerifyMealV2MetafieldDefinitionsMessage = (
+  result: Omit<VerifyMealV2MetafieldDefinitionsResult, "message">,
+): string => {
+  if (result.ok) {
+    return `Catalogue nutritionnel prêt (${result.present}/${MEAL_V2_METAFIELD_DEFINITIONS.length} définitions PRODUCTVARIANT).`;
+  }
+
+  const missingLabels = result.missing.map((item) => definitionLabel(item));
+  const incompatibleLabels = result.incompatible.map(
+    (item) =>
+      `${definitionLabel(item)} (trouvé ${item.foundType ?? "inconnu"}, attendu ${item.expectedType})`,
+  );
+
+  const parts = [
+    "Le catalogue nutritionnel Shopify est incomplet. Configurez les définitions Repas V2 dans Réglages avant de créer un plat.",
+  ];
+  if (missingLabels.length > 0) {
+    parts.push(`Manquantes : ${missingLabels.join(", ")}.`);
+  }
+  if (incompatibleLabels.length > 0) {
+    parts.push(`Incompatibles : ${incompatibleLabels.join(", ")}.`);
+  }
+  if (result.errors.length > 0) {
+    parts.push(result.errors.join(" "));
+  }
+  return parts.join(" ");
+};
+
+/**
+ * READ-ONLY check of MEAL_V2_METAFIELD_DEFINITIONS (existence + exact type).
+ * Never creates or mutates definitions.
+ */
+export const verifyMealV2MetafieldDefinitions = async (admin: {
+  graphql: (
+    query: string,
+    options?: { variables?: Record<string, unknown> },
+  ) => Promise<Response>;
+}): Promise<VerifyMealV2MetafieldDefinitionsResult> => {
+  const items: MealV2MetafieldDefinitionCheckItem[] = [];
+
+  for (const definition of MEAL_V2_METAFIELD_DEFINITIONS) {
+    const lookup = await lookupMetafieldDefinition(admin, definition);
+    if (lookup.errors.length > 0) {
+      items.push({
+        expectedType: definition.type,
+        foundType: null,
+        key: definition.key,
+        namespace: definition.namespace,
+        ownerType: definition.ownerType,
+        status: "error",
+        errors: lookup.errors,
+      });
+      continue;
+    }
+
+    if (lookup.nodes.length === 0) {
+      items.push({
+        expectedType: definition.type,
+        foundType: null,
+        key: definition.key,
+        namespace: definition.namespace,
+        ownerType: definition.ownerType,
+        status: "missing",
+        errors: [
+          `${definitionLabel(definition)} (${definition.ownerType}) est absente.`,
+        ],
+      });
+      continue;
+    }
+
+    const incompatible = lookup.nodes.find(
+      (node) => node.type.name !== definition.type,
+    );
+    if (incompatible) {
+      items.push({
+        expectedType: definition.type,
+        foundType: incompatible.type.name,
+        key: definition.key,
+        namespace: definition.namespace,
+        ownerType: definition.ownerType,
+        status: "incompatible",
+        errors: [
+          `${definitionLabel(definition)} (${definition.ownerType}) existe avec le type ${incompatible.type.name}, attendu ${definition.type}.`,
+        ],
+      });
+      continue;
+    }
+
+    items.push({
+      expectedType: definition.type,
+      foundType: definition.type,
+      key: definition.key,
+      namespace: definition.namespace,
+      ownerType: definition.ownerType,
+      status: "present",
+      errors: [],
+    });
+  }
+
+  const missing = items.filter((item) => item.status === "missing");
+  const incompatible = items.filter((item) => item.status === "incompatible");
+  const errors = items.flatMap((item) => item.errors);
+  const present = items.filter((item) => item.status === "present").length;
+  const summary = {
+    errors,
+    incompatible,
+    items,
+    missing,
+    ok: missing.length === 0 && incompatible.length === 0 && errors.length === 0,
+    present,
+  };
+
+  return {
+    ...summary,
+    message: formatVerifyMealV2MetafieldDefinitionsMessage(summary),
+  };
+};
 
 export const setupMealV2MetafieldDefinitions = async (admin: {
   graphql: (

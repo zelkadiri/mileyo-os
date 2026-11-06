@@ -80,11 +80,17 @@ export type ShopifyMealCatalogVariantNode = {
 };
 
 const mealCollectionProductsQuery = `#graphql
-  query SubscriptionMealCatalogProducts($id: ID!, $sortKey: ProductCollectionSortKeys!) {
+  query SubscriptionMealCatalogProducts(
+    $id: ID!
+    $sortKey: ProductCollectionSortKeys!
+    $first: Int!
+    $after: String
+  ) {
     collection(id: $id) {
-      products(first: 50, sortKey: $sortKey) {
+      products(first: $first, after: $after, sortKey: $sortKey) {
         pageInfo {
           hasNextPage
+          endCursor
         }
         nodes {
           id
@@ -157,15 +163,63 @@ const mealCollectionProductsQuery = `#graphql
   }
 `;
 
+/** Page size for meal collection product fetches (Builder / Portal / create). */
 export const MEAL_CATALOG_PRODUCTS_PAGE_SIZE = 50;
+
+/**
+ * Hard ceiling for paginated meal catalog reads.
+ * Never silently truncates — fails closed past this many pages.
+ */
+export const MEAL_CATALOG_PRODUCTS_MAX_PAGES = 20;
+
+const mealCollectionTitlesQuery = `#graphql
+  query SubscriptionMealCatalogTitles(
+    $id: ID!
+    $first: Int!
+    $after: String
+  ) {
+    collection(id: $id) {
+      id
+      products(first: $first, after: $after, sortKey: TITLE) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          title
+        }
+      }
+    }
+  }
+`;
 
 type MealCollectionProductsResponse = {
   data?: {
     collection?: {
       products: {
-        pageInfo?: { hasNextPage?: boolean | null } | null;
+        pageInfo?: {
+          hasNextPage?: boolean | null;
+          endCursor?: string | null;
+        } | null;
         nodes: ShopifyMealCatalogProductNode[];
       };
+    } | null;
+  };
+  errors?: { message?: string | null }[];
+};
+
+type MealCollectionTitlesResponse = {
+  data?: {
+    collection?: {
+      id?: string | null;
+      products?: {
+        pageInfo?: {
+          hasNextPage?: boolean | null;
+          endCursor?: string | null;
+        } | null;
+        nodes?: Array<{ id: string; title: string }>;
+      } | null;
     } | null;
   };
   errors?: { message?: string | null }[];
@@ -228,6 +282,13 @@ export const toMealCatalogProducts = (
  * Default sortKey TITLE preserves historical Builder ordering.
  * Pass COLLECTION_DEFAULT for storefront / theme collection order
  * (matches Liquid `collection.products` when sort is merchant/manual).
+ *
+ * Paginated (cursor) — never silently truncates. Fails closed past
+ * MEAL_CATALOG_PRODUCTS_PAGE_SIZE × MEAL_CATALOG_PRODUCTS_MAX_PAGES.
+ *
+ * Note: Admin client typings in callers often declare only `{ id, sortKey? }`.
+ * Pagination variables are passed at runtime (asserted) to keep those callers
+ * assignable without a repo-wide Admin typing refactor.
  */
 export const fetchMealCatalogProducts = async (
   admin: {
@@ -242,25 +303,143 @@ export const fetchMealCatalogProducts = async (
   options?: { sortKey?: MealCatalogSortKey },
 ) => {
   const sortKey = options?.sortKey ?? "TITLE";
-  const response = await admin.graphql(mealCollectionProductsQuery, {
-    variables: { id: mealCollectionId, sortKey },
-  });
-  const json = (await response.json()) as MealCollectionProductsResponse;
+  const products: ShopifyMealCatalogProductNode[] = [];
+  let after: string | null = null;
+  let page = 0;
 
-  if (json.errors?.length) {
-    throw new Error(
-      json.errors
-        .map((error) => error.message)
-        .filter(Boolean)
-        .join(" ") || "Impossible de charger le catalogue repas.",
-    );
+  while (page < MEAL_CATALOG_PRODUCTS_MAX_PAGES) {
+    page += 1;
+    const response = await admin.graphql(mealCollectionProductsQuery, {
+      variables: {
+        id: mealCollectionId,
+        sortKey,
+        first: MEAL_CATALOG_PRODUCTS_PAGE_SIZE,
+        after,
+      } as { id: string; sortKey?: MealCatalogSortKey },
+    });
+    const json = (await response.json()) as MealCollectionProductsResponse;
+
+    if (json.errors?.length) {
+      throw new Error(
+        json.errors
+          .map((error) => error.message)
+          .filter(Boolean)
+          .join(" ") || "Impossible de charger le catalogue repas.",
+      );
+    }
+
+    const connection = json.data?.collection?.products;
+    for (const node of connection?.nodes ?? []) {
+      if (node?.id) {
+        products.push(node);
+      }
+    }
+
+    if (!connection?.pageInfo?.hasNextPage) {
+      return toMealCatalogProducts(products);
+    }
+
+    const endCursor = connection.pageInfo.endCursor?.trim() ?? "";
+    if (!endCursor) {
+      throw new Error(
+        "Pagination catalogue repas incomplète (endCursor manquant).",
+      );
+    }
+    after = endCursor;
   }
 
-  if (json.data?.collection?.products.pageInfo?.hasNextPage) {
-    throw new Error(
-      `La collection repas dépasse ${MEAL_CATALOG_PRODUCTS_PAGE_SIZE} produits. Catalogue incomplet refusé.`,
-    );
+  throw new Error(
+    `La collection repas dépasse ${
+      MEAL_CATALOG_PRODUCTS_PAGE_SIZE * MEAL_CATALOG_PRODUCTS_MAX_PAGES
+    } produits. Catalogue incomplet refusé.`,
+  );
+};
+
+/**
+ * Lightweight paginated title list for create-meal capacity + uniqueness gates.
+ * Same pagination contract as fetchMealCatalogProducts (fail-closed, no truncate).
+ */
+export const fetchMealCatalogProductTitles = async (
+  admin: {
+    graphql: (
+      query: string,
+      options?: {
+        variables?: { id: string; sortKey?: MealCatalogSortKey };
+      },
+    ) => Promise<Response>;
+  },
+  mealCollectionId: string,
+): Promise<
+  | { ok: true; titles: Array<{ id: string; title: string }> }
+  | { ok: false; errors: string[] }
+> => {
+  if (!mealCollectionId.trim()) {
+    return {
+      ok: false,
+      errors: ["Collection de plats manquante dans les réglages."],
+    };
   }
 
-  return toMealCatalogProducts(json.data?.collection?.products.nodes ?? []);
+  const titles: Array<{ id: string; title: string }> = [];
+  let after: string | null = null;
+  let page = 0;
+
+  while (page < MEAL_CATALOG_PRODUCTS_MAX_PAGES) {
+    page += 1;
+    const response = await admin.graphql(mealCollectionTitlesQuery, {
+      variables: {
+        id: mealCollectionId,
+        first: MEAL_CATALOG_PRODUCTS_PAGE_SIZE,
+        after,
+      } as { id: string; sortKey?: MealCatalogSortKey },
+    });
+    const json = (await response.json()) as MealCollectionTitlesResponse;
+
+    if (json.errors?.length) {
+      return {
+        ok: false,
+        errors: json.errors
+          .map((error) => error.message)
+          .filter((message): message is string => Boolean(message)),
+      };
+    }
+
+    if (!json.data?.collection?.id) {
+      return {
+        ok: false,
+        errors: ["Collection de plats introuvable dans Shopify."],
+      };
+    }
+
+    const connection = json.data.collection.products;
+    for (const node of connection?.nodes ?? []) {
+      if (node?.id) {
+        titles.push({ id: node.id, title: node.title });
+      }
+    }
+
+    if (!connection?.pageInfo?.hasNextPage) {
+      return { ok: true, titles };
+    }
+
+    const endCursor = connection.pageInfo.endCursor?.trim() ?? "";
+    if (!endCursor) {
+      return {
+        ok: false,
+        errors: [
+          "Pagination catalogue repas incomplète (endCursor manquant).",
+        ],
+      };
+    }
+    after = endCursor;
+  }
+
+  return {
+    ok: false,
+    errors: [
+      `La collection repas dépasse ${
+        MEAL_CATALOG_PRODUCTS_PAGE_SIZE * MEAL_CATALOG_PRODUCTS_MAX_PAGES
+      } produits. Opération annulée.`,
+    ],
+  };
 };

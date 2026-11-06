@@ -47,9 +47,11 @@ import {
   VARIANT_OBJECTIVE_METAFIELD_DEFINITION,
   ensureMetafieldDefinition,
   formatMealV2MetafieldDefinitionsMessage,
+  formatVerifyMealV2MetafieldDefinitionsMessage,
   isMetafieldDefinitionAlreadyExistsError,
   setupMealV2MetafieldDefinitions,
   toMetafieldDefinitionCreateOutcome,
+  verifyMealV2MetafieldDefinitions,
 } from "../../app/features/settings/settings-metafields.server";
 import {
   createBusinessTestContext,
@@ -543,6 +545,78 @@ const runSuite = async () => {
     "batch message format",
     batch.message,
     formatMealV2MetafieldDefinitionsMessage(batch),
+  );
+  ctx.assertTrue(
+    "batch message lists created keys",
+    batch.message.includes("Créées :") &&
+      batch.message.includes("custom.saturated_fat"),
+  );
+  ctx.assertTrue(
+    "batch message lists present keys",
+    batch.message.includes("Déjà présentes :") &&
+      batch.message.includes("mileyo.objective"),
+  );
+
+  const verifyAllPresent = await verifyMealV2MetafieldDefinitions(
+    createDefinitionsMockAdmin({
+      existing: MEAL_V2_METAFIELD_DEFINITIONS.map((definition) => ({
+        namespace: definition.namespace,
+        key: definition.key,
+        ownerType: definition.ownerType,
+        typeName: definition.type,
+      })),
+    }).admin,
+  );
+  ctx.assertTrue("verify all present ok", verifyAllPresent.ok);
+  ctx.assertEqual(
+    "verify present count",
+    verifyAllPresent.present,
+    MEAL_V2_METAFIELD_DEFINITIONS.length,
+  );
+
+  const verifyMissing = await verifyMealV2MetafieldDefinitions(
+    createDefinitionsMockAdmin({
+      existing: MEAL_V2_METAFIELD_DEFINITIONS.filter(
+        (definition) =>
+          !["saturated_fat", "sugars", "fiber", "salt"].includes(
+            definition.key,
+          ),
+      ).map((definition) => ({
+        namespace: definition.namespace,
+        key: definition.key,
+        ownerType: definition.ownerType,
+        typeName: definition.type,
+      })),
+    }).admin,
+  );
+  ctx.assertFalse("verify missing four not ok", verifyMissing.ok);
+  ctx.assertEqual("verify missing count", verifyMissing.missing.length, 4);
+  ctx.assertTrue(
+    "verify message points to Réglages",
+    verifyMissing.message.includes("Réglages"),
+  );
+  ctx.assertEqual(
+    "verify message formatter",
+    verifyMissing.message,
+    formatVerifyMealV2MetafieldDefinitionsMessage(verifyMissing),
+  );
+
+  const verifyBadType = await verifyMealV2MetafieldDefinitions(
+    createDefinitionsMockAdmin({
+      existing: MEAL_V2_METAFIELD_DEFINITIONS.map((definition) => ({
+        namespace: definition.namespace,
+        key: definition.key,
+        ownerType: definition.ownerType,
+        typeName:
+          definition.key === "salt" ? "number_integer" : definition.type,
+      })),
+    }).admin,
+  );
+  ctx.assertFalse("verify bad type not ok", verifyBadType.ok);
+  ctx.assertEqual(
+    "verify incompatible count",
+    verifyBadType.incompatible.length,
+    1,
   );
 
   ctx.scenario("E. Classification LEGACY_ELIGIBLE");
