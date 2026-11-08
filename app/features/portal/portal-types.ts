@@ -58,6 +58,14 @@ export type PortalForecastCycle = {
   mealsCount: number;
 };
 
+/** One-shot complimentary kitchen delivery (no Shopify billing). */
+export type PortalComplimentaryDelivery = {
+  mealsCount: number | null;
+  scheduledDeliveryDate: string;
+  /** scheduled | processing | fulfilled | failed */
+  status: string;
+};
+
 export type PortalHistoryOrder = {
   boxTitle: string | null;
   financialStatus: string | null;
@@ -132,6 +140,11 @@ export type PortalSelection = {
   deliveryCutoff: PortalDeliveryCutoffStatus;
   boxSubscriptionPrice: string | null;
   boxTitle: string | null;
+  /**
+   * Scheduled complimentary kitchen delivery (0 €, no Shopify charge).
+   * Null/undefined when none. Does not alter forecast / NBD.
+   */
+  complimentaryDelivery?: PortalComplimentaryDelivery | null;
   /** ISO timestamp — default-selection tie-break. */
   createdAt: string;
   currentVariantId: string | null;

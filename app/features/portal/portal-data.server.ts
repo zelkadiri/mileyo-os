@@ -44,6 +44,8 @@ import {
 import { normalizeShopifyId } from "../../utils/shopifyIds.server";
 import { dedupeSubscriptionSelectionsByContract } from "../../services/subscriptionMealSelection.server";
 import { fetchSubscriptionContractShippingAddress } from "../../services/subscriptionContractAddress.server";
+import { listOpenComplimentaryDeliveriesForSelection } from "../../services/complimentaryDelivery.server";
+import { COMPLIMENTARY_DELIVERY_STATUS } from "../../constants/complimentaryDelivery";
 import { derivePortalResumeUi } from "./portal-resume.server";
 import {
   fetchPortalMealOptions,
@@ -616,6 +618,25 @@ export const loadPortalData = async ({
             })(),
             boxSubscriptionPrice,
             boxTitle,
+            complimentaryDelivery: await (async () => {
+              const rows = await listOpenComplimentaryDeliveriesForSelection({
+                selectionId: reconciled.id,
+                shop,
+              });
+              const active =
+                rows.find(
+                  (row) =>
+                    row.status === COMPLIMENTARY_DELIVERY_STATUS.SCHEDULED ||
+                    row.status === COMPLIMENTARY_DELIVERY_STATUS.PROCESSING ||
+                    row.status === COMPLIMENTARY_DELIVERY_STATUS.FULFILLED,
+                ) ?? null;
+              if (!active) return null;
+              return {
+                mealsCount: reconciled.mealsCount as number,
+                scheduledDeliveryDate: active.scheduledDeliveryDate,
+                status: active.status,
+              };
+            })(),
             createdAt: reconciled.createdAt.toISOString(),
             currentVariantId: currentBox?.variantId ?? currentVariantId,
             forecastCycles,

@@ -471,6 +471,28 @@ const renderDeliveryCutoffNotice = (selection: PortalSelection) => {
     </div>`;
 };
 
+const renderComplimentaryDeliveryNotice = (selection: PortalSelection) => {
+  const complimentary = selection.complimentaryDelivery;
+  if (!complimentary) {
+    return "";
+  }
+
+  const deliveryLabel = formatScheduledDeliveryLabel(
+    complimentary.scheduledDeliveryDate,
+  );
+  const statusNote =
+    complimentary.status === "fulfilled"
+      ? "Box offerte confirmée pour la cuisine — aucun paiement."
+      : "Box offerte : 0 € — aucun prélèvement pour cette livraison.";
+
+  return `<div class="cutoff-notice cutoff-notice--open" role="note">
+      <p class="cutoff-title">Livraison offerte${
+        deliveryLabel ? ` — ${escapeHtml(deliveryLabel)}` : ""
+      }</p>
+      <p class="cutoff-message">${escapeHtml(statusNote)}</p>
+    </div>`;
+};
+
 const renderHeroDelivery = (selection: PortalSelection) => {
   const deliveryLabel = formatScheduledDeliveryLabel(
     selection.nextScheduledDeliveryDate,
@@ -636,6 +658,7 @@ const renderNextBoxCard = ({
         </div>`
             : ""
         }
+        ${renderComplimentaryDeliveryNotice(selection)}
         ${renderDeliveryCutoffNotice(selection)}
       </div>
       </section>
