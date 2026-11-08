@@ -157,11 +157,50 @@ model SubscriptionMealSelection {
   paymentRecoveries SubscriptionPaymentRecovery[]
   boxChanges        SubscriptionBoxChange[]
   billingCycleClaims SubscriptionBillingCycleClaim[]
+  complimentaryDeliveries ComplimentaryDelivery[]
 
   @@unique([shop, shopifyOrderId])
   @@unique([shop, subscriptionContractId])
   @@index([shop, customerShopifyId])
   @@index([shop, subscriptionContractId])
+}
+
+/// One-shot complimentary kitchen delivery (no Shopify billing / no paid claim).
+/// Portal meal edits stay open until Monday cutoff; fulfillment snapshots meals after cutoff.
+model ComplimentaryDelivery {
+  id                          String    @id @default(cuid())
+  shop                        String
+  subscriptionContractId      String
+  subscriptionMealSelectionId String
+  /// Idempotent ops key — unique per shop.
+  operationId                 String
+  /// YYYY-MM-DD Europe/Paris delivery day (Thursday/Friday).
+  scheduledDeliveryDate       String    @db.VarChar(10)
+  /// Instant after which portal meal edits are closed for this delivery (Monday 23:59 Paris).
+  mealCutoffAt                DateTime
+  commercialReason            String
+  /// scheduled | processing | fulfilled | failed | cancelled
+  status                      String
+  /// BoxOrder created at fulfillment (kitchen-local complimentary id).
+  boxOrderId                  String?
+  /// Echo of BoxOrder.shopifyOrderId (complimentary_* prefix — not a Shopify GID).
+  boxShopifyOrderId           String?
+  /// Snapshot of selectedMeals frozen at fulfillment time.
+  mealsSnapshotJson           Json?
+  failureReason               String?
+  fulfilledAt                 DateTime?
+  cancelledAt                 DateTime?
+  /// Append-only JSON array of { at, event, detail? }.
+  historyJson                 Json      @default("[]")
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  subscriptionMealSelection SubscriptionMealSelection @relation(fields: [subscriptionMealSelectionId], references: [id], onDelete: Cascade)
+
+  @@unique([shop, operationId])
+  @@unique([subscriptionMealSelectionId, scheduledDeliveryDate])
+  @@index([shop, status, mealCutoffAt])
+  @@index([subscriptionContractId, status])
 }
 
 // Intent to change box size on a future billing cycle (BOX-CHANGE-2).

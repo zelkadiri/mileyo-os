@@ -15,6 +15,7 @@ import {
   completeCronCheckInSuccess,
   startCronCheckIn,
 } from "./observability/sentry-cron.server";
+import { processDueComplimentaryDeliveries } from "./complimentaryDelivery.server";
 import { processDueSubscriptionBillings } from "./subscriptionBillingWorker.server";
 import { resolveCronShop } from "../utils/cronShop.server";
 
@@ -24,6 +25,7 @@ export type ProcessSubscriptionsCronDeps = {
   completeCronRunFailure?: typeof completeCronRunFailure;
   completeCronRunSuccess?: typeof completeCronRunSuccess;
   cronRunClient?: CronRunDb;
+  processDueComplimentaryDeliveries?: typeof processDueComplimentaryDeliveries;
   processDueMealSelectionReminders?: typeof processDueMealSelectionReminders;
   processDueSubscriptionBillings?: typeof processDueSubscriptionBillings;
   processDueUpcomingDeliveryEmails?: typeof processDueUpcomingDeliveryEmails;
@@ -82,6 +84,8 @@ export const runProcessSubscriptionsCron = async (
 ) => {
   const processBillings =
     deps.processDueSubscriptionBillings ?? processDueSubscriptionBillings;
+  const processComplimentary =
+    deps.processDueComplimentaryDeliveries ?? processDueComplimentaryDeliveries;
   const processMealReminders =
     deps.processDueMealSelectionReminders ?? processDueMealSelectionReminders;
   const processUpcoming =
@@ -125,6 +129,28 @@ export const runProcessSubscriptionsCron = async (
 
   try {
     const billingSummary = await processBillings(shop);
+
+    // Complimentary kitchen boxes (no Shopify billing). Fail-open vs billing.
+    let complimentaryDeliveries = null;
+    let complimentaryDeliveryError: string | null = null;
+    try {
+      complimentaryDeliveries = await processComplimentary(shop);
+    } catch (complimentaryError) {
+      complimentaryDeliveryError =
+        complimentaryError instanceof Error
+          ? complimentaryError.message
+          : "Complimentary delivery runner failed unexpectedly.";
+      console.error(
+        "[cron/process-subscriptions] complimentary delivery failed",
+        complimentaryDeliveryError,
+        complimentaryError,
+      );
+      captureTechnicalError(complimentaryError, {
+        cronName: "process-subscriptions",
+        runner: "complimentary-delivery",
+        shop,
+      });
+    }
 
     let mealSelectionReminders = null;
     let mealSelectionReminderError: string | null = null;
@@ -198,6 +224,8 @@ export const runProcessSubscriptionsCron = async (
 
     return Response.json({
       ...billingSummary,
+      complimentaryDeliveries,
+      complimentaryDeliveryError,
       mealSelectionReminderError,
       mealSelectionReminders,
       runId,
