@@ -272,16 +272,22 @@ const runSuite = () => {
       isSuccessfulBillingAwaitingNextBillingAdvance(earlyPayStuck, satNow),
     );
 
-    ctx.assertTrue(
-      "Hossam held",
+    // Hossam cleared from HOLD (A3 + calendar sync). Gate must stay wired for
+    // any future id re-added to SUBSCRIPTION_BILLING_INCIDENT_HOLD_CONTRACT_IDS.
+    ctx.assertFalse(
+      "Hossam cleared from HOLD",
       isSubscriptionBillingIncidentHeld("26652508488"),
     );
-    ctx.assertEqual(
-      "hold skip",
-      getSelectionSkipReason(
-        dueSelection({ subscriptionContractId: "26652508488" }),
+    ctx.assertFalse(
+      "Hossam gid form also cleared",
+      isSubscriptionBillingIncidentHeld(
+        "gid://shopify/SubscriptionContract/26652508488",
       ),
-      "incident_billing_hold",
+    );
+    ctx.assertTrue(
+      "hold skip reason still implemented",
+      workerSource.includes("incident_billing_hold") &&
+        workerSource.includes("isSubscriptionBillingIncidentHeld"),
     );
   }
 

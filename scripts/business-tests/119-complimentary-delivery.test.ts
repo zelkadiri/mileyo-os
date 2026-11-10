@@ -11,6 +11,7 @@ import {
   buildComplimentaryShopifyOrderId,
   isComplimentaryShopifyOrderId,
 } from "../../app/constants/complimentaryDelivery";
+import { isSubscriptionBillingIncidentHeld } from "../../app/constants/subscriptionBillingIncidentHold";
 import { isDeliveryCutoffPassed } from "../../app/utils/deliveryDate";
 import { createBusinessTestContext, finishSuite } from "./_framework";
 
@@ -119,12 +120,21 @@ const run = async () => {
     );
   }
 
-  ctx.scenario("T_HOLD list untouched");
+  ctx.scenario("T_HOLD list cleared for Hossam");
   {
     const hold = read("app/constants/subscriptionBillingIncidentHold.ts");
     ctx.assertTrue(
-      "Hossam still on HOLD list",
-      hold.includes("26652508488"),
+      "hold helper export preserved",
+      hold.includes("isSubscriptionBillingIncidentHeld") &&
+        hold.includes("SUBSCRIPTION_BILLING_INCIDENT_HOLD_CONTRACT_IDS"),
+    );
+    ctx.assertTrue(
+      "Hossam removed from HOLD list",
+      !hold.includes('"26652508488"') && !hold.includes("'26652508488'"),
+    );
+    ctx.assertFalse(
+      "runtime hold cleared",
+      isSubscriptionBillingIncidentHeld("26652508488"),
     );
   }
 
