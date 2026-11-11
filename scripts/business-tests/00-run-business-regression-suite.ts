@@ -131,6 +131,7 @@ const BUSINESS_SUITES = [
   "106-builder-delivery-capacity.test.ts",
   "107-preparation-delivery-date-archive.test.ts",
   "108-portal-pause-shopify-status.test.ts",
+  "120-portal-resume-failclosed.test.ts",
   "113-billing-cycle-idempotency-guards.test.ts",
   "114-billing-cycle-claim-pg-integration.test.ts",
   "115-prisma-serverless-pool.test.ts",
