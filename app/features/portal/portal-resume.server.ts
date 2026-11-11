@@ -3,12 +3,25 @@ import { resetSubscriptionPausedEmailSentAt } from "../../services/email/email.s
 import {
   activateSubscriptionContractWithVerification,
   fetchSubscriptionContractNextBillingDate,
+  pauseSubscriptionContractOnShopify,
 } from "../../services/subscriptionBillingWorker.server";
 import {
   alignScheduledResumeWithDeliverySchedule,
   resolveResumeDeliverySchedule,
 } from "../../services/deliverySchedule.server";
 import type { ResumeDeliveryScheduleResolution } from "../../utils/deliveryDate";
+
+/** Calendar was not secured after activate — never treat resume as successful. */
+export const PORTAL_SCHEDULED_RESUME_CALENDAR_UNSECURED_ERROR =
+  "Impossible de reprendre l’abonnement : la date de prochaine facturation n’a pas pu être sécurisée. Réessayez plus tard.";
+
+/** Activate succeeded, align failed, and pause rollback also failed. */
+export const PORTAL_SCHEDULED_RESUME_ROLLBACK_FAILED_ERROR =
+  "Impossible de sécuriser la reprise de l’abonnement. Contactez le support avant toute nouvelle tentative.";
+
+/** DB could not be marked active after a secured Shopify calendar. */
+export const PORTAL_SCHEDULED_RESUME_DB_SYNC_FAILED_ERROR =
+  "Votre calendrier de facturation a été mis à jour, mais la reprise n’a pas pu être finalisée. Réessayez dans un instant ou contactez le support.";
 
 export type PortalResumeMode =
   | { mode: "blocked"; error: string }
@@ -185,22 +198,82 @@ export const resolvePortalResumeMode = async ({
   };
 };
 
+export type CompletePortalScheduledResumeDeps = {
+  activate?: typeof activateSubscriptionContractWithVerification;
+  align?: typeof alignScheduledResumeWithDeliverySchedule;
+  pause?: typeof pauseSubscriptionContractOnShopify;
+  markSelectionActive?: (input: {
+    selectionId: string;
+  }) => Promise<void>;
+  ensureSelectionPaused?: (input: {
+    selectionId: string;
+  }) => Promise<void>;
+  resetPausedEmail?: typeof resetSubscriptionPausedEmailSentAt;
+  now?: () => Date;
+};
+
+const defaultMarkSelectionActive = async ({
+  selectionId,
+}: {
+  selectionId: string;
+}) => {
+  await prisma.subscriptionMealSelection.update({
+    data: {
+      active: true,
+      status: "active",
+    },
+    where: { id: selectionId },
+  });
+};
+
+const defaultEnsureSelectionPaused = async ({
+  selectionId,
+}: {
+  selectionId: string;
+}) => {
+  await prisma.subscriptionMealSelection.update({
+    data: {
+      active: false,
+      status: "paused",
+    },
+    where: { id: selectionId },
+  });
+};
+
+/**
+ * Fail-closed schedule-only resume:
+ * activate → align calendar → only then mark local active.
+ * If alignment is not secured, pause Shopify again and keep DB paused so an
+ * old nextBillingDate can never become billable after a partial resume.
+ */
 export const completePortalScheduledResume = async ({
   admin,
+  deps = {},
   resumeSchedule,
   selectionId,
   subscriptionContractId,
 }: {
   admin: Parameters<typeof activateSubscriptionContractWithVerification>[0];
+  deps?: CompletePortalScheduledResumeDeps;
   resumeSchedule: ResumeDeliveryScheduleResolution;
   selectionId: string;
   subscriptionContractId: string;
 }): Promise<{ error?: string; ok: true } | { error: string; ok: false }> => {
-  const activateResult = await activateSubscriptionContractWithVerification(
-    admin,
-    subscriptionContractId,
-    { selectionId },
-  );
+  const activate =
+    deps.activate ?? activateSubscriptionContractWithVerification;
+  const align = deps.align ?? alignScheduledResumeWithDeliverySchedule;
+  const pause = deps.pause ?? pauseSubscriptionContractOnShopify;
+  const markSelectionActive =
+    deps.markSelectionActive ?? defaultMarkSelectionActive;
+  const ensureSelectionPaused =
+    deps.ensureSelectionPaused ?? defaultEnsureSelectionPaused;
+  const resetPausedEmail =
+    deps.resetPausedEmail ?? resetSubscriptionPausedEmailSentAt;
+  const now = deps.now ?? (() => new Date());
+
+  const activateResult = await activate(admin, subscriptionContractId, {
+    selectionId,
+  });
 
   if (!activateResult.ok) {
     return {
@@ -209,57 +282,80 @@ export const completePortalScheduledResume = async ({
     };
   }
 
-  const alignmentResult = await alignScheduledResumeWithDeliverySchedule({
+  const alignmentResult = await align({
     admin,
     resumeSchedule,
     selectionId,
     subscriptionContractId,
   });
 
-  if (alignmentResult.status === "failed") {
-    await prisma.subscriptionMealSelection.update({
-      data: {
-        active: true,
-        nextScheduledDeliveryDate: resumeSchedule.resumeTargetDeliveryDate,
-        status: "active",
-      },
-      where: { id: selectionId },
+  const calendarSecured =
+    alignmentResult.status === "aligned" &&
+    alignmentResult.alignedNextBillingDate.getTime() > now().getTime();
+
+  if (!calendarSecured) {
+    const alignError =
+      alignmentResult.status === "failed"
+        ? alignmentResult.error
+        : alignmentResult.status === "skipped"
+          ? alignmentResult.reason
+          : "aligned_next_billing_date_not_in_future";
+
+    console.log("[portal-resume] schedule_only calendar unsecured — rolling back", {
+      alignError,
+      alignStatus: alignmentResult.status,
+      selectionId,
+      subscriptionContractId,
+      targetNextBillingDate: resumeSchedule.alignedNextBillingDate.toISOString(),
     });
 
-    await resetSubscriptionPausedEmailSentAt({ selectionId });
+    const pauseResult = await pause(admin, subscriptionContractId);
+
+    try {
+      await ensureSelectionPaused({ selectionId });
+    } catch (error) {
+      console.log("[portal-resume] failed to keep selection paused after align failure", {
+        error: error instanceof Error ? error.message : String(error),
+        selectionId,
+        subscriptionContractId,
+      });
+    }
+
+    if (pauseResult.error) {
+      console.log("[portal-resume] CRITICAL pause rollback failed after activate", {
+        alignError,
+        pauseError: pauseResult.error,
+        selectionId,
+        subscriptionContractId,
+      });
+
+      return {
+        error: PORTAL_SCHEDULED_RESUME_ROLLBACK_FAILED_ERROR,
+        ok: false,
+      };
+    }
 
     return {
-      error:
-        "Votre abonnement est repris, mais la date de prochaine facturation n’a pas pu être mise à jour automatiquement.",
+      error: PORTAL_SCHEDULED_RESUME_CALENDAR_UNSECURED_ERROR,
       ok: false,
     };
   }
 
-  if (alignmentResult.status === "skipped") {
-    await prisma.subscriptionMealSelection.update({
-      data: {
-        active: true,
-        nextBillingDate: resumeSchedule.alignedNextBillingDate,
-        nextScheduledDeliveryDate: resumeSchedule.resumeTargetDeliveryDate,
-        status: "active",
-      },
-      where: { id: selectionId },
+  try {
+    await markSelectionActive({ selectionId });
+    await resetPausedEmail({ selectionId });
+  } catch (error) {
+    console.log("[portal-resume] DB sync failed after secured calendar", {
+      error: error instanceof Error ? error.message : String(error),
+      selectionId,
+      subscriptionContractId,
     });
 
-    await resetSubscriptionPausedEmailSentAt({ selectionId });
-
-    return { ok: true };
+    return {
+      error: PORTAL_SCHEDULED_RESUME_DB_SYNC_FAILED_ERROR,
+      ok: false,
+    };
   }
-
-  await prisma.subscriptionMealSelection.update({
-    data: {
-      active: true,
-      status: "active",
-    },
-    where: { id: selectionId },
-  });
-
-  await resetSubscriptionPausedEmailSentAt({ selectionId });
 
   return { ok: true };
 };
