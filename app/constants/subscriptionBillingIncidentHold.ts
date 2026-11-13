@@ -2,11 +2,12 @@
  * Temporary P0 billing holds — contract stays ACTIVE; all charge entry points skip.
  * Clear an id only after deliveries / refunds / NBD are reconciled by ops.
  * Never auto-schedule the next renewal for held contracts.
+ *
+ * 2026-11-10: 26652508488 (Hossam) cleared after Shopify A3 Saturday realign +
+ * calendar sync (NBD 2026-11-13T23:05:00Z / NSDD 2026-11-19). List empty until
+ * the next incident — re-add numeric contract ids here to re-enable a hold.
  */
-export const SUBSCRIPTION_BILLING_INCIDENT_HOLD_CONTRACT_IDS = [
-  /** Contract 26652508488 — daily double-charge incident; do not bill until ops clears. */
-  "26652508488",
-] as const;
+export const SUBSCRIPTION_BILLING_INCIDENT_HOLD_CONTRACT_IDS = [] as const;
 
 export const isSubscriptionBillingIncidentHeld = (
   subscriptionContractId: string | null | undefined,
