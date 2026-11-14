@@ -220,6 +220,7 @@ export const handleSubscriptionsAction = async (request: Request) => {
 
       const billingResult = await triggerSubscriptionBillingAttempt({
         admin,
+        billingCycle: prepared.cycle,
         billingCycleClaimId: prepared.claim.id,
         dueBillingDate,
         idempotencyKey: prepared.claim.idempotencyKey,

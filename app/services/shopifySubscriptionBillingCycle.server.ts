@@ -409,3 +409,53 @@ export const resolveBillableShopifyCycle = async ({
 
   return classifyBillableShopifyCycle({ cycles, nextBillingDate, now });
 };
+
+/**
+ * originTime for subscriptionBillingAttemptCreate when billingCycleSelector.index
+ * is set. Shopify defaults originTime to now; if now is outside the selected
+ * cycle [start, end] the create is rejected (ORIGIN_TIME_OUT_OF_RANGE).
+ *
+ * Prefer due NBD (fulfillment scheduling), then Shopify expected, then now —
+ * all clamped to the selected cycle. Never invent a time outside the cycle.
+ */
+export const resolveSubscriptionBillingAttemptOriginTime = ({
+  cycle,
+  dueBillingDate = null,
+  now = new Date(),
+}: {
+  cycle: Pick<
+    ShopifyBillingCycleSnapshot,
+    "billingAttemptExpectedDate" | "cycleEndAt" | "cycleStartAt"
+  >;
+  dueBillingDate?: Date | null;
+  now?: Date;
+}): string => {
+  const startMs = new Date(cycle.cycleStartAt).getTime();
+  const endMs = new Date(cycle.cycleEndAt).getTime();
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) {
+    throw new Error(
+      `Bornes de cycle invalides pour originTime (${cycle.cycleStartAt} → ${cycle.cycleEndAt}).`,
+    );
+  }
+
+  const pickIfInside = (
+    value: Date | string | null | undefined,
+  ): string | null => {
+    if (value == null) {
+      return null;
+    }
+    const ms = value instanceof Date ? value.getTime() : new Date(value).getTime();
+    if (Number.isNaN(ms) || ms < startMs || ms > endMs) {
+      return null;
+    }
+    return new Date(ms).toISOString();
+  };
+
+  return (
+    pickIfInside(dueBillingDate) ??
+    pickIfInside(cycle.billingAttemptExpectedDate) ??
+    pickIfInside(now) ??
+    // Past cycleEndAt (c7 @ cron 02h+29s): stay inside selected cycle.
+    new Date(Math.max(startMs, endMs - 1000)).toISOString()
+  );
+};

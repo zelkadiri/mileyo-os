@@ -158,6 +158,11 @@ const runSuite = () => {
         workerSource.includes("index: shopifyCycleIndex"),
     );
     ctx.assertTrue(
+      "create passes originTime inside selected cycle",
+      workerSource.includes("subscriptionBillingAttemptInput.originTime") &&
+        workerSource.includes("resolveSubscriptionBillingAttemptOriginTime"),
+    );
+    ctx.assertTrue(
       "missing cycleIndex fail-closed on trigger",
       workerSource.includes("missing_shopify_cycle_index"),
     );
