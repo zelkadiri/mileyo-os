@@ -123,6 +123,7 @@ const BUSINESS_SUITES = [
   "98-monitoring-system-health.test.ts",
   "99-sentry-cron-checkins.test.ts",
   "100-shopify-admin-session-retry.test.ts",
+  "121-resilient-shopify-session-storage.test.ts",
   "101-billing-missed-run-recovery.test.ts",
   "102-builder-perf-instrumentation.test.ts",
   "103-builder-catalog-cache.test.ts",

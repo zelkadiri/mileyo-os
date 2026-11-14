@@ -7,6 +7,15 @@ import {
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
 import { instrumentSessionStorage } from "./utils/instrumentedSessionStorage.server";
+import { resilientShopifySessionStorage } from "./utils/resilientShopifySessionStorage.server";
+
+/**
+ * Shopify PrismaSessionStorage permanently rejects `ready` after one failed
+ * pollForTable() (often a transient pool/timeout), then every Admin/cron call
+ * throws MissingSessionTableError even though `Session` exists. Heal via
+ * isReady() before giving up — see resilientShopifySessionStorage.
+ */
+const prismaSessionStorage = new PrismaSessionStorage(prisma);
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -16,7 +25,9 @@ const shopify = shopifyApp({
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
   // Wall-clock load/store timings when builder perf ALS is active (no secrets).
-  sessionStorage: instrumentSessionStorage(new PrismaSessionStorage(prisma)),
+  sessionStorage: instrumentSessionStorage(
+    resilientShopifySessionStorage(prismaSessionStorage),
+  ),
   distribution: AppDistribution.AppStore,
   future: {
     expiringOfflineAccessTokens: true,
