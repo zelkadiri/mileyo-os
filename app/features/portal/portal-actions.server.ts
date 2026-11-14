@@ -1217,6 +1217,7 @@ const handleResumeSubscriptionAndPayAction = async ({
 
       const billingResult = await triggerSubscriptionBillingAttempt({
         admin,
+        billingCycle: prepared.cycle,
         billingCycleClaimId,
         dueBillingDate: selection.nextBillingDate,
         idempotencyKey: shopifyIdempotencyKey,

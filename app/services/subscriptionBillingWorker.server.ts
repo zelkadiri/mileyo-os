@@ -33,6 +33,10 @@ import {
   prepareCanonicalCycleBilling,
 } from "./subscriptionBillingGate.server";
 import { extractShopifyCycleIndexFromBillingKey } from "../utils/subscriptionBillingCycleKeys";
+import {
+  resolveSubscriptionBillingAttemptOriginTime,
+  type ShopifyBillingCycleSnapshot,
+} from "./shopifySubscriptionBillingCycle.server";
 
 export { buildAutoBillingIdempotencyKey };
 export {
@@ -1430,11 +1434,14 @@ export const fetchShopifyBillingAttempt = async (
 export const reconcileBillingAttemptByIdempotencyKey = async ({
   admin,
   idempotencyKey,
+  originTime = null,
   shopifyCycleIndex = null,
   subscriptionContractId,
 }: {
   admin: ShopifyAdminGraphql;
   idempotencyKey: string;
+  /** Required when replaying a cycle-indexed create after ORIGIN_TIME_OUT_OF_RANGE. */
+  originTime?: string | null;
   shopifyCycleIndex?: number | null;
   subscriptionContractId: string;
 }) => {
@@ -1443,6 +1450,7 @@ export const reconcileBillingAttemptByIdempotencyKey = async ({
     subscriptionContractId,
     idempotencyKey,
     shopifyCycleIndex,
+    originTime,
   );
 
   if (json.errors?.length) {
@@ -2095,6 +2103,7 @@ const createBillingAttempt = async (
   subscriptionContractId: string,
   idempotencyKey: string,
   shopifyCycleIndex?: number | null,
+  originTime?: string | null,
 ) => {
   const subscriptionBillingAttemptInput: Record<string, unknown> = {
     idempotencyKey,
@@ -2107,6 +2116,9 @@ const createBillingAttempt = async (
     subscriptionBillingAttemptInput.billingCycleSelector = {
       index: shopifyCycleIndex,
     };
+  }
+  if (typeof originTime === "string" && originTime.length > 0) {
+    subscriptionBillingAttemptInput.originTime = originTime;
   }
 
   const response = await admin.graphql(billingAttemptCreateMutation, {
@@ -2130,6 +2142,7 @@ export type TriggerBillingAttemptResult = {
 
 export const triggerSubscriptionBillingAttempt = async ({
   admin,
+  billingCycle = null,
   billingCycleClaimId = null,
   dueBillingDate = null,
   idempotencyKey,
@@ -2140,6 +2153,11 @@ export const triggerSubscriptionBillingAttempt = async ({
   syncNextBillingDateFromShopify = true,
 }: {
   admin: ShopifyAdminGraphql;
+  /** Selected Shopify cycle bounds — used to set originTime inside the cycle. */
+  billingCycle?: Pick<
+    ShopifyBillingCycleSnapshot,
+    "billingAttemptExpectedDate" | "cycleEndAt" | "cycleStartAt"
+  > | null;
   /** Durable cycle claim row — marked uncertain on transport crash after create. */
   billingCycleClaimId?: string | null;
   /** Cycle due date used to advance NBD after success (auto/admin/recovery). */
@@ -2195,6 +2213,51 @@ export const triggerSubscriptionBillingAttempt = async ({
     };
   }
 
+  if (!billingCycle) {
+    console.log("[BILLING] trigger blocked — missing billing cycle bounds", {
+      selectionId,
+      shopifyCycleIndex,
+      subscriptionContractId,
+    });
+    return {
+      attemptId: null,
+      errorCode: "missing_billing_cycle_bounds",
+      errorMessage:
+        "Bornes du cycle Shopify manquantes — originTime impossible (fail-closed).",
+      orderId: null,
+      paymentAt: null,
+      status: "failure",
+    };
+  }
+
+  let originTime: string;
+  try {
+    originTime = resolveSubscriptionBillingAttemptOriginTime({
+      cycle: billingCycle,
+      dueBillingDate,
+      now: attemptedAt,
+    });
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "originTime impossible à résoudre pour ce cycle.";
+    console.log("[BILLING] trigger blocked — originTime resolve failed", {
+      errorMessage,
+      selectionId,
+      shopifyCycleIndex,
+      subscriptionContractId,
+    });
+    return {
+      attemptId: null,
+      errorCode: "invalid_billing_cycle_origin_time",
+      errorMessage,
+      orderId: null,
+      paymentAt: null,
+      status: "failure",
+    };
+  }
+
   try {
     shopifyCreateStarted = true;
     const json = await createBillingAttempt(
@@ -2202,6 +2265,7 @@ export const triggerSubscriptionBillingAttempt = async ({
       subscriptionContractId,
       idempotencyKey,
       shopifyCycleIndex,
+      originTime,
     );
 
     if (json.errors?.length) {
@@ -2836,9 +2900,17 @@ export const processDueSubscriptionBillings = async (
       const cycleIndex =
         extractShopifyCycleIndexFromBillingKey(claim.billingCycleKey) ??
         prepared.shopifyCycleIndex;
+      const originTime =
+        prepared.action === "proceed" || prepared.action === "already_paid"
+          ? resolveSubscriptionBillingAttemptOriginTime({
+              cycle: prepared.cycle,
+              dueBillingDate,
+            })
+          : null;
       const reconciled = await reconcileBillingAttemptByIdempotencyKey({
         admin,
         idempotencyKey: claim.idempotencyKey,
+        originTime,
         shopifyCycleIndex: cycleIndex,
         subscriptionContractId: contractId,
       });
@@ -2969,6 +3041,7 @@ export const processDueSubscriptionBillings = async (
 
     const billingResult = await triggerSubscriptionBillingAttempt({
       admin,
+      billingCycle: prepared.cycle,
       billingCycleClaimId: prepared.claim.id,
       dueBillingDate,
       idempotencyKey: prepared.claim.idempotencyKey,

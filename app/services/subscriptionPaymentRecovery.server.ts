@@ -1935,6 +1935,7 @@ export const processDueRecoveryRetries = async (
 
       const billingResult = await triggerSubscriptionBillingAttempt({
         admin,
+        billingCycle: prepared.cycle,
         billingCycleClaimId,
         dueBillingDate: billableSelection.nextBillingDate,
         idempotencyKey: retryIdempotencyKey,
