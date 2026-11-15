@@ -507,6 +507,7 @@ const runSuite = () => {
               {
                 completedAt: "2026-11-07T00:10:00.000Z",
                 createdAt: "2026-11-07T00:10:00.000Z",
+                errorMessage: null,
                 id: "att_paid",
                 idempotencyKey: "mileyo_auto_x_c2",
                 orderId: "gid://shopify/Order/1",
@@ -517,6 +518,7 @@ const runSuite = () => {
               {
                 completedAt: "2026-11-07T00:10:00.000Z",
                 createdAt: "2026-11-07T00:10:00.000Z",
+                errorMessage: null,
                 id: "att_paid",
                 idempotencyKey: "mileyo_auto_x_c2",
                 orderId: "gid://shopify/Order/1",
@@ -554,6 +556,7 @@ const runSuite = () => {
               {
                 completedAt: null,
                 createdAt: "2026-11-07T00:06:00.000Z",
+                errorMessage: null,
                 id: "att_open",
                 idempotencyKey: "mileyo_auto_x_c3",
                 orderId: null,
@@ -567,6 +570,43 @@ const runSuite = () => {
       now: satNov7Cron(),
     });
     ctx.assertEqual("P0-2 uncertain attempt", classified.action, "block_ambiguous");
+  }
+
+  ctx.scenario("P0-2 — attempt FAILED terminal : billable (pas ambiguous)");
+  {
+    const nbd = satNov7Nbd();
+    const expected = parisWallClockToInstant({
+      date: requireDate("2026-11-07"),
+      hour: 12,
+      minute: 0,
+      timezone: SUBSCRIPTION_CYCLE_TIMEZONE,
+    });
+    const classified = classifyBillableShopifyCycle({
+      cycles: [
+        mkCycle({
+          cycleIndex: 3,
+          expectedIso: expected.toISOString(),
+          cycleStartAt: "2026-11-03T00:00:00.000Z",
+          cycleEndAt: "2026-11-10T00:00:00.000Z",
+          extras: {
+            attempts: [
+              {
+                completedAt: "2026-11-07T00:06:04.000Z",
+                createdAt: "2026-11-07T00:06:00.000Z",
+                errorMessage: "Your card does not support this type of purchase.",
+                id: "att_failed",
+                idempotencyKey: "mileyo_auto_x_c3",
+                orderId: null,
+                orderName: null,
+              },
+            ],
+          },
+        }),
+      ],
+      nextBillingDate: nbd,
+      now: satNov7Cron(),
+    });
+    ctx.assertEqual("P0-2 failed terminal billable", classified.action, "billable");
   }
 
   ctx.scenario("P0-2 — cycle non résolvable : BLOCK");

@@ -53,6 +53,7 @@ const paidC7: ShopifyBillingCycleSnapshot = {
     {
       id: "gid://shopify/SubscriptionBillingAttempt/1",
       createdAt: "2026-11-14T01:00:30Z",
+      errorMessage: null,
       completedAt: "2026-11-14T01:00:31Z",
       idempotencyKey: "mileyo_auto_sel_c7",
       orderId: "gid://shopify/Order/1",
@@ -63,6 +64,7 @@ const paidC7: ShopifyBillingCycleSnapshot = {
     {
       id: "gid://shopify/SubscriptionBillingAttempt/1",
       createdAt: "2026-11-14T01:00:30Z",
+      errorMessage: null,
       completedAt: "2026-11-14T01:00:31Z",
       idempotencyKey: "mileyo_auto_sel_c7",
       orderId: "gid://shopify/Order/1",

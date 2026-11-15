@@ -21,6 +21,7 @@ type CycleNode = {
         id: string;
         createdAt: string;
         completedAt?: string | null;
+        errorMessage?: string | null;
         idempotencyKey?: string | null;
         order?: { id?: string | null; name?: string | null } | null;
       };
@@ -33,6 +34,7 @@ const mapCycles = (nodes: CycleNode[]) =>
     const attempts = (node.billingAttempts?.edges ?? []).map((edge) => ({
       completedAt: edge.node.completedAt ?? null,
       createdAt: edge.node.createdAt,
+      errorMessage: edge.node.errorMessage ?? null,
       id: edge.node.id,
       idempotencyKey: edge.node.idempotencyKey ?? null,
       orderId: edge.node.order?.id ?? null,
@@ -77,6 +79,7 @@ const query = `#graphql
               id
               createdAt
               completedAt
+              errorMessage
               idempotencyKey
               order { id name }
             }

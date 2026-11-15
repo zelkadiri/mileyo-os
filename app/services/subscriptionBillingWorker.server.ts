@@ -2077,14 +2077,35 @@ export const resolveBillingAttemptStatus = (
     };
   }
 
+  const legacyErrorMessage =
+    typeof attempt?.errorMessage === "string" &&
+    attempt.errorMessage.trim().length > 0
+      ? attempt.errorMessage.trim()
+      : null;
+
+  if (legacyErrorMessage) {
+    return {
+      errorCode: attempt?.processingError?.code ?? null,
+      errorMessage: legacyErrorMessage,
+      status: "failure",
+    };
+  }
+
   const orderId = getBillingAttemptOrderId(attempt);
 
   if (orderId) {
     return { errorCode: null, errorMessage: null, status: "success" };
   }
 
+  // completedAt without order and without error is contradictory — fail-closed.
+  // Never classify SUCCESS solely because completedAt is set.
   if (attempt?.completedAt) {
-    return { errorCode: null, errorMessage: null, status: "success" };
+    return {
+      errorCode: null,
+      errorMessage:
+        "Tentative terminée sans commande ni erreur Shopify explicite.",
+      status: "unknown",
+    };
   }
 
   if (attempt?.id) {

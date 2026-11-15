@@ -40,7 +40,10 @@ import {
 import { computeNextSubscriptionCycleRetryAt } from "../utils/subscriptionCycleBilling";
 import { captureTechnicalError } from "./observability/captureTechnicalError.server";
 import { isSubscriptionBillingIncidentHeld } from "../constants/subscriptionBillingIncidentHold";
-import { rotateClaimIdempotencyKeyAfterConfirmedFailure } from "./subscriptionBillingCycleClaim.server";
+import {
+  reconcileBillingCycleClaimOnConfirmedFailure,
+  rotateClaimIdempotencyKeyAfterConfirmedFailure,
+} from "./subscriptionBillingCycleClaim.server";
 import {
   BILLING_CYCLE_CLAIM_SOURCE,
   prepareCanonicalCycleBilling,
@@ -544,6 +547,16 @@ const scheduleRecoveryAfterFailure = async ({
 }) => {
   const now = new Date();
 
+  // Converge claim even when recovery row is a duplicate — unlocks stuck submitted.
+  if (billingResult.status === "failure") {
+    await reconcileBillingCycleClaimOnConfirmedFailure({
+      billingAttemptId: billingResult.attemptId,
+      billingCycleKey,
+      errorMessage: billingResult.errorMessage,
+      selectionId: selection.id,
+    });
+  }
+
   const existing = await db.subscriptionPaymentRecovery.findUnique({
     where: {
       subscriptionMealSelectionId_billingCycleKey: {
@@ -784,6 +797,14 @@ export const processBillingAttemptFailure = async ({
     selection.id,
     shopifyCycleIndex,
   );
+
+  // Always converge claim on confirmed failure (incl. duplicate webhooks / stuck submitted).
+  await reconcileBillingCycleClaimOnConfirmedFailure({
+    billingAttemptId,
+    billingCycleKey,
+    errorMessage,
+    selectionId: selection.id,
+  });
 
   const existing = await db.subscriptionPaymentRecovery.findUnique({
     where: {
@@ -1652,6 +1673,17 @@ export const processDueRecoveryRetries = async (
               summary.skipped += 1;
               continue;
             }
+
+            // Historical stuck submitted claims: converge before key rotation.
+            if (status === "failure") {
+              await reconcileBillingCycleClaimOnConfirmedFailure({
+                billingAttemptId: workingRecovery.lastBillingAttemptId,
+                billingCycleKey: workingRecovery.billingCycleKey,
+                errorMessage:
+                  errorMessage ?? "Le paiement de l’abonnement a échoué.",
+                selectionId: selection.id,
+              });
+            }
           } else {
             console.log("[paymentRecovery] retry terminal failure", {
               attemptId: workingRecovery.lastBillingAttemptId,
@@ -1708,6 +1740,9 @@ export const processDueRecoveryRetries = async (
 
       // PROD-HARDENING-2A: verify Shopify before any new recovery charge.
       // Do not reuse getSelectionSkipReason — PAUSED must still allow dunning retries.
+      // P2 (separate): never auto-activate a voluntarily PAUSED contract; do not
+      // charge while paused without an explicit product rule. This slice never
+      // calls subscriptionContractActivate.
       let billableSelection = selection;
 
       try {

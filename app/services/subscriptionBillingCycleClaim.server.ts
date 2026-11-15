@@ -159,20 +159,98 @@ export const markBillingCycleClaimSucceeded = async ({
   });
 
 export const markBillingCycleClaimFailed = async ({
+  billingAttemptId,
   claimId,
   errorMessage,
 }: {
+  billingAttemptId?: string | null;
   claimId: string;
   errorMessage: string | null;
 }) =>
   db.subscriptionBillingCycleClaim.update({
     data: {
+      ...(billingAttemptId ? { billingAttemptId } : {}),
       lastErrorMessage: errorMessage,
       lastReconciledAt: new Date(),
       status: BILLING_CYCLE_CLAIM_STATUS.FAILED,
     },
     where: { id: claimId },
   });
+
+/**
+ * Idempotent: after a Shopify billing attempt is confirmed FAILED (error present,
+ * no paid order), converge the cycle claim to failed so recovery can rotate keys.
+ * Never downgrades succeeded. Never marks failed while claim is uncertain unless
+ * the same billingAttemptId is confirmed failed.
+ */
+export const reconcileBillingCycleClaimOnConfirmedFailure = async ({
+  billingAttemptId,
+  billingCycleKey,
+  errorMessage,
+  selectionId,
+}: {
+  billingAttemptId: string | null;
+  billingCycleKey: string;
+  errorMessage: string | null;
+  selectionId: string;
+}): Promise<BillingCycleClaimRow | null> => {
+  const claim = await db.subscriptionBillingCycleClaim.findUnique({
+    where: {
+      subscriptionMealSelectionId_billingCycleKey: {
+        billingCycleKey,
+        subscriptionMealSelectionId: selectionId,
+      },
+    },
+  });
+
+  if (!claim) {
+    return null;
+  }
+
+  if (claim.status === BILLING_CYCLE_CLAIM_STATUS.SUCCEEDED) {
+    return claim;
+  }
+
+  if (claim.status === BILLING_CYCLE_CLAIM_STATUS.UNCERTAIN) {
+    const sameAttempt =
+      Boolean(billingAttemptId) &&
+      claim.billingAttemptId === billingAttemptId;
+    if (!sameAttempt) {
+      return claim;
+    }
+  }
+
+  if (claim.status === BILLING_CYCLE_CLAIM_STATUS.FAILED) {
+    const needsAttemptStamp =
+      Boolean(billingAttemptId) &&
+      claim.billingAttemptId !== billingAttemptId;
+    const needsErrorStamp =
+      errorMessage != null && claim.lastErrorMessage !== errorMessage;
+
+    if (!needsAttemptStamp && !needsErrorStamp) {
+      return claim;
+    }
+
+    return markBillingCycleClaimFailed({
+      billingAttemptId,
+      claimId: claim.id,
+      errorMessage: errorMessage ?? claim.lastErrorMessage,
+    });
+  }
+
+  if (
+    claim.status !== BILLING_CYCLE_CLAIM_STATUS.CLAIMED &&
+    claim.status !== BILLING_CYCLE_CLAIM_STATUS.SUBMITTED
+  ) {
+    return claim;
+  }
+
+  return markBillingCycleClaimFailed({
+    billingAttemptId: billingAttemptId ?? claim.billingAttemptId,
+    claimId: claim.id,
+    errorMessage,
+  });
+};
 
 export const markBillingCycleClaimUncertain = async ({
   billingAttemptId,

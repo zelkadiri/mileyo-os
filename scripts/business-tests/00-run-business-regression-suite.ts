@@ -139,6 +139,8 @@ const BUSINESS_SUITES = [
   "116-anti-double-billing-p7-scenarios.test.ts",
   "117-billing-validation-matrix-preprod.test.ts",
   "118-meal-create.test.ts",
+  "122-billing-attempt-origin-time.test.ts",
+  "123-recovery-async-claim-stuck.test.ts",
 ];
 
 const LEGACY_SUITES = [
