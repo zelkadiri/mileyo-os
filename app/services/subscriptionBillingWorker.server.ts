@@ -2055,19 +2055,43 @@ export const resolveBillingAttemptStatus = (
   errorMessage: string | null;
   status: BillingAttemptStatus;
 } => {
-  if (userErrors.length > 0) {
-    return {
-      errorCode: null,
-      errorMessage:
-        userErrors
+  const userErrorMessage =
+    userErrors.length > 0
+      ? userErrors
           .map((error) => error.message)
           .filter(Boolean)
-          .join(" ") || "Shopify a refusé la tentative de facturation.",
-      status: "failure",
+          .join(" ") || "Shopify a refusé la tentative de facturation."
+      : null;
+
+  const processingErrorMessage = formatProcessingError(attempt?.processingError);
+
+  const legacyErrorMessage =
+    typeof attempt?.errorMessage === "string" &&
+    attempt.errorMessage.trim().length > 0
+      ? attempt.errorMessage.trim()
+      : null;
+
+  const errorMessage =
+    userErrorMessage ?? processingErrorMessage ?? legacyErrorMessage;
+  const orderId = getBillingAttemptOrderId(attempt);
+
+  // A linked order plus an error is contradictory. Never definitive FAILED
+  // (would unlock another charge) and never definitive SUCCESS.
+  if (orderId && errorMessage) {
+    return {
+      errorCode: attempt?.processingError?.code ?? null,
+      errorMessage,
+      status: "unknown",
     };
   }
 
-  const processingErrorMessage = formatProcessingError(attempt?.processingError);
+  if (userErrorMessage) {
+    return {
+      errorCode: null,
+      errorMessage: userErrorMessage,
+      status: "failure",
+    };
+  }
 
   if (processingErrorMessage) {
     return {
@@ -2077,14 +2101,27 @@ export const resolveBillingAttemptStatus = (
     };
   }
 
-  const orderId = getBillingAttemptOrderId(attempt);
+  if (legacyErrorMessage) {
+    return {
+      errorCode: attempt?.processingError?.code ?? null,
+      errorMessage: legacyErrorMessage,
+      status: "failure",
+    };
+  }
 
   if (orderId) {
     return { errorCode: null, errorMessage: null, status: "success" };
   }
 
+  // completedAt without order and without error is contradictory — fail-closed.
+  // Never classify SUCCESS solely because completedAt is set.
   if (attempt?.completedAt) {
-    return { errorCode: null, errorMessage: null, status: "success" };
+    return {
+      errorCode: null,
+      errorMessage:
+        "Tentative terminée sans commande ni erreur Shopify explicite.",
+      status: "unknown",
+    };
   }
 
   if (attempt?.id) {
@@ -2335,6 +2372,7 @@ export const triggerSubscriptionBillingAttempt = async ({
           });
         } else {
           await markBillingCycleClaimFailed({
+            billingAttemptId: attemptId,
             claimId: billingCycleClaimId,
             errorMessage,
           });
@@ -2961,6 +2999,7 @@ export const processDueSubscriptionBillings = async (
 
       if (reconciled.status === "failure") {
         await markBillingCycleClaimFailed({
+          billingAttemptId: reconciled.attempt?.id ?? null,
           claimId: claim.id,
           errorMessage: reconciled.errorMessage,
         });

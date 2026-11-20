@@ -20,11 +20,27 @@ const toSubscriptionContractGid = (subscriptionContractId: string) =>
 export type ShopifyBillingCycleAttemptSummary = {
   completedAt: string | null;
   createdAt: string;
+  /** Shopify attempt errorMessage when terminal failure is confirmed. */
+  errorMessage: string | null;
   id: string;
   idempotencyKey: string | null;
   orderId: string | null;
   orderName: string | null;
 };
+
+/**
+ * Confirmed terminal bank/Shopify failure: error text present and no paid order.
+ * Absence of response / completed without error is NOT a confirmed failure.
+ */
+export const isConfirmedTerminalFailedBillingAttempt = (
+  attempt: Pick<
+    ShopifyBillingCycleAttemptSummary,
+    "errorMessage" | "orderId"
+  >,
+): boolean =>
+  !attempt.orderId &&
+  typeof attempt.errorMessage === "string" &&
+  attempt.errorMessage.trim().length > 0;
 
 export type ShopifyBillingCycleSnapshot = {
   billingAttemptExpectedDate: string;
@@ -125,6 +141,7 @@ const billingCyclesQuery = `#graphql
               id
               createdAt
               completedAt
+              errorMessage
               idempotencyKey
               order { id name }
             }
@@ -139,11 +156,13 @@ const mapAttempt = (node: {
   id: string;
   createdAt: string;
   completedAt?: string | null;
+  errorMessage?: string | null;
   idempotencyKey?: string | null;
   order?: { id?: string | null; name?: string | null } | null;
 }): ShopifyBillingCycleAttemptSummary => ({
   completedAt: node.completedAt ?? null,
   createdAt: node.createdAt,
+  errorMessage: node.errorMessage ?? null,
   id: node.id,
   idempotencyKey: node.idempotencyKey ?? null,
   orderId: node.order?.id ?? null,
@@ -251,7 +270,10 @@ export const identifyShopifyBillingCycleCandidate = ({
  * Pure classifier (testable). Previous cycles BILLED are normal.
  * Ambiguous only when a *later* cycle already has successful payments while
  * the due NBD still points at an unpaid earlier candidate (Hossam pattern),
- * or when the candidate has in-flight attempts without an order.
+ * or when the candidate has in-flight / unknown attempts without an order.
+ *
+ * Confirmed terminal failures (errorMessage, no order) do NOT block recovery
+ * of the same cycle. Missing Shopify response is never treated as failure.
  *
  * Identification (byExpected / byWindow) is separate from charge authorization
  * (NBD within cycle bounds + Shopify expected−24h window).
@@ -324,7 +346,10 @@ export const classifyBillableShopifyCycle = ({
     };
   }
 
-  const openAttempts = candidate.attempts.filter((attempt) => !attempt.orderId);
+  const openAttempts = candidate.attempts.filter(
+    (attempt) =>
+      !attempt.orderId && !isConfirmedTerminalFailedBillingAttempt(attempt),
+  );
   if (openAttempts.length > 0) {
     return {
       action: "block_ambiguous",

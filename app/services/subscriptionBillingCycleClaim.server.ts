@@ -39,6 +39,34 @@ const isUniqueConstraintError = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
   error.code === "P2002";
 
+type BillingCycleClaimDelegate = {
+  create: typeof db.subscriptionBillingCycleClaim.create;
+  findUnique: typeof db.subscriptionBillingCycleClaim.findUnique;
+  findUniqueOrThrow: typeof db.subscriptionBillingCycleClaim.findUniqueOrThrow;
+  update: typeof db.subscriptionBillingCycleClaim.update;
+  updateMany: typeof db.subscriptionBillingCycleClaim.updateMany;
+};
+
+let claimDelegateOverride: BillingCycleClaimDelegate | null = null;
+
+const billingCycleClaims = () =>
+  claimDelegateOverride ?? db.subscriptionBillingCycleClaim;
+
+/** Test-only seam. Production uses the Prisma delegate. */
+export const __setBillingCycleClaimDelegateForTests = (
+  delegate: BillingCycleClaimDelegate | null,
+) => {
+  claimDelegateOverride = delegate;
+};
+
+const attemptIdsConflict = (
+  storedAttemptId: string | null,
+  incomingAttemptId: string | null,
+) =>
+  Boolean(storedAttemptId) &&
+  Boolean(incomingAttemptId) &&
+  storedAttemptId !== incomingAttemptId;
+
 export const buildStableBillingCycleKey = (
   selectionId: string,
   shopifyCycleIndex: number,
@@ -70,7 +98,7 @@ export const claimOrLoadBillingCycle = async ({
   );
 
   try {
-    const created = await db.subscriptionBillingCycleClaim.create({
+    const created = await billingCycleClaims().create({
       data: {
         billingCycleKey,
         idempotencyKey,
@@ -89,7 +117,7 @@ export const claimOrLoadBillingCycle = async ({
     }
   }
 
-  const existing = await db.subscriptionBillingCycleClaim.findUnique({
+  const existing = await billingCycleClaims().findUnique({
     where: {
       subscriptionMealSelectionId_billingCycleKey: {
         billingCycleKey,
@@ -129,7 +157,7 @@ export const markBillingCycleClaimSubmitted = async ({
   billingAttemptId: string | null;
   claimId: string;
 }) =>
-  db.subscriptionBillingCycleClaim.update({
+  billingCycleClaims().update({
     data: {
       billingAttemptId,
       lastReconciledAt: new Date(),
@@ -147,7 +175,7 @@ export const markBillingCycleClaimSucceeded = async ({
   claimId: string;
   shopifyOrderId: string | null;
 }) =>
-  db.subscriptionBillingCycleClaim.update({
+  billingCycleClaims().update({
     data: {
       billingAttemptId,
       lastReconciledAt: new Date(),
@@ -159,20 +187,197 @@ export const markBillingCycleClaimSucceeded = async ({
   });
 
 export const markBillingCycleClaimFailed = async ({
+  billingAttemptId,
   claimId,
   errorMessage,
+  expectedBillingAttemptId,
+  expectedStatus,
+  matchExpectedBillingAttemptId = false,
 }: {
+  billingAttemptId?: string | null;
   claimId: string;
   errorMessage: string | null;
-}) =>
-  db.subscriptionBillingCycleClaim.update({
+  /**
+   * CAS: stored attempt id that must still be on the row.
+   * `null` matches a claim that has not recorded an attempt yet.
+   */
+  expectedBillingAttemptId?: string | null;
+  /** CAS: status observed before this write. */
+  expectedStatus?: BillingCycleClaimStatus;
+  /** Apply expectedBillingAttemptId even when it is null. */
+  matchExpectedBillingAttemptId?: boolean;
+}): Promise<BillingCycleClaimRow> => {
+  const where: Prisma.SubscriptionBillingCycleClaimWhereInput = {
+    id: claimId,
+  };
+
+  if (expectedStatus) {
+    where.status = expectedStatus;
+  } else if (billingAttemptId) {
+    // A newer SUBMITTED attempt id must not be overwritten by an older failure.
+    // SUCCEEDED is absent — a paid claim cannot be reopened.
+    where.OR = [
+      { status: BILLING_CYCLE_CLAIM_STATUS.CLAIMED },
+      { status: BILLING_CYCLE_CLAIM_STATUS.FAILED },
+      {
+        status: BILLING_CYCLE_CLAIM_STATUS.SUBMITTED,
+        OR: [{ billingAttemptId }, { billingAttemptId: null }],
+      },
+      {
+        status: BILLING_CYCLE_CLAIM_STATUS.UNCERTAIN,
+        billingAttemptId,
+      },
+    ];
+  } else {
+    where.OR = [
+      { status: BILLING_CYCLE_CLAIM_STATUS.CLAIMED },
+      { status: BILLING_CYCLE_CLAIM_STATUS.FAILED },
+      {
+        status: BILLING_CYCLE_CLAIM_STATUS.SUBMITTED,
+        billingAttemptId: null,
+      },
+    ];
+  }
+
+  if (matchExpectedBillingAttemptId) {
+    where.billingAttemptId = expectedBillingAttemptId ?? null;
+  }
+
+  const updated = await billingCycleClaims().updateMany({
     data: {
+      ...(billingAttemptId ? { billingAttemptId } : {}),
       lastErrorMessage: errorMessage,
       lastReconciledAt: new Date(),
       status: BILLING_CYCLE_CLAIM_STATUS.FAILED,
     },
+    where,
+  });
+
+  const current = await billingCycleClaims().findUnique({
     where: { id: claimId },
   });
+
+  if (!current) {
+    throw new Error(
+      `Billing cycle claim missing after failure transition (${claimId})`,
+    );
+  }
+
+  if (updated.count === 0) {
+    console.log("[BILLING] claim failure transition skipped", {
+      billingAttemptId: billingAttemptId ?? null,
+      claimId,
+      status: current.status,
+      storedAttemptId: current.billingAttemptId,
+    });
+  }
+
+  return current;
+};
+
+/**
+ * Idempotent: after a Shopify billing attempt is confirmed FAILED (error present,
+ * no paid order), converge the cycle claim to failed so recovery can rotate keys.
+ * Never downgrades succeeded. Never marks failed while claim is uncertain unless
+ * the same billingAttemptId is confirmed failed.
+ * A failure for an older attempt never unlocks a newer SUBMITTED / CLAIMED attempt.
+ */
+export const reconcileBillingCycleClaimOnConfirmedFailure = async ({
+  billingAttemptId,
+  billingCycleKey,
+  errorMessage,
+  selectionId,
+}: {
+  billingAttemptId: string | null;
+  billingCycleKey: string;
+  errorMessage: string | null;
+  selectionId: string;
+}): Promise<BillingCycleClaimRow | null> => {
+  const claim = await billingCycleClaims().findUnique({
+    where: {
+      subscriptionMealSelectionId_billingCycleKey: {
+        billingCycleKey,
+        subscriptionMealSelectionId: selectionId,
+      },
+    },
+  });
+
+  if (!claim) {
+    return null;
+  }
+
+  if (claim.status === BILLING_CYCLE_CLAIM_STATUS.SUCCEEDED) {
+    return claim;
+  }
+
+  if (claim.status === BILLING_CYCLE_CLAIM_STATUS.UNCERTAIN) {
+    const sameAttempt =
+      Boolean(billingAttemptId) &&
+      claim.billingAttemptId === billingAttemptId;
+    if (!sameAttempt) {
+      return claim;
+    }
+  }
+
+  // Rotation leaves the previous attempt id on a CLAIMED row. A replay of that
+  // older failure must not move the claim back to FAILED while the new attempt
+  // is still pending or unknown.
+  if (
+    claim.status === BILLING_CYCLE_CLAIM_STATUS.CLAIMED &&
+    claim.billingAttemptId
+  ) {
+    return claim;
+  }
+
+  if (
+    (claim.status === BILLING_CYCLE_CLAIM_STATUS.SUBMITTED ||
+      claim.status === BILLING_CYCLE_CLAIM_STATUS.CLAIMED) &&
+    attemptIdsConflict(claim.billingAttemptId, billingAttemptId)
+  ) {
+    return claim;
+  }
+
+  if (claim.status === BILLING_CYCLE_CLAIM_STATUS.FAILED) {
+    if (attemptIdsConflict(claim.billingAttemptId, billingAttemptId)) {
+      return claim;
+    }
+
+    const needsAttemptStamp =
+      Boolean(billingAttemptId) &&
+      claim.billingAttemptId !== billingAttemptId;
+    const needsErrorStamp =
+      errorMessage != null && claim.lastErrorMessage !== errorMessage;
+
+    if (!needsAttemptStamp && !needsErrorStamp) {
+      return claim;
+    }
+
+    return markBillingCycleClaimFailed({
+      billingAttemptId,
+      claimId: claim.id,
+      errorMessage: errorMessage ?? claim.lastErrorMessage,
+      expectedBillingAttemptId: claim.billingAttemptId,
+      expectedStatus: claim.status as BillingCycleClaimStatus,
+      matchExpectedBillingAttemptId: true,
+    });
+  }
+
+  if (
+    claim.status !== BILLING_CYCLE_CLAIM_STATUS.CLAIMED &&
+    claim.status !== BILLING_CYCLE_CLAIM_STATUS.SUBMITTED
+  ) {
+    return claim;
+  }
+
+  return markBillingCycleClaimFailed({
+    billingAttemptId: billingAttemptId ?? claim.billingAttemptId,
+    claimId: claim.id,
+    errorMessage,
+    expectedBillingAttemptId: claim.billingAttemptId,
+    expectedStatus: claim.status as BillingCycleClaimStatus,
+    matchExpectedBillingAttemptId: true,
+  });
+};
 
 export const markBillingCycleClaimUncertain = async ({
   billingAttemptId,
@@ -183,7 +388,7 @@ export const markBillingCycleClaimUncertain = async ({
   claimId: string;
   errorMessage: string | null;
 }) =>
-  db.subscriptionBillingCycleClaim.update({
+  billingCycleClaims().update({
     data: {
       ...(billingAttemptId ? { billingAttemptId } : {}),
       lastErrorMessage: errorMessage,
@@ -202,7 +407,7 @@ export const rotateClaimIdempotencyKeyAfterConfirmedFailure = async ({
   claimId: string;
   selectionId: string;
 }): Promise<BillingCycleClaimRow> => {
-  const existing = await db.subscriptionBillingCycleClaim.findUniqueOrThrow({
+  const existing = await billingCycleClaims().findUniqueOrThrow({
     where: { id: claimId },
   });
 
@@ -222,7 +427,7 @@ export const rotateClaimIdempotencyKeyAfterConfirmedFailure = async ({
     attemptNumber,
   );
 
-  return db.subscriptionBillingCycleClaim.update({
+  const rotated = await billingCycleClaims().updateMany({
     data: {
       idempotencyKey: nextKey,
       lastErrorMessage: null,
@@ -230,6 +435,20 @@ export const rotateClaimIdempotencyKeyAfterConfirmedFailure = async ({
       source: BILLING_CYCLE_CLAIM_SOURCE.RECOVERY,
       status: BILLING_CYCLE_CLAIM_STATUS.CLAIMED,
     },
+    where: {
+      id: claimId,
+      status: BILLING_CYCLE_CLAIM_STATUS.FAILED,
+      subscriptionMealSelectionId: selectionId,
+    },
+  });
+
+  if (rotated.count !== 1) {
+    throw new Error(
+      `Cannot rotate billing claim idempotency key from status=${existing.status}`,
+    );
+  }
+
+  return billingCycleClaims().findUniqueOrThrow({
     where: { id: claimId },
   });
 };
@@ -243,7 +462,7 @@ export const findBillingCycleClaimByShopifyCycle = async (
     shopifyCycleIndex,
   );
 
-  return db.subscriptionBillingCycleClaim.findUnique({
+  return billingCycleClaims().findUnique({
     where: {
       subscriptionMealSelectionId_billingCycleKey: {
         billingCycleKey,
@@ -265,7 +484,7 @@ export const findBillingCycleClaim = async (
 export const findBillingCycleClaimByIdempotencyKey = async (
   idempotencyKey: string,
 ) =>
-  db.subscriptionBillingCycleClaim.findUnique({
+  billingCycleClaims().findUnique({
     where: { idempotencyKey },
   });
 
