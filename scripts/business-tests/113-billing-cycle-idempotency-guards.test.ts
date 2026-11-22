@@ -387,6 +387,7 @@ const runSuite = () => {
       {
         completedAt: "2026-10-01T00:00:00Z",
         createdAt: "2026-10-01T00:00:00Z",
+        errorMessage: null,
         id: `att_${orderName}`,
         idempotencyKey: null,
         orderId: `gid://shopify/Order/${orderName}`,
